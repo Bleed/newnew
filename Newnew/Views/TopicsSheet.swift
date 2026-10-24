@@ -28,7 +28,12 @@ struct TopicsSheet: View {
     NavigationStack {
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
-          SwissHeader("Topics", subtitle: kind == .follow ? "What you want more of" : "What you'd rather not see")
+          // One line, one colour: what this sheet is for.
+          Text("Follow and mute topics")
+            .font(.system(size: 30, weight: .regular))
+            .tracking(-0.6)
+            .foregroundStyle(Swiss.ink)
+            .accessibilityAddTraits(.isHeader)
             .padding(.top, 4)
 
           Picker("Topics", selection: $kind.animation(.snappy(duration: 0.2))) {
