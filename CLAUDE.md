@@ -113,8 +113,7 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   in the same order, looping until loaded, always ending with both in. Pull to refresh
   (`dotRefreshable`) replaces the system spinner; the same small board shows in the middle of the
   top bar, top edge level with the filter button's, for any sync, and empties after. The
-  sentence top is lifted into the bar row (date centred on the button, `headerLift`) and steps
-  down while the board is up so they never overlap. The launch
+  sentence top sits below the bar (figure 44 pt, words 17 pt). The launch
   sync waits until the launch board is gone; the board's dot field is an Equatable `DotGrid`
   drawn in two fills. Regions are tagged only for new articles (main-actor time).
   Keep loop state in an object: a ViewModifier's @State written from a task it started never
