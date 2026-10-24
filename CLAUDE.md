@@ -138,12 +138,15 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   2. Breaking push: the scraper (scripts/alerts.mjs) finds stories from ≥ 5 outlets with ≥ 3
      articles in 45 min and writes a `Breaking` record to the CloudKit public database; the app's
      subscription makes Apple push it. ≤ 2 per run, 6 a day; state in public/alerts.json.
-- To turn on push: create the CloudKit container (e.g. iCloud.com.svein.newnew) for team
-  W533Y4V578, set `NEWNEW_CLOUDKIT_CONTAINER` and `NEWNEW_ENTITLEMENTS =
-  Newnew/App/Newnew-CloudKit.entitlements` in project.yml; in CloudKit Console create a
-  server-to-server key and add GitHub variable `CLOUDKIT_CONTAINER` and secrets
-  `CLOUDKIT_KEY_ID`, `CLOUDKIT_PRIVATE_KEY`. Records go to the development environment unless
-  `CLOUDKIT_ENVIRONMENT` is `production` (deploy the schema first).
+- Push is on (set up 2026-10-24): container iCloud.com.svein.newnew (team W533Y4V578), the app
+  builds with Newnew/App/Newnew-CloudKit.entitlements; `Breaking` (headline String, url String,
+  outlets Int64) is deployed to Production. The scraper signs with a Production
+  server-to-server key ("newnew scraper (GitHub Action)"; private key at
+  ~/.newnew-cloudkit/eckey.pem, never committed), via GitHub variables `CLOUDKIT_CONTAINER`,
+  `CLOUDKIT_ENVIRONMENT=production` and secrets `CLOUDKIT_KEY_ID`, `CLOUDKIT_PRIVATE_KEY`.
+  Server keys belong to one environment: a Development test needs its own key.
+- SwiftData stays local (`ModelConfiguration(cloudKitDatabase: .none)`): with the iCloud
+  entitlement it would otherwise try to sync and crash on launch (unique attributes).
 - Feed performance: `FeedSections` works the sections out once per render. Computed
   properties re-run on every read froze the main thread for seconds with 400+ stories.
 

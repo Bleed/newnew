@@ -18,8 +18,8 @@ settings:
     # The CloudKit container for breaking-news pushes, e.g. iCloud.com.svein.newnew. Empty: no
     # push; breaking alerts come from background refresh. Set it together with
     # NEWNEW_ENTITLEMENTS = Newnew/App/Newnew-CloudKit.entitlements.
-    NEWNEW_CLOUDKIT_CONTAINER: ""
-    NEWNEW_ENTITLEMENTS: Newnew/App/Newnew.entitlements
+    NEWNEW_CLOUDKIT_CONTAINER: iCloud.com.svein.newnew
+    NEWNEW_ENTITLEMENTS: Newnew/App/Newnew-CloudKit.entitlements
     DEVELOPMENT_TEAM: W533Y4V578
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES

@@ -19,14 +19,18 @@ struct NewnewApp: App {
 
   init() {
     let container: ModelContainer
+    // Local only. With iCloud in the app's entitlements (for breaking-news pushes) SwiftData
+    // would otherwise try to sync this store to CloudKit, which these models don't allow.
+    let configuration = ModelConfiguration(cloudKitDatabase: .none)
+    let types: [any PersistentModel.Type] = [ArticleItem.self, StoryCluster.self, SemanticTopic.self]
     do {
-      container = try ModelContainer(for: ArticleItem.self, StoryCluster.self, SemanticTopic.self)
+      container = try ModelContainer(for: Schema(types), configurations: configuration)
     } catch {
       // A store from an older build that can't be migrated: start over (it's only a cache of
       // the feed, plus your topics).
       let url = URL.applicationSupportDirectory.appending(path: "default.store")
       try? FileManager.default.removeItem(at: url)
-      container = try! ModelContainer(for: ArticleItem.self, StoryCluster.self, SemanticTopic.self)
+      container = try! ModelContainer(for: Schema(types), configurations: configuration)
     }
     self.container = container
     let pipeline = FeedSyncPipeline(context: container.mainContext)

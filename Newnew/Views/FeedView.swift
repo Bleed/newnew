@@ -179,9 +179,17 @@ struct NewsTop: View {
   @State private var width: CGFloat = 360
   @ScaledMetric(relativeTo: .body) var size: CGFloat = 17
 
-  /// How many characters of the top headline fit beside (TOP), the clock, "nn MIN" and the
-  /// arrow. SF Mono is 0.6 em wide; the rest takes about 10 em.
-  var headlineChars: Int { max(12, Int((width - size * 10) / (size * 0.6))) }
+  /// How many characters of the top headline fit on two lines beside (TOP), the clock,
+  /// "nn MIN" and the arrow. SF Mono is 0.6 em wide; the rest takes about 7 em, and a couple of
+  /// characters go to the gap where the first line breaks.
+  var headlineChars: Int { max(12, Int((width * 2 - size * 7) / (size * 0.6)) - 3) }
+
+  /// The headline as separate words, so the line can wrap onto a second line.
+  func headlineWords(_ title: String) -> [RebusToken] {
+    let up = title.uppercased()
+    let cut = up.count > headlineChars ? String(up.prefix(headlineChars - 1)).trimmingCharacters(in: .whitespaces) + "…" : up
+    return cut.split(separator: " ").map { .word(String($0)) }
+  }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
   /// New to you: reached this iPhone since you last looked. Not by publish time, because
@@ -212,7 +220,7 @@ struct NewsTop: View {
     if let top, let lead = top.lead {
       messages.append(KeyMessage(
         id: "top-\(top.id)",
-        tokens: [.pill("TOP"), .name(lead.title, max: headlineChars), .clock, .minutes(Self.age(top.updatedAt)), .arrow],
+        tokens: [.pill("TOP")] + headlineWords(lead.title) + [.clock, .minutes(Self.age(top.updatedAt)), .arrow],
         action: { open(top) }))
     }
     if hiddenCount > 0 {
