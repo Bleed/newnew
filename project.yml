@@ -10,11 +10,11 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     MARKETING_VERSION: "0.1"
-    CURRENT_PROJECT_VERSION: "6"
+    CURRENT_PROJECT_VERSION: "7"
     CODE_SIGN_STYLE: Automatic
     # The published latest_news.json (GitHub Pages, from .github/workflows/update_feed.yml).
     # Empty: the app uses its bundled sample instead.
-    NEWNEW_FEED_URL: "https://bleed.github.io/newnew/latest_news.json"
+    NEWNEW_FEED_URL: "https://bleed.github.io/newnew/index.json"
     # The CloudKit container for breaking-news pushes, e.g. iCloud.com.svein.newnew. Empty: no
     # push; breaking alerts come from background refresh. Set it together with
     # NEWNEW_ENTITLEMENTS = Newnew/App/Newnew-CloudKit.entitlements.

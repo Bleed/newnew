@@ -47,6 +47,22 @@ import SwiftData
 
   var text: String { "\(title). \(snippet)" }
 
+  /// Takes in a newer version from the feed. Changed text is embedded and tagged again.
+  func update(from dto: FeedArticleDTO) {
+    if title != dto.title || snippet != dto.snippet {
+      title = dto.title
+      snippet = dto.snippet
+      embedding = nil
+      regionsRaw = RegionTagger.regions(title: dto.title, snippet: dto.snippet).map(\.rawValue).sorted().joined(separator: ",")
+    }
+    if imageURL != dto.imageURL { imageURL = dto.imageURL }
+    if category != dto.category { category = dto.category }
+    if videoID != dto.videoID { videoID = dto.videoID }
+    if audioURL != dto.audioURL { audioURL = dto.audioURL }
+    if audioSeconds != dto.audioSeconds { audioSeconds = dto.audioSeconds }
+    if isChart != (dto.isChart ?? false) { isChart = dto.isChart ?? false }
+  }
+
   var isMedia: Bool { videoID != nil || audioURL != nil }
   var videoURL: URL? { videoID.flatMap { URL(string: "https://www.youtube.com/watch?v=\($0)") } }
 
@@ -154,6 +170,21 @@ nonisolated enum TopicKind: String, Codable, CaseIterable {
 /// `latest_news.json`, as the scraper publishes it.
 nonisolated struct FeedDTO: Decodable {
   var generatedAt: Date
+  var articles: [FeedArticleDTO]
+}
+
+/// `index.json`: the pieces of the feed, oldest first.
+nonisolated struct FeedIndex: Decodable {
+  struct Chunk: Decodable {
+    var id: String
+    var file: String
+  }
+  var snapshot: String
+  var chunks: [Chunk]
+}
+
+/// `chunks/<run>.json`: the articles new or changed in one scraper run.
+nonisolated struct FeedChunk: Decodable {
   var articles: [FeedArticleDTO]
 }
 

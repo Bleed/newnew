@@ -59,6 +59,13 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
   from 46/48 feeds in ~20 s; 669 + 188 reused + 27 from pages, 12 left to the phone.
 - Last 48 h, 30 per feed, 1,200 total; deduped by link and by outlet + headline.
 - Refuses to publish if fewer than half the feeds answer.
+- Small downloads: every article carries `changedAt`, the run it was new or last changed in
+  (compared with the previous snapshot). Each run rebuilds `chunks/<run>.json` (articles by
+  `changedAt`) and `index.json` (the runs, oldest first) from the snapshot, since Pages replaces
+  the whole site. The app (`NEWNEW_FEED_URL` = …/index.json) fetches the index, then only chunks
+  newer than `feedLastChunk`; the snapshot on first launch or when its last chunk has aged out.
+  Changed articles are updated in place. Measured: index ~170 B, a run's chunk ~1 KB, against
+  ~226 KB for the whole feed. `latest_news.json` stays for builds 1–6.
 
 ## Matching: measured, not the brief's numbers
 

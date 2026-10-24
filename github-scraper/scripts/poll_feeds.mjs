@@ -12,16 +12,24 @@
 //   "chart"    a data-journalism feed: the picture is a chart, to be shown whole, not cropped;
 //              charts come weekly, so they're kept for 14 days instead of 48 hours.
 //
+// Output, so the app downloads little (GitHub Pages replaces the whole site each run, so the
+// small files are rebuilt from the snapshot every time):
+//   latest_news.json   the snapshot: every article of the last 48 h, each stamped `changedAt`
+//                      with the run it was new or last changed in (first launch; builds 1–6)
+//   chunks/<run>.json  the articles whose `changedAt` is that run
+//   index.json         the runs that have a chunk, newest last: the app fetches this (~2 KB),
+//                      then only the chunks newer than the last one it has
+//
 // Pictures come from a waterfall:
 //   1. The feed itself: <media:content>, <media:thumbnail>, <enclosure>, or an <img> in the item.
 //   2. The article page's first 25 KB (an HTTP Range request), read for og:image / twitter:image.
 //   3. Left empty: the app asks the page itself from the phone (LinkPresentation), which works
 //      for publishers that block data-centre IPs.
 //
-//   node scripts/poll_feeds.mjs                 writes public/latest_news.json
+//   node scripts/poll_feeds.mjs                 writes public/ (see "Output" below)
 //   PREVIOUS_FEED_URL=https://… node …          reuses pictures already found in the last run
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import Parser from 'rss-parser'
@@ -279,28 +287,65 @@ async function pageImage(articleURL) {
   }
 }
 
-/** Pictures found by the previous run, so tier 2 only looks at new articles. */
-async function previousImages() {
+/** The previous run's snapshot: its pictures (so tier 2 only looks at new articles) and its
+ * articles (to tell which changed). */
+async function previousFeed() {
   const images = new Map()
+  const byURL = new Map()
   try {
     const source = process.env.PREVIOUS_FEED_URL
     const text = source
       ? await (await fetchWithTimeout(source, { timeout: FEED_TIMEOUT })).text()
       : await readFile(OUT_FILE, 'utf8')
     for (const article of JSON.parse(text).articles ?? []) {
+      byURL.set(article.url, article)
       if (article.imageURL) images.set(article.url, article.imageURL)
     }
   } catch {
     // First run, or the last file isn't reachable: look everything up.
   }
-  return images
+  return { images, byURL }
+}
+
+/** What counts as a change: anything the app shows. */
+const CONTENT_KEYS = ['title', 'snippet', 'imageURL', 'videoID', 'audioURL', 'audioSeconds', 'isChart', 'category', 'country']
+
+/** Stamps each article with the run it was new or last changed in. */
+function stampChanges(articles, previous, runID) {
+  for (const article of articles) {
+    const before = previous.get(article.url)
+    const same = before?.changedAt && CONTENT_KEYS.every(k => (before[k] ?? null) === (article[k] ?? null))
+    article.changedAt = same ? before.changedAt : runID
+  }
+}
+
+/** The chunks and the index, rebuilt from the stamped snapshot. */
+async function writeChunks(articles, generatedAt) {
+  const dir = path.join(OUT_DIR, 'chunks')
+  await rm(dir, { recursive: true, force: true })
+  await mkdir(dir, { recursive: true })
+  const byRun = new Map()
+  for (const article of articles) byRun.set(article.changedAt, [...(byRun.get(article.changedAt) ?? []), article])
+  const runs = [...byRun.keys()].sort()
+  for (const run of runs) {
+    await writeFile(path.join(dir, `${run}.json`), JSON.stringify({ id: run, articles: byRun.get(run) }))
+  }
+  const index = {
+    version: 1,
+    generatedAt,
+    snapshot: 'latest_news.json',
+    chunks: runs.map(run => ({ id: run, file: `chunks/${run}.json`, count: byRun.get(run).length })),
+  }
+  await writeFile(path.join(OUT_DIR, 'index.json'), JSON.stringify(index))
+  return runs.length
 }
 
 // MARK: Run
 
 async function main() {
   const feeds = JSON.parse(await readFile(path.join(root, 'feeds.json'), 'utf8'))
-  const known = await previousImages()
+  const previous = await previousFeed()
+  const known = previous.images
 
   const results = await pool(feeds, 12, pollFeed)
 
@@ -342,6 +387,9 @@ async function main() {
   lookups.forEach((article, i) => (article.imageURL = found[i]))
 
   const generatedAt = new Date().toISOString()
+  // A run's ID is its time, safe as a file name and in order as text: 2026-10-24T18-35-58Z.
+  const runID = generatedAt.replace(/\.\d+Z$/, 'Z').replace(/:/g, '-')
+  stampChanges(articles, previous.byURL, runID)
   const status = {
     generatedAt,
     articles: articles.length,
@@ -356,6 +404,7 @@ async function main() {
 
   await mkdir(OUT_DIR, { recursive: true })
   await writeFile(OUT_FILE, JSON.stringify({ generatedAt, articles }))
+  const chunkCount = await writeChunks(articles, generatedAt)
   await writeFile(path.join(OUT_DIR, 'status.json'), JSON.stringify(status, null, 2))
   await writeFile(path.join(OUT_DIR, '.nojekyll'), '')
 

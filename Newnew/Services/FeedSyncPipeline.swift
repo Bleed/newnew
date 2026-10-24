@@ -60,19 +60,21 @@ import SwiftData
     phase = .downloading
     defer { isSyncing = false }
     do {
-      let feed = try await loadFeed()
-      phase = .reading(outlets: Set(feed.articles.map(\.outlet)).count)
       let source = Self.feedURL?.absoluteString ?? "sample"
       let articles = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
       // The sample's links all go to example.com; none of them belong next to real news.
       let hasSample = source != "sample" && articles.contains { $0.url.hasPrefix("https://example.com/") }
-      if storedSource != source || hasSample {
+      if storedSource != source || hasSample || articles.isEmpty {
         // One by one: the bulk delete fails silently on the article–story relationship.
         for cluster in (try? context.fetch(FetchDescriptor<StoryCluster>())) ?? [] { context.delete(cluster) }
         for article in articles { context.delete(article) }
         try context.save()
         storedSource = source
+        // Nothing stored: the next download is the whole snapshot.
+        lastChunkID = nil
       }
+      let feed = try await loadFeed()
+      phase = .reading(outlets: Set(feed.articles.map(\.outlet)).count)
       let added = upsert(feed.articles)
       prune()
       tagRegions(added)
@@ -81,6 +83,8 @@ import SwiftData
       await recluster()
       applyTopics()
       try context.save()
+      // Only once everything is stored: a failed sync asks for the same pieces again.
+      if let newest = feed.newestChunk { lastChunkID = newest }
       lastSync = .now
       lastError = nil
       phase = .done(stories: storyCount)
@@ -90,13 +94,49 @@ import SwiftData
     }
   }
 
-  func loadFeed() async throws -> FeedDTO {
+  /// The newest feed piece this iPhone has (see github-scraper/scripts/poll_feeds.mjs).
+  var lastChunkID: String? {
+    get { UserDefaults.standard.string(forKey: "feedLastChunk") }
+    set { UserDefaults.standard.set(newValue, forKey: "feedLastChunk") }
+  }
+
+  /// What a sync brings in: articles to add or update, and the newest piece they came from.
+  struct Download {
+    var articles: [FeedArticleDTO]
+    var newestChunk: String?
+  }
+
+  /// With an `index.json` feed, only the pieces newer than the last one this iPhone has (a
+  /// typical refresh: ~2 KB of index and one or two pieces of ~10 KB); the whole snapshot on a
+  /// first launch or after more than two days away. A `latest_news.json` feed is fetched whole.
+  func loadFeed() async throws -> Download {
     let decoder = JSONDecoder()
     decoder.dateDecodingStrategy = .iso8601
-    if let url = Self.feedURL {
+    guard let url = Self.feedURL else { return Download(articles: try sampleArticles(decoder), newestChunk: nil) }
+    guard url.lastPathComponent == "index.json" else {
       let (data, _) = try await URLSession.shared.data(from: url)
-      return try decoder.decode(FeedDTO.self, from: data)
+      return Download(articles: try decoder.decode(FeedDTO.self, from: data).articles, newestChunk: nil)
     }
+    // Asks the server whether the index changed rather than trusting a cached copy, so a pull
+    // right after a scraper run sees it.
+    let request = URLRequest(url: url, cachePolicy: .reloadRevalidatingCacheData)
+    let index = try decoder.decode(FeedIndex.self, from: try await URLSession.shared.data(for: request).0)
+    let newest = index.chunks.last?.id
+    // The pieces up to `last` only ever lose articles to newer pieces, so what's after it is
+    // everything new or changed. Older than the oldest piece: too long away, take it all.
+    if let last = lastChunkID, let oldest = index.chunks.first?.id, last >= oldest {
+      var articles: [FeedArticleDTO] = []
+      for chunk in index.chunks where chunk.id > last {
+        let (data, _) = try await URLSession.shared.data(from: url.deletingLastPathComponent().appending(path: chunk.file))
+        articles += try decoder.decode(FeedChunk.self, from: data).articles
+      }
+      return Download(articles: articles, newestChunk: newest)
+    }
+    let (data, _) = try await URLSession.shared.data(from: url.deletingLastPathComponent().appending(path: index.snapshot))
+    return Download(articles: try decoder.decode(FeedDTO.self, from: data).articles, newestChunk: newest)
+  }
+
+  private func sampleArticles(_ decoder: JSONDecoder) throws -> [FeedArticleDTO] {
     guard let url = Bundle.main.url(forResource: "sample_news", withExtension: "json") else {
       throw CocoaError(.fileNoSuchFile)
     }
@@ -106,22 +146,29 @@ import SwiftData
       let shift = Date.now.addingTimeInterval(-4 * 60).timeIntervalSince(newest)
       for index in feed.articles.indices { feed.articles[index].publishedAt.addTimeInterval(shift) }
     }
-    return feed
+    return feed.articles
   }
 
-  /// Inserts the articles not stored yet and returns them.
+
+  /// Inserts the articles not stored yet and returns them; updates the ones that changed (a
+  /// picture found later, a corrected headline), and reads changed text again.
   @discardableResult
   func upsert(_ incoming: [FeedArticleDTO]) -> [ArticleItem] {
-    let known = Set(((try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []).map(\.url))
+    let stored = Dictionary(((try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []).map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
     let now = Date.now
     var added: [ArticleItem] = []
-    for dto in incoming where !known.contains(dto.url) {
+    for dto in incoming {
+      if let article = stored[dto.url] {
+        article.update(from: dto)
+        continue
+      }
       let article = ArticleItem(dto, fetchedAt: now)
       context.insert(article)
       added.append(article)
     }
     return added
   }
+
 
 
   /// Tags the new articles' regions (a word list). Only new ones: tagging all of them each sync
