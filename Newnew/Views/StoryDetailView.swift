@@ -235,68 +235,64 @@ struct ArticleRow: View {
   }
 }
 
-/// Videos and podcast episodes, linking out. Up to three show as they are; more fold into one
-/// "Watch and listen · 4 videos, 1 episode" row that opens on a tap.
+/// Videos and podcast episodes, always folded into one clearly labelled row: "4 videos, 1 podcast
+/// episode · On YouTube and the podcasts' own sites · Show". Opened, each row links out.
 struct MediaFold: View {
   let media: [ArticleItem]
   @State private var isOpen = false
   @Environment(\.openURL) var openURL
 
-  static let foldsAbove = 3
-
-  var summary: String {
+  /// "2 videos, 1 podcast episode".
+  var title: String {
     let videos = media.filter { $0.videoID != nil }.count
     let episodes = media.count - videos
     var parts: [String] = []
     if videos > 0 { parts.append("\(videos) \(videos == 1 ? "video" : "videos")") }
-    if episodes > 0 { parts.append("\(episodes) \(episodes == 1 ? "episode" : "episodes")") }
+    if episodes > 0 { parts.append("\(episodes) podcast \(episodes == 1 ? "episode" : "episodes")") }
     return parts.joined(separator: ", ")
   }
 
+  /// Where they open.
+  var summary: String {
+    let hasVideo = media.contains { $0.videoID != nil }
+    let hasAudio = media.contains { $0.audioURL != nil }
+    return hasVideo && hasAudio ? "On YouTube and the podcasts' own sites"
+      : hasVideo ? "On YouTube" : "On the podcast's own site"
+  }
+
   var body: some View {
-    if media.count <= Self.foldsAbove {
-      VStack(alignment: .leading, spacing: 10) {
-        Eyebrow("Watch and listen")
-        rows
-      }
-    } else {
-      folded
-    }
-  }
-
-  var rows: some View {
-    ForEach(media) { article in
-      ArticleRow(article: article) {
-        if let url = article.videoURL ?? URL(string: article.url) { openURL(url) }
-      }
-    }
-  }
-
-  var folded: some View {
     VStack(alignment: .leading, spacing: 10) {
       Button {
         withAnimation(.snappy(duration: 0.25)) { isOpen.toggle() }
       } label: {
-        HStack(spacing: 8) {
-          Image(systemName: "play.rectangle").font(.subheadline.weight(.medium))
-          Text("Watch and listen").font(.subheadline.weight(.medium))
-          Text(summary).font(.subheadline).foregroundStyle(Swiss.muted)
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.body.weight(.medium)).foregroundStyle(Swiss.ink)
+            Text(summary).font(.footnote).foregroundStyle(Swiss.muted)
+          }
           Spacer(minLength: 6)
-          Image(systemName: "chevron.down")
-            .font(.footnote.weight(.semibold))
-            .foregroundStyle(Swiss.muted)
-            .rotationEffect(.degrees(isOpen ? 180 : 0))
+          HStack(spacing: 4) {
+            Text(isOpen ? "Hide" : "Show")
+            Image(systemName: "chevron.down").rotationEffect(.degrees(isOpen ? 180 : 0))
+          }
+          .font(.footnote.weight(.medium))
+          .foregroundStyle(Swiss.ink)
         }
-        .foregroundStyle(Swiss.ink)
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .tile(.plain, radius: 16)
         .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
       }
       .buttonStyle(.plain)
-      .accessibilityValue(isOpen ? "Open" : "Closed")
+      .accessibilityLabel("\(title), \(summary)")
+      .accessibilityHint(isOpen ? "Hides them" : "Shows them")
       if isOpen {
-        rows.transition(.opacity.combined(with: .move(edge: .top)))
+        ForEach(media) { article in
+          ArticleRow(article: article) {
+            if let url = article.videoURL ?? URL(string: article.url) { openURL(url) }
+          }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
       }
     }
   }
