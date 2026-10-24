@@ -184,7 +184,10 @@ struct NewsTop: View {
   var headlineChars: Int { max(12, Int((width - size * 10) / (size * 0.6))) }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
-  var fresh: [ArticleItem] { articles.filter { $0.publishedAt > since } }
+  /// New to you: reached this iPhone since you last looked. Not by publish time, because
+  /// articles are a median 41 minutes old by the time the scraper sees them, so nearly all of
+  /// them were "published" before your last look.
+  var fresh: [ArticleItem] { articles.filter { $0.fetchedAt > since } }
 
   var figure: String {
     // The first sync (embedding a few hundred articles) takes a while.
