@@ -5,6 +5,13 @@
 // time, category and, for local-news feeds, the country. Never the article body: the app links
 // out to the publisher.
 //
+// Besides articles, feeds.json can mark a feed with "kind":
+//   "video"    a YouTube channel's public feed: the video ID and its HD thumbnail (Shorts are
+//              skipped; they're vertical).
+//   "podcast"  a daily news podcast: the episode's audio URL and length, no picture.
+//   "chart"    a data-journalism feed: the picture is a chart, to be shown whole, not cropped;
+//              charts come weekly, so they're kept for 14 days instead of 48 hours.
+//
 // Pictures come from a waterfall:
 //   1. The feed itself: <media:content>, <media:thumbnail>, <enclosure>, or an <img> in the item.
 //   2. The article page's first 25 KB (an HTTP Range request), read for og:image / twitter:image.
@@ -28,7 +35,7 @@ const OUT_FILE = path.join(OUT_DIR, 'latest_news.json')
 const USER_AGENT = 'NewnewBot/1.0 (headline aggregator; links to publishers)'
 const MAX_AGE_HOURS = 48
 const PER_FEED = 30
-const TOTAL = 1200
+const TOTAL = 1600
 const SNIPPET_LENGTH = 280
 const FEED_TIMEOUT = 15_000
 const PAGE_TIMEOUT = 6_000
@@ -44,6 +51,8 @@ const parser = new Parser({
       ['media:group', 'mediaGroup'],
       ['content:encoded', 'contentEncoded'],
       ['dc:date', 'dcDate'],
+      ['yt:videoId', 'videoId'],
+      ['itunes:duration', 'duration'],
     ],
   },
 })
@@ -84,7 +93,7 @@ async function pollFeed(feed) {
     const response = await fetchWithTimeout(feed.url, { timeout: FEED_TIMEOUT, headers: { Accept: 'application/rss+xml, application/xml, text/xml, */*' } })
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const parsed = await parser.parseString(await response.text())
-    const cutoff = Date.now() - MAX_AGE_HOURS * 3600_000
+    const cutoff = Date.now() - (feed.maxAgeHours ?? (feed.kind === 'chart' ? 14 * 24 : MAX_AGE_HOURS)) * 3600_000
     const articles = []
     for (const item of parsed.items ?? []) {
       const article = toArticle(item, feed)
@@ -105,18 +114,65 @@ function toArticle(item, feed) {
   const date = Date.parse(item.isoDate ?? item.pubDate ?? item.dcDate ?? '')
   if (!title || !url || Number.isNaN(date)) return null
   const body = item.contentSnippet || item.summary || item.content || item.contentEncoded || ''
+  const media = {}
+  if (feed.kind === 'video') {
+    if (!item.videoId || url.includes('/shorts/')) return null
+    media.videoID = item.videoId
+    media.imageURL = `https://i.ytimg.com/vi/${item.videoId}/maxresdefault.jpg`
+  } else if (feed.kind === 'podcast') {
+    const audio = item.enclosure?.url
+    if (!audio || !(item.enclosure.type ?? 'audio').startsWith('audio')) return null
+    media.audioURL = audio
+    media.audioSeconds = seconds(item.duration)
+    // The show's square logo makes a poor news picture: none.
+    media.imageURL = null
+  } else if (feed.kind === 'chart') {
+    media.isChart = true
+  }
+  const description = feed.kind === 'video' ? item.mediaGroup?.['media:description']?.[0] ?? '' : body
   return {
-    title,
-    snippet: truncate(clean(body), SNIPPET_LENGTH),
+    title: feed.kind === 'video' ? videoTitle(title, feed.outlet) : title,
+    snippet: truncate(clean(description), SNIPPET_LENGTH),
     outlet: feed.outlet,
     url,
-    imageURL: feedImage(item, url),
+    imageURL: 'imageURL' in media ? media.imageURL : feedImage(item, url),
+    videoID: media.videoID ?? null,
+    audioURL: media.audioURL ?? null,
+    audioSeconds: media.audioSeconds ?? null,
+    isChart: media.isChart ?? false,
     // Never in the future: some feeds stamp tomorrow's print date.
     publishedAt: new Date(Math.min(date, Date.now())).toISOString(),
     category: feed.category ?? null,
     // Only on local-news feeds (The Local Norway → "NO"): the app's Local region.
     country: feed.country ?? null,
   }
+}
+
+/** "938", "15:38" or "1:02:03" → seconds. */
+function seconds(duration) {
+  if (duration == null) return null
+  const parts = String(duration).split(':').map(Number)
+  if (parts.some(Number.isNaN)) return null
+  return parts.reduce((total, part) => total * 60 + part, 0)
+}
+
+/** YouTube titles carry channel tags: "… | DW News", "… • FRANCE 24 English", "… #BBCNews". */
+function videoTitle(title, outlet) {
+  const first = outlet.split(/\s+/)[0].toLowerCase()
+  let out = title.replace(/(\s+#[\p{L}\p{N}_]+)+\s*$/u, '').trim()
+  // A last " | x", " • x" or " - x" segment that names the channel.
+  const m = out.match(/^(.*\S)\s+[|•–-]\s+([^|•–-]{1,40})$/u)
+  if (m && m[2].toLowerCase().includes(first)) out = m[1].trim()
+  return out
+}
+
+/** maxresdefault only exists for HD uploads; otherwise the 4:3 hqdefault (with bars). */
+async function videoThumbnail(article) {
+  try {
+    const response = await fetchWithTimeout(article.imageURL, { timeout: PAGE_TIMEOUT, headers: {} })
+    if (response.ok) return article.imageURL
+  } catch {}
+  return article.imageURL.replace('maxresdefault', 'hqdefault')
 }
 
 /** Plain text: tags and entities gone, whitespace collapsed. */
@@ -262,11 +318,17 @@ async function main() {
   articles.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
   articles = articles.slice(0, TOTAL)
 
+  // Video thumbnails: check the HD one exists (reusing last run's answer).
+  const videos = articles.filter(a => a.videoID)
+  const checked = await pool(videos, 16, a => known.get(a.url) ?? videoThumbnail(a))
+  videos.forEach((a, i) => (a.imageURL = checked[i]))
+
   // Waterfall: feed picture, then last run's, then the page's own (newest first, capped).
   let reused = 0
   const missing = []
   for (const article of articles) {
-    if (article.imageURL) continue
+    // Podcasts have no picture on purpose.
+    if (article.imageURL || article.audioURL) continue
     const previous = known.get(article.url)
     if (previous) {
       article.imageURL = previous

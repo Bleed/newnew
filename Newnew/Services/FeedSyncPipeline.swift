@@ -20,6 +20,8 @@ import SwiftData
 
   /// Articles older than this are let go.
   static let retention: TimeInterval = 72 * 3600
+  /// Charts come weekly; they stay two weeks.
+  static let chartRetention: TimeInterval = 14 * 24 * 3600
   static let refreshInterval: TimeInterval = 15 * 60
 
   /// The published `latest_news.json` (`NEWNEW_FEED_URL` in project.yml); until it's set the
@@ -127,7 +129,10 @@ import SwiftData
 
   func prune() {
     let cutoff = Date.now.addingTimeInterval(-Self.retention)
-    try? context.delete(model: ArticleItem.self, where: #Predicate { $0.publishedAt < cutoff })
+    let chartCutoff = Date.now.addingTimeInterval(-Self.chartRetention)
+    try? context.delete(
+      model: ArticleItem.self,
+      where: #Predicate { $0.publishedAt < chartCutoff || ($0.publishedAt < cutoff && !$0.isChart) })
   }
 
   // MARK: Vectors

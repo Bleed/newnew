@@ -18,6 +18,13 @@ import SwiftData
   var isRead = false
   /// The outlet's country when the scraper knows it ("NO": local-news outlets).
   var country: String?
+  /// A YouTube video, watched on YouTube.
+  var videoID: String?
+  /// A podcast episode's audio, played in the app.
+  var audioURL: String?
+  var audioSeconds: Int?
+  /// The picture is a chart: shown whole, never cropped.
+  var isChart = false
   /// `Region` raw values, comma-separated (see `RegionTagger`).
   var regionsRaw: String = ""
   var cluster: StoryCluster?
@@ -30,11 +37,18 @@ import SwiftData
     imageURL = dto.imageURL
     category = dto.category
     country = dto.country
+    videoID = dto.videoID
+    audioURL = dto.audioURL
+    audioSeconds = dto.audioSeconds
+    isChart = dto.isChart ?? false
     publishedAt = dto.publishedAt
     self.fetchedAt = fetchedAt
   }
 
   var text: String { "\(title). \(snippet)" }
+
+  var isMedia: Bool { videoID != nil || audioURL != nil }
+  var videoURL: URL? { videoID.flatMap { URL(string: "https://www.youtube.com/watch?v=\($0)") } }
 
   var regions: Set<Region> { Set(regionsRaw.split(separator: ",").compactMap { Region(rawValue: String($0)) }) }
 }
@@ -67,8 +81,16 @@ import SwiftData
   /// Newest first.
   var sortedArticles: [ArticleItem] { articles.sorted { $0.publishedAt > $1.publishedAt } }
 
-  /// The article that fronts the card: the newest one with a picture, else the newest.
-  var lead: ArticleItem? { sortedArticles.first { $0.imageURL != nil } ?? sortedArticles.first }
+  /// The article that fronts the card: the newest written article with a picture (video and
+  /// podcast titles read less like headlines), then any with a picture, then the newest.
+  var lead: ArticleItem? {
+    let sorted = sortedArticles
+    return sorted.first { $0.imageURL != nil && !$0.isMedia } ?? sorted.first { $0.imageURL != nil } ?? sorted.first
+  }
+
+  /// The newest podcast episode and video in the story, for its Listen and Watch pills.
+  var episode: ArticleItem? { sortedArticles.first { $0.audioURL != nil } }
+  var video: ArticleItem? { sortedArticles.first { $0.videoID != nil } }
 
   var outlets: [String] {
     var seen = Set<String>()
@@ -145,6 +167,10 @@ nonisolated struct FeedArticleDTO: Decodable {
   var category: String?
   /// The outlet's country (ISO code), when the scraper's feed list says.
   var country: String?
+  var videoID: String?
+  var audioURL: String?
+  var audioSeconds: Int?
+  var isChart: Bool?
 }
 
 /// What Apple Intelligence says about how outlets covered one story.

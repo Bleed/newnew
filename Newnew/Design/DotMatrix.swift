@@ -47,6 +47,8 @@ enum DotFont {
   static let letters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
   /// The lower-case letters drawn here, for words that roll in lower case.
   static let lowercase = Array("atelirsudonw")
+  /// The lower-case letters without ascenders.
+  static let xHeight = Array("aeonrsuw")
 
   /// Upper case, with any space (including the narrow no-break space in "550 000") as a gap.
   /// Upper case, except a word written all in the lower-case letters drawn here ("newnew").
@@ -102,8 +104,9 @@ struct DotText: View {
 
   init(
     _ text: String, pitch: CGFloat = 1.8, unlit: Double = 0, motion: Motion = .flip, rollsIn: Bool = false, scales: Bool = true,
-    clock: (start: Date, now: Date)? = nil
+    clock: (start: Date, now: Date)? = nil, glyphTime: Double = DotText.glyphTime
   ) {
+    self.glyphSeconds = glyphTime
     self.scales = scales
     self.clock = clock
     self.basePitch = pitch
@@ -116,6 +119,8 @@ struct DotText: View {
 
   static let rowDelay = 0.014
   static let glyphTime = 0.06
+  /// Seconds per rolled glyph: shorter rolls faster (the pull-to-refresh band uses 0.03).
+  var glyphSeconds = DotText.glyphTime
 
   var target: [Character] { DotFont.normalized(text) }
 
@@ -166,7 +171,7 @@ struct DotText: View {
     switch motion {
     case .none: return 0
     case .flip: return Double(target.count) * 0.02 + rows + 0.05
-    case .roll: return Double(rollLength(target.count - 1) + 1) * Self.glyphTime + rows + 0.05
+    case .roll: return Double(rollLength(target.count - 1) + 1) * glyphSeconds + rows + 0.05
     }
   }
 
@@ -182,9 +187,12 @@ struct DotText: View {
     case .flip: return t < Double(index) * 0.02 ? old : to
     case .roll:
       guard t >= 0 else { return old }
-      let step = Int(t / Self.glyphTime)
+      let step = Int(t / glyphSeconds)
       guard step < rollLength(index) else { return to }
-      let pool = to.isNumber || to == " " ? DotFont.digits : to.isLowercase ? DotFont.lowercase : DotFont.letters
+      // Lower case rolls through x-height letters only, so no dot pokes above the word; rolling
+      // out to a space keeps the case it came from.
+      let lower = to.isLowercase || (to == " " && old.isLowercase)
+      let pool = lower ? DotFont.xHeight : to.isNumber || to == " " ? DotFont.digits : DotFont.letters
       // Stable per cell and step, so every row of a cell shows the same glyph.
       let hash = (index &* 7919 &+ step &* 104_729 &+ 31) % 9973
       return pool[hash % pool.count]
@@ -272,11 +280,68 @@ struct DotBoard: View {
   }
 }
 
-/// The loading board (Figma: Newnew › Loading animation). The whole screen becomes a board of
-/// faint dots, 28 across; "new" over "new" rolls in on it like a departures board, as on the
-/// icon. With stories already stored it holds a beat and fades. On a first launch (nothing
-/// stored) it stays while the feed is read: a figure flips through outlets, articles read and
-/// stories found, and the bottom row of dots fills with progress. A tap skips it.
+/// The stagger both dot boards use (launch and pull to refresh), like an old departures board:
+/// the first "new" rolls in, then the second, then the first rolls out, then the second, and
+/// again, until `done`, always ending with both words in. An object, so the loop's changes
+/// reach the screen (a view's own @State written from a task it started can miss it).
+@MainActor @Observable final class WordLoop {
+  var first = false
+  var second = false
+
+  static let stagger = 0.22
+  static let landed = 0.42
+  static let hold = 0.7
+
+  func run(reduceMotion: Bool, until done: @escaping @MainActor () -> Bool) async {
+    if reduceMotion {
+      first = true; second = true
+      while !done() { try? await Task.sleep(for: .milliseconds(100)) }
+      return
+    }
+    while true {
+      first = true
+      try? await Task.sleep(for: .seconds(Self.stagger))
+      second = true
+      try? await Task.sleep(for: .seconds(Self.landed))
+      if done() { return }
+      try? await Task.sleep(for: .seconds(Self.hold))
+      if done() { return }
+      first = false
+      try? await Task.sleep(for: .seconds(Self.stagger))
+      second = false
+      try? await Task.sleep(for: .seconds(Self.landed))
+    }
+  }
+}
+
+/// "new" over "new" in the dot face at `pitch`, each line rolling in or out as it turns on or
+/// off. Lower-case glyphs use rows 2–6 of their 7, so it draws from glyph row 2: 17 × 11 dots.
+struct StackedWords: View {
+  var first: Bool
+  var second: Bool
+  var pitch: CGFloat = 4
+
+  static let cols = 17
+  static let rows = 11
+
+  var body: some View {
+    ZStack(alignment: .topLeading) {
+      ForEach(0..<2, id: \.self) { line in
+        DotText((line == 0 ? first : second) ? "new" : "   ", pitch: pitch, motion: .roll, scales: false, glyphTime: 0.03)
+          .offset(y: CGFloat(line * 6 - 2) * pitch)
+      }
+    }
+    .frame(width: CGFloat(Self.cols) * pitch, height: CGFloat(Self.rows) * pitch, alignment: .topLeading)
+    .clipped()
+  }
+}
+
+/// The launch board (Figma: newnew › Loading animation, made finer): the whole screen becomes a
+/// fine board of faint dots, 4 pt apart, as the pull-to-refresh board, with the small "new" over
+/// "new" in its middle looping in the same stagger. With stories stored it lands both words and
+/// fades at once. On a first launch (nothing stored) it loops while the feed is read, a small
+/// figure counts outlets, then articles read, then stories, and a row of dots fills with
+/// progress. A tap skips it.
 struct LoadingBoard: View {
   @Binding var isShowing: Bool
   /// Nothing to show yet: stay up and show progress until the first sync is done.
@@ -284,16 +349,15 @@ struct LoadingBoard: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Environment(\.accessibilityReduceMotion) var reduceMotion
   @State private var faded = false
-  @State private var start = Date()
+  @State private var loop = WordLoop()
 
   /// Once per launch, not every time the window is reopened.
   @MainActor static var hasPlayed = false
 
-  static let columns = 28
-  static let word = "new"
+  static let pitch: CGFloat = 4
   static let ink = Color.adaptive(light: 0x1E1E1E, dark: 0xEDEDED)
 
-  /// The figure under the word: outlets, then articles read, then stories.
+  /// The figure under the words: outlets, then articles read, then stories.
   var figure: String? {
     guard waitsForFeed else { return nil }
     switch pipeline.phase {
@@ -307,40 +371,33 @@ struct LoadingBoard: View {
 
   var body: some View {
     GeometryReader { proxy in
-      let pitch = proxy.size.width / CGFloat(Self.columns)
-      let rows = Int(proxy.size.height / pitch)
-      let ox = pitch / 2
-      let oy = (proxy.size.height - CGFloat(rows - 1) * pitch) / 2
-      let d = pitch * 0.82
-      // "new" is 17 columns; its glyphs leave their top two rows blank (lower case), so the
-      // second line sits 6 rows down, one blank row between the lines, as on the icon.
-      let wordCol = (Self.columns - (Self.word.count * 6 - 1)) / 2
-      let wordRow = Int(Double(rows) * 0.26) - 2
-      let figureRow = wordRow + 16
-      let barRow = rows - 8
-      let lit = Int((pipeline.phase.progress * Double(Self.columns)).rounded())
-      let place = { (col: Int, row: Int) in CGSize(width: ox + CGFloat(col) * pitch - d / 2, height: oy + CGFloat(row) * pitch - d / 2) }
+      let p = Self.pitch, d = p * 0.82
+      let cols = Int(proxy.size.width / p), rows = Int(proxy.size.height / p)
+      let ox = (proxy.size.width - CGFloat(cols - 1) * p) / 2
+      let oy = (proxy.size.height - CGFloat(rows - 1) * p) / 2
+      // Grid-aligned: the words' top-left dot sits on a board dot.
+      let wordCol = (cols - StackedWords.cols) / 2
+      let wordRow = rows / 2 - StackedWords.rows
+      let figureRow = wordRow + StackedWords.rows + 4
+      let barRow = rows - 24
+      let lit = Int((pipeline.phase.progress * Double(cols)).rounded())
+      let place = { (col: Int, row: Int) in CGSize(width: ox + CGFloat(col) * p - d / 2 - (p - d) / 2, height: oy + CGFloat(row) * p - d / 2 - (p - d) / 2) }
       ZStack(alignment: .topLeading) {
         Swiss.canvas
         Canvas { ctx, _ in
-          for r in 0..<rows { for c in 0..<Self.columns {
-            let rect = CGRect(x: ox + CGFloat(c) * pitch - d / 2, y: oy + CGFloat(r) * pitch - d / 2, width: d, height: d)
+          for r in 0..<rows { for c in 0..<cols {
+            let rect = CGRect(x: ox + CGFloat(c) * p - d / 2, y: oy + CGFloat(r) * p - d / 2, width: d, height: d)
             let isLit = waitsForFeed && r == barRow && c < lit
             ctx.fill(Path(ellipseIn: rect), with: .color(isLit ? Self.ink : Swiss.ink.opacity(0.1)))
           } }
         }
-        ForEach(0..<2, id: \.self) { line in
-          TimelineView(.animation(paused: reduceMotion)) { context in
-            DotText(Self.word, pitch: pitch, motion: .roll, scales: false,
-              clock: (start.addingTimeInterval(0.2 + Double(line) * 0.25), context.date))
-              .foregroundStyle(Self.ink)
-          }
-          .offset(place(wordCol, wordRow + line * 6))
-        }
+        StackedWords(first: loop.first, second: loop.second, pitch: p)
+          .foregroundStyle(Self.ink)
+          .offset(place(wordCol, wordRow))
         if let figure {
-          DotText(figure, pitch: pitch, motion: .roll, scales: false)
+          DotText(figure, pitch: p, motion: .roll, scales: false, glyphTime: 0.03)
             .foregroundStyle(Self.ink)
-            .offset(place((Self.columns - (figure.count * 6 - 1)) / 2, figureRow))
+            .offset(place((cols - (figure.count * 6 - 1)) / 2, figureRow))
             .transition(.opacity)
         }
       }
@@ -354,14 +411,11 @@ struct LoadingBoard: View {
     .accessibilityLabel(waitsForFeed ? "newnew, reading the news" : "newnew")
     .task {
       Self.hasPlayed = true
-      start = Date()
-      // The roll settles in about 1.3 s; then a short hold.
-      try? await Task.sleep(for: .seconds(reduceMotion ? 0.8 : 2.0))
-      if !waitsForFeed || isFinished(pipeline.phase) { await settleAndFinish() }
-    }
-    .onChange(of: pipeline.phase) { _, phase in
-      guard waitsForFeed, isFinished(phase), Date.now.timeIntervalSince(start) > 1.6 else { return }
-      Task { await settleAndFinish() }
+      await loop.run(reduceMotion: reduceMotion) { !waitsForFeed || isFinished(pipeline.phase) }
+      // Let the story count land on a first launch.
+      if waitsForFeed, case .done = pipeline.phase { try? await Task.sleep(for: .seconds(0.6)) }
+      try? await Task.sleep(for: .seconds(0.15))
+      finish()
     }
   }
 
@@ -372,15 +426,9 @@ struct LoadingBoard: View {
     }
   }
 
-  /// Lets the story count land before fading.
-  func settleAndFinish() async {
-    if waitsForFeed, case .done = pipeline.phase { try? await Task.sleep(for: .seconds(0.9)) }
-    finish()
-  }
-
   func finish() {
     guard !faded else { return }
-    withAnimation(.easeOut(duration: 0.35)) { faded = true } completion: {
+    withAnimation(.easeOut(duration: 0.3)) { faded = true } completion: {
       isShowing = false
       LaunchState.shared.isShowing = false
     }
@@ -416,7 +464,7 @@ struct DotChip: View {
       // Full-strength dots: grey ones vanish on tiles and in dark mode.
       .foregroundStyle(Swiss.ink)
       .padding(.horizontal, 9)
-      .padding(.vertical, 6)
+      .pillHeight()
       .background(Swiss.ink.opacity(0.07), in: Capsule())
       .fixedSize()
       .accessibilityLabel(label ?? text)

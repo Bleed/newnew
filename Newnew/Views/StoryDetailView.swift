@@ -13,7 +13,7 @@ struct StoryDetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 14) {
         if let lead = cluster.lead {
-          HeroImage(remote: lead.imageURL, article: lead.url, height: 220, radius: 20)
+          HeroImage(remote: lead.imageURL, article: lead.url, radius: 20, fits: lead.isChart, isVideo: lead.videoID != nil)
           HStack(spacing: 8) {
             if let category = lead.category { Text(category).font(.footnote.weight(.medium)) }
             Text("Updated \(Text(cluster.updatedAt.shortAgo).font(Swiss.smallFigure)) ago").font(.footnote)
@@ -192,32 +192,39 @@ struct ArticleRow: View {
   let article: ArticleItem
   var open: () -> Void
 
+  /// Where tapping the row goes: the video on YouTube, else the article (or episode page).
+  var destination: String { article.videoID != nil ? "Opens the video on YouTube" : "Opens \(article.outlet) in Safari" }
+
   var body: some View {
-    Button(action: open) {
-      VStack(alignment: .leading, spacing: 6) {
-        HStack(spacing: 6) {
-          Text(article.outlet).font(.footnote.weight(.medium)).foregroundStyle(Swiss.ink)
-          Text(article.publishedAt.shortAgo).font(Swiss.smallFigure).foregroundStyle(Swiss.muted)
-          Spacer(minLength: 6)
-          Image(systemName: "arrow.up.right").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted)
-        }
-        Text(article.title)
-          .font(Swiss.headline(20, relativeTo: .body))
-          .foregroundStyle(Swiss.ink)
-          .multilineTextAlignment(.leading)
-          .fixedSize(horizontal: false, vertical: true)
-        Text(article.snippet)
-          .font(.footnote)
-          .foregroundStyle(Swiss.muted)
-          .multilineTextAlignment(.leading)
-          .lineLimit(3)
+    VStack(alignment: .leading, spacing: 6) {
+      HStack(spacing: 6) {
+        Text(article.outlet).font(.footnote.weight(.medium)).foregroundStyle(Swiss.ink)
+        Text(article.publishedAt.shortAgo).font(Swiss.smallFigure).foregroundStyle(Swiss.muted)
+        Spacer(minLength: 6)
+        Image(systemName: article.videoID != nil ? "play.rectangle" : "arrow.up.right")
+          .font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted)
       }
-      .padding(14)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .tile(.plain, radius: 16)
-      .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      Text(article.title)
+        .font(Swiss.headline(20, relativeTo: .body))
+        .foregroundStyle(Swiss.ink)
+        .multilineTextAlignment(.leading)
+        .fixedSize(horizontal: false, vertical: true)
+      Text(article.snippet)
+        .font(.footnote)
+        .foregroundStyle(Swiss.muted)
+        .multilineTextAlignment(.leading)
+        .lineLimit(3)
+      // The episode plays here; the row itself still opens its page.
+      if article.audioURL != nil { ListenPill(episode: article).padding(.top, 2) }
     }
-    .buttonStyle(.plain)
-    .accessibilityHint("Opens \(article.outlet) in Safari")
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .tile(.plain, radius: 16)
+    .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    .onTapGesture(perform: open)
+    .accessibilityElement(children: .contain)
+    .accessibilityAddTraits(.isButton)
+    .accessibilityAction(named: "Open", open)
+    .accessibilityHint(destination)
   }
 }

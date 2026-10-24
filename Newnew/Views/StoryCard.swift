@@ -8,7 +8,7 @@ struct StoryCard: View {
   var body: some View {
     if let lead = cluster.lead {
       VStack(alignment: .leading, spacing: 12) {
-        HeroImage(remote: lead.imageURL, article: lead.url, height: 188)
+        HeroImage(remote: lead.imageURL, article: lead.url, fits: lead.isChart, isVideo: lead.videoID != nil)
         HStack(alignment: .center, spacing: 8) {
           meta(lead)
           Spacer(minLength: 6)
@@ -25,13 +25,15 @@ struct StoryCard: View {
           .foregroundStyle(Swiss.muted)
           .lineLimit(2)
         OutletPills(outlets: cluster.outlets)
+        MediaPills(episode: cluster.episode, video: cluster.video)
       }
       .padding(14)
       .padding(.bottom, 2)
       .frame(maxWidth: .infinity, alignment: .leading)
       .tile(.plain)
       .contentShape(RoundedRectangle(cornerRadius: Swiss.tileRadius, style: .continuous))
-      .accessibilityElement(children: .combine)
+      // Contain, not combine: the Listen and Watch pills stay buttons for VoiceOver.
+      .accessibilityElement(children: .contain)
     }
   }
 
@@ -99,17 +101,85 @@ struct BriefRow: View {
             .foregroundStyle(cluster.readAt == nil ? Swiss.ink : Swiss.muted)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
+          MediaPills(episode: cluster.episode, video: nil)
         }
         Spacer(minLength: 0)
         if lead.imageURL != nil {
-          HeroImage(remote: lead.imageURL, article: lead.url, height: 64, width: 64, radius: 10)
+          HeroImage(remote: lead.imageURL, article: lead.url, height: 64, width: 64, radius: 10, fits: lead.isChart, isVideo: lead.videoID != nil)
         }
       }
       .padding(14)
       .frame(maxWidth: .infinity, alignment: .leading)
       .tile(.plain, radius: 16)
       .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-      .accessibilityElement(children: .combine)
+      .accessibilityElement(children: .contain)
+    }
+  }
+}
+
+/// "Listen · 15 min" for a podcast episode in the story (played here), "Watch · Reuters" for a
+/// video (opens YouTube). Quiet pills, the same height as the signal and sources pills.
+struct MediaPills: View {
+  let episode: ArticleItem?
+  let video: ArticleItem?
+  @Environment(\.openURL) var openURL
+
+  var body: some View {
+    if episode != nil || video != nil {
+      HStack(spacing: 6) {
+        if let episode { ListenPill(episode: episode) }
+        if let video, let url = video.videoURL {
+          Button { openURL(url) } label: {
+            Label("Watch · \(video.outlet)", systemImage: "play.rectangle.fill")
+          }
+          .buttonStyle(MediaPillStyle())
+          .accessibilityHint("Opens the video on YouTube")
+        }
+      }
+    }
+  }
+}
+
+struct ListenPill: View {
+  let episode: ArticleItem
+  var player = AudioPlayer.shared
+
+  var minutes: String {
+    episode.audioSeconds.map { " · \(max(1, Int((Double($0) / 60).rounded()))) min" } ?? ""
+  }
+
+  var body: some View {
+    let playing = player.isPlaying(episode.audioURL ?? "")
+    Button { player.toggle(episode) } label: {
+      Label(playing ? "Pause\(minutes)" : "Listen\(minutes)", systemImage: playing ? "pause.fill" : "play.fill")
+    }
+    .buttonStyle(MediaPillStyle())
+    .accessibilityLabel(playing ? "Pause \(episode.outlet)" : "Listen to \(episode.outlet)\(minutes)")
+  }
+}
+
+/// A quiet pill with a glyph, sized like the other pills on a card.
+struct MediaPillStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .labelStyle(MediaLabelStyle())
+      .font(.caption.weight(.medium))
+      .lineLimit(1)
+      .padding(.horizontal, 10)
+      .pillHeight()
+      .foregroundStyle(Swiss.ink)
+      .background(Swiss.ink.opacity(0.07), in: Capsule())
+      .opacity(configuration.isPressed ? 0.6 : 1)
+      .contentShape(Capsule())
+      .fixedSize()
+  }
+}
+
+private struct MediaLabelStyle: LabelStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    HStack(spacing: 5) {
+      configuration.icon.imageScale(.small)
+      configuration.title
     }
   }
 }

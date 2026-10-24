@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 
 /// Today: the one-sentence top (what's new since you last looked, and the top story), the
-/// filter switch (regions, then the topics you follow), then stories on topics you follow,
-/// stories covered widely, and stories in brief.
+/// filter switch (regions, then the topics you follow), then stories on topics you follow, top
+/// stories (most important first; see `FeedSections.importance`), and stories in brief.
 struct FeedView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Query(sort: \StoryCluster.updatedAt, order: .reverse) var clusters: [StoryCluster]
@@ -73,7 +73,7 @@ struct FeedView: View {
             }
           }
           if !wide.isEmpty {
-            Eyebrow("Covered widely").padding(.top, following.isEmpty ? 4 : 16)
+            Eyebrow("Top stories").padding(.top, following.isEmpty ? 4 : 16)
             ForEach(wide) { cluster in
               NavigationLink(value: cluster) { StoryCard(cluster: cluster) }
                 .buttonStyle(.plain)
@@ -102,7 +102,7 @@ struct FeedView: View {
       }
       .swissCanvas()
       .swissNavigationTitle("Today")
-      .refreshable { await pipeline.sync() }
+      .dotRefreshable(isSyncing: pipeline.isSyncing) { await pipeline.sync() }
       .navigationDestination(for: StoryCluster.self) { StoryDetailView(cluster: $0) }
       .toolbar {
         ToolbarItem(placement: .topBarTrailing) {
@@ -264,15 +264,33 @@ struct FeedSections {
       case .topic(let phrase): if cluster.followedBy == phrase { visible.append(cluster) }
       }
     }
-    // Each story's outlet count once, not on every comparison of the sort.
+    // Each story's outlet count and importance once, not on every comparison of the sort.
+    let now = Date.now
     let outlets = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Set($0.articles.map(\.outlet)).count) })
+    let importance = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Self.importance($0, outlets: outlets[$0.id] ?? 0, now: now)) })
+    let byImportance = { (a: StoryCluster, b: StoryCluster) in importance[a.id, default: 0] > importance[b.id, default: 0] }
     let byTopic: Bool
     if case .topic = filter { byTopic = true } else { byTopic = false }
-    following = byTopic ? [] : visible.filter(\.isFollowed)
+    following = byTopic ? [] : visible.filter(\.isFollowed).sorted(by: byImportance)
     let rest = byTopic ? visible : visible.filter { !$0.isFollowed }
-    wide = rest.filter { outlets[$0.id, default: 0] > 1 }
-      .sorted { (outlets[$0.id, default: 0], $0.updatedAt) > (outlets[$1.id, default: 0], $1.updatedAt) }
-    brief = rest.filter { outlets[$0.id, default: 0] <= 1 }
+    wide = rest.filter { outlets[$0.id, default: 0] > 1 }.sorted(by: byImportance)
+    brief = rest.filter { outlets[$0.id, default: 0] <= 1 }.sorted { $0.updatedAt > $1.updatedAt }
+  }
+
+  /// How high a story goes: how widely it's covered, how fast coverage is growing right now,
+  /// and how fresh it is. Coverage counts with diminishing returns (the 18th outlet adds less
+  /// than the 3rd); the story fades with a 6-hour half-life from its newest article; a story
+  /// you've read, with nothing new since, sinks.
+  ///
+  /// So a story 12 outlets broke an hour ago beats one 18 outlets covered yesterday, and five
+  /// outlets in the last hour beat ten spread over the day.
+  static func importance(_ cluster: StoryCluster, outlets: Int, now: Date) -> Double {
+    let recent = Set(cluster.articles.filter { now.timeIntervalSince($0.publishedAt) < 2 * 3600 }.map(\.outlet)).count
+    let coverage = log(1 + Double(outlets)) + 0.6 * log(1 + Double(recent))
+    let hours = max(now.timeIntervalSince(cluster.updatedAt), 0) / 3600
+    let freshness = pow(0.5, hours / 6)
+    let settled = cluster.readAt != nil && cluster.newSinceRead == 0
+    return coverage * (0.25 + 0.75 * freshness) * (settled ? 0.4 : 1)
   }
 }
 

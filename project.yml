@@ -10,7 +10,7 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     MARKETING_VERSION: "0.1"
-    CURRENT_PROJECT_VERSION: "2"
+    CURRENT_PROJECT_VERSION: "3"
     CODE_SIGN_STYLE: Automatic
     # The published latest_news.json (GitHub Pages, from .github/workflows/update_feed.yml).
     # Empty: the app uses its bundled sample instead.
@@ -50,8 +50,9 @@ targets:
       properties:
         NewnewFeedURL: $(NEWNEW_FEED_URL)
         NewnewCloudKitContainer: $(NEWNEW_CLOUDKIT_CONTAINER)
-        # Background refresh (local alerts) and pushes (breaking news) wake the app to sync.
-        UIBackgroundModes: [fetch, remote-notification]
+        # Background refresh (local alerts) and pushes (breaking news) wake the app to sync;
+        # podcast episodes keep playing in the background.
+        UIBackgroundModes: [fetch, remote-notification, audio]
         BGTaskSchedulerPermittedIdentifiers: [com.svein.newnew.refresh]
         # ProMotion: scrolling at up to 120 Hz.
         CADisableMinimumFrameDurationOnPhone: true

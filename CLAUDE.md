@@ -90,6 +90,23 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - In the Simulator `NLContextualEmbedding` fails to compile its model (sandbox), so the engine
   falls back to `NLEmbedding.sentenceEmbedding`. Real devices use the contextual model.
 
+## Ranking, media and the dot boards
+
+- Top stories are ordered by `FeedSections.importance`: log(outlets) + 0.6·log(outlets in the
+  last 2 h), times freshness (6 h half-life, floor 25 %), × 0.4 once read with nothing new.
+  Followed stories use the same order; "In brief" is newest first.
+- Feeds can be `"kind": "video"` (YouTube channel feed: `videoID`, HD thumbnail, Shorts
+  skipped), `"podcast"` (`audioURL`, `audioSeconds`, no picture) or `"chart"` (`isChart`: shown
+  whole on white, kept 14 days). Cards get "Listen · n min" (AudioPlayer, background audio, Lock
+  Screen) and "Watch · outlet" (opens YouTube) pills. Lead article prefers written articles.
+- Hero images are 5:4. The small pills on a card share one height (`pillHeight()`).
+- Launch and pull to refresh share one animation (`WordLoop`, `StackedWords`): a fine 4 pt dot
+  board with a small "new" over "new"; first line rolls in, then the second, then they roll out
+  in the same order, looping until loaded, always ending with both in. Pull to refresh
+  (`dotRefreshable`) replaces the system spinner; the same small board shows for any sync.
+  Keep loop state in an object: a ViewModifier's @State written from a task it started never
+  reached the screen.
+
 ## Loading board and alerts
 
 - `LoadingBoard` (Design/DotMatrix.swift; Figma › Loading animation) replaces the launch board on

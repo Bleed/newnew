@@ -93,7 +93,7 @@ struct SignalBadge: View {
     // Act now is a red dot and words; attention is a mint pill.
     .foregroundStyle(level == .actNow ? Swiss.alert : .black)
     .padding(.horizontal, level == .actNow ? 0 : 9)
-    .padding(.vertical, 4)
+    .pillHeight()
     .background(level == .actNow ? .clear : level.color, in: Capsule())
     .fixedSize()
     .accessibilityElement(children: .ignore)
@@ -231,6 +231,17 @@ struct Eyebrow: View {
     Text(text).font(.subheadline.weight(.medium)).tileSecondary()
       .accessibilityAddTraits(.isHeader)
   }
+}
+
+/// One height for the small pills that sit side by side on a card (signal, sources, listen),
+/// following the text size.
+private struct PillHeight: ViewModifier {
+  @ScaledMetric(relativeTo: .caption) var height: CGFloat = 24
+  func body(content: Content) -> some View { content.frame(height: height) }
+}
+
+extension View {
+  func pillHeight() -> some View { modifier(PillHeight()) }
 }
 
 /// A quiet 7 % pill with a short label: outlet names, suggestions.

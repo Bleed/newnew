@@ -46,7 +46,7 @@ struct NewnewApp: App {
       .task {
         // With stories to show, the sync waits for the board to fade, so its work on the main
         // actor can't hold the board up.
-        if hadStories { try? await Task.sleep(for: .seconds(2.4)) }
+        if hadStories { try? await Task.sleep(for: .seconds(1.5)) }
         await syncInForeground()
         await Alerts.updateSubscriptions()
       }
