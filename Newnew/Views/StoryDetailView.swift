@@ -171,7 +171,7 @@ struct BriefPanel: View {
   var footnote: String {
     brief.isGenerated
       ? "Written on this iPhone by Apple Intelligence from \(brief.sourceCount) headlines and snippets. It can be wrong; the full stories are at each outlet."
-      : "\(IntelligenceService.unavailableReason), so this preview just lists each outlet's headline."
+      : brief.note ?? "\(IntelligenceService.unavailableReason), so this preview just lists each outlet's headline."
   }
 
   func section(_ title: String, _ lines: [String], mark: Color) -> some View {

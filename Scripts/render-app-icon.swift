@@ -68,7 +68,14 @@ func render(size: CGFloat, to path: String) {
     }
   }
   NSGraphicsContext.restoreGraphicsState()
-  try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+  // Saved opaque: App Store Connect rejects an app icon with an alpha channel.
+  let opaque = CGContext(
+    data: nil, width: px, height: px, bitsPerComponent: 8, bytesPerRow: 0,
+    space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+  opaque.draw(rep.cgImage!, in: CGRect(x: 0, y: 0, width: px, height: px))
+  let destination = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.png" as CFString, 1, nil)!
+  CGImageDestinationAddImage(destination, opaque.makeImage()!, nil)
+  CGImageDestinationFinalize(destination)
 }
 
 render(size: 1024, to: CommandLine.arguments[1])

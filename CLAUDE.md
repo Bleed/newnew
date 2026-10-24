@@ -25,6 +25,18 @@ cd public && python3 -m http.server 8765 --bind 127.0.0.1
 SIMCTL_CHILD_NEWNEW_FEED_URL=http://127.0.0.1:8765/latest_news.json xcrun simctl launch --terminate-running-process booted com.svein.newnew
 ```
 
+## Release
+
+```bash
+Scripts/release.sh            # archive + export to build/release/iOS (nothing leaves the Mac)
+Scripts/release.sh --upload   # the same, then upload to App Store Connect › TestFlight
+```
+
+Signs with the Apple Account in Xcode (team W533Y4V578, Mutiny AS). App Store Connect app:
+"newnew: News, Grouped" (the name "newnew" was taken; the home-screen name is still newnew),
+bundle ID com.svein.newnew, SKU newnew-ios. Build numbers are set at export. Internal TestFlight
+group "Team" gets every upload automatically. The icon must stay opaque (no alpha channel).
+
 ## Layout
 
 | Path | What |
@@ -107,10 +119,14 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
    `FoundationModels`, `SwiftData`, `ImageIO`, `LinkPresentation`).
 2. Bulk work (every article) uses only `NaturalLanguage` + `Accelerate`. `FoundationModels` runs
    on a tap, for one story or one topic, and its result is cached (`cachedPerspectiveBriefJSON`).
-3. Never read `SystemLanguageModel.default.availability` from a view body: it caused a redraw
+3. Apple's default guardrails refuse much hard news ("May contain sensitive content" on riots,
+   war). Briefs then retry with `.permissiveContentTransformations` (plain text in a SUMMARY/
+   AGREE/DIFFER/ANGLE line format, parsed), and only then fall back to the headline preview with
+   a note. Never show the raw model error.
+4. Never read `SystemLanguageModel.default.availability` from a view body: it caused a redraw
    loop that froze the UI. Use `IntelligenceService.isAvailable` (cached, refreshed on foreground).
-4. Wrap FoundationModels in `#if canImport(FoundationModels)` with the plain preview fallback.
-5. News pictures go through `ImagePipeline` (`CGImageSourceCreateThumbnailAtIndex` at the shown
+5. Wrap FoundationModels in `#if canImport(FoundationModels)` with the plain preview fallback.
+6. News pictures go through `ImagePipeline` (`CGImageSourceCreateThumbnailAtIndex` at the shown
    size), never `AsyncImage` or `UIImage(data:)`. No blurs, shadows or live blend modes in rows.
 
 ## Look (from Atelier CRM)

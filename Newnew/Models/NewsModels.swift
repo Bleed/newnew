@@ -163,4 +163,6 @@ nonisolated struct ClusterPerspectiveBrief: Codable, Equatable {
   /// False for the preview shown where Apple Intelligence isn't available.
   var isGenerated: Bool
   var createdAt: Date
+  /// Why this is only a preview, when there's a reason other than Apple Intelligence being off.
+  var note: String?
 }

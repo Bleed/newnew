@@ -52,17 +52,81 @@ enum IntelligenceService {
     refreshAvailability()
     #if canImport(FoundationModels)
       if isAvailable {
-        let session = LanguageModelSession(instructions: briefInstructions)
-        let response = try await session.respond(to: briefPrompt(sources), generating: GeneratedBrief.self)
-        let brief = response.content
-        return ClusterPerspectiveBrief(
-          summary: brief.summary, sharedFacts: brief.sharedFacts, differences: brief.differences,
-          angles: brief.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
-          sourceCount: sources.count, isGenerated: true, createdAt: .now)
+        do {
+          let session = LanguageModelSession(instructions: briefInstructions)
+          let response = try await session.respond(to: briefPrompt(sources), generating: GeneratedBrief.self)
+          let brief = response.content
+          return ClusterPerspectiveBrief(
+            summary: brief.summary, sharedFacts: brief.sharedFacts, differences: brief.differences,
+            angles: brief.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
+            sourceCount: sources.count, isGenerated: true, createdAt: .now)
+        } catch {
+          // The default guardrails refuse a lot of hard news (war, riots, attacks). Comparing
+          // headlines someone else wrote is what the permissive setting is for; it only answers
+          // in text. Any other failure gets the same second try.
+            if let brief = try? await plainTextBrief(sources) { return brief }
+          var preview = previewBrief(sources)
+          preview.note = isDeclined(error)
+            ? "Apple Intelligence declined to compare this story; it avoids some subjects, such as violence. Here is each outlet's headline instead."
+            : "Apple Intelligence couldn't compare this story just now. Here is each outlet's headline instead."
+          return preview
+        }
       }
     #endif
     return previewBrief(sources)
   }
+
+  #if canImport(FoundationModels)
+    static func isDeclined(_ error: Error) -> Bool {
+      if let error = error as? LanguageModelSession.GenerationError {
+        switch error {
+        case .guardrailViolation, .refusal: return true
+        default: break
+        }
+      }
+      return String(describing: error).localizedCaseInsensitiveContains("refus")
+    }
+
+    /// The same brief with the permissive guardrails, in a line format the app parses:
+    /// SUMMARY:, AGREE:, DIFFER: and ANGLE: outlet | focus.
+    static func plainTextBrief(_ sources: [Source]) async throws -> ClusterPerspectiveBrief? {
+      let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+      let session = LanguageModelSession(model: model, instructions: briefInstructions)
+      let prompt = briefPrompt(sources) + """
+
+
+        Answer in exactly this format, one item per line, nothing else:
+        SUMMARY: one or two sentences on what happened, using facts most outlets agree on
+        AGREE: a fact several outlets report (2 to 4 lines)
+        DIFFER: how one outlet's coverage differs, naming it once (1 to 3 lines)
+        ANGLE: outlet name | what it focuses on, under 10 words (one line per outlet)
+        """
+      let text = try await session.respond(to: prompt).content
+      var summary = "", agree: [String] = [], differ: [String] = [], angles: [ClusterPerspectiveBrief.Angle] = []
+      for line in text.split(whereSeparator: \.isNewline) {
+        let line = line.trimmingCharacters(in: .whitespaces)
+        func value(_ key: String) -> String? {
+          line.uppercased().hasPrefix(key) ? line.dropFirst(key.count).trimmingCharacters(in: .whitespaces) : nil
+        }
+        // The model sometimes carries the ANGLE format over ("Outlet | text"): keep it readable.
+        func tidy(_ text: String) -> String {
+          let parts = text.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+          return parts.count == 2 ? "\(parts[0]): \(parts[1])" : text
+        }
+        if let v = value("SUMMARY:") { summary = v }
+        else if let v = value("AGREE:"), !v.isEmpty { agree.append(tidy(v)) }
+        else if let v = value("DIFFER:"), !v.isEmpty { differ.append(tidy(v)) }
+        else if let v = value("ANGLE:") {
+          let parts = v.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+          if parts.count == 2 { angles.append(.init(outlet: parts[0], focus: parts[1])) }
+        }
+      }
+      guard !summary.isEmpty else { return nil }
+      return ClusterPerspectiveBrief(
+        summary: summary, sharedFacts: Array(agree.prefix(4)), differences: Array(differ.prefix(3)),
+        angles: angles, sourceCount: sources.count, isGenerated: true, createdAt: .now)
+    }
+  #endif
 
   static let briefInstructions = """
     You compare how news outlets cover one event. You only see each outlet's headline and \
