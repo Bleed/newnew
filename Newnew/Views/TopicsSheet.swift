@@ -205,7 +205,7 @@ struct AlertSettings: View {
         Text(detail).font(.footnote).tileSecondary().fixedSize(horizontal: false, vertical: true)
       }
     }
-    .tint(Swiss.ink)
+    .toggleStyle(.swiss)
     .padding(14)
     .tile(.plain, radius: 16)
   }

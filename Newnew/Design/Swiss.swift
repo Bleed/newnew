@@ -283,6 +283,39 @@ extension ButtonStyle where Self == SwissButtonStyle {
   static var swissSecondary: SwissButtonStyle { SwissButtonStyle(prominent: false) }
 }
 
+/// Switches in ink, reversed in dark mode like the ink pills: on is an ink track with a knob
+/// in the page colour, so the knob never melts into a white track. Off is a quiet grey track.
+struct SwissToggleStyle: ToggleStyle {
+  static let offKnob = Color.adaptive(light: 0xFFFFFF, dark: 0x8E8E8E)
+
+  func makeBody(configuration: Configuration) -> some View {
+    Button { configuration.isOn.toggle() } label: {
+      HStack(spacing: 12) {
+        configuration.label.frame(maxWidth: .infinity, alignment: .leading)
+        Capsule()
+          .fill(configuration.isOn ? Swiss.ink : Swiss.ink.opacity(0.12))
+          .frame(width: 51, height: 31)
+          .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+            Circle()
+              .fill(configuration.isOn ? Swiss.onInk : Self.offKnob)
+              .shadow(color: .black.opacity(0.15), radius: 1.5, y: 1)
+              .padding(2)
+          }
+          .animation(.snappy(duration: 0.2), value: configuration.isOn)
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isToggle)
+    .accessibilityValue(configuration.isOn ? "On" : "Off")
+  }
+}
+
+extension ToggleStyle where Self == SwissToggleStyle {
+  static var swiss: SwissToggleStyle { SwissToggleStyle() }
+}
+
 /// Minimal wrapping layout for pills.
 struct FlowLayout: Layout {
   var spacing: CGFloat = 6
