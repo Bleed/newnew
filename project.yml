@@ -1,0 +1,54 @@
+name: Newnew
+options:
+  bundleIdPrefix: com.svein.newnew
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    # The published latest_news.json, e.g. https://<user>.github.io/<repo>/latest_news.json.
+    # Empty: the app uses its bundled sample.
+    NEWNEW_FEED_URL: ""
+    DEVELOPMENT_TEAM: W533Y4V578
+    DEAD_CODE_STRIPPING: YES
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    STRING_CATALOG_GENERATE_SYMBOLS: YES
+targets:
+  Newnew:
+    type: application
+    platform: iOS
+    sources: [Newnew]
+    settings:
+      base:
+        PRODUCT_NAME: Newnew
+        PRODUCT_BUNDLE_IDENTIFIER: com.svein.newnew
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Newnew
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.news
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+    info:
+      path: Newnew/App/Info.plist
+      properties:
+        NewnewFeedURL: $(NEWNEW_FEED_URL)
+        # ProMotion: scrolling at up to 120 Hz.
+        CADisableMinimumFrameDurationOnPhone: true
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+schemes:
+  Newnew:
+    build:
+      targets: { Newnew: all }
+    run: { config: Debug }

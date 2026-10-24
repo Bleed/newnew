@@ -1,0 +1,64 @@
+# Polls the RSS feeds every 30 minutes and publishes latest_news.json (and status.json) to
+# GitHub Pages: https://<owner>.github.io/<repo>/latest_news.json
+#
+# One-time setup: Settings → Pages → Source: "GitHub Actions". Pages is free for public repos.
+# GitHub pauses scheduled workflows in repos with no activity for 60 days; re-enable it under
+# Actions if the feed stops updating.
+name: Update feed
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["github-scraper/**", ".github/workflows/update_feed.yml"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: github-scraper
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: github-scraper/package-lock.json
+
+      - run: npm ci
+
+      - name: Poll feeds
+        env:
+          # Pictures found last run are reused, so only new articles are looked up.
+          PREVIOUS_FEED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest_news.json
+        run: node scripts/poll_feeds.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: github-scraper/public
+
+  deploy:
+    needs: poll
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

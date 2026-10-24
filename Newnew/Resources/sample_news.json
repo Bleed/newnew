@@ -1,0 +1,285 @@
+{
+  "generatedAt": "2026-10-24T09:00:00Z",
+  "note": "Offline sample. Outlets and stories are invented for testing; links go to example.com.",
+  "articles": [
+    {
+      "title": "Storm Elin batters western Norway, cutting power to 40,000 homes",
+      "snippet": "Gusts above 140 km/h brought down lines across Vestland overnight, and the grid operator says some valleys may be dark until Monday.",
+      "outlet": "Fjord Herald",
+      "url": "https://example.com/fjord-herald/storm-elin-power",
+      "imageURL": "https://picsum.photos/seed/elin1/1600/900",
+      "publishedAt": "2026-10-24T08:40:00Z",
+      "category": "World"
+    },
+    {
+      "title": "Ferries cancelled and bridges closed as Storm Elin sweeps the Norwegian coast",
+      "snippet": "Coastal ferry routes north of Bergen were suspended and two suspension bridges closed to traffic as the storm moved inland.",
+      "outlet": "Meridian Wire",
+      "url": "https://example.com/meridian/elin-ferries",
+      "imageURL": "https://picsum.photos/seed/elin2/1600/900",
+      "publishedAt": "2026-10-24T08:10:00Z",
+      "category": "World"
+    },
+    {
+      "title": "Storm Elin: power outages spread across Norway's west coast",
+      "snippet": "Tens of thousands of households lost electricity as the strongest autumn storm in a decade hit Vestland and Møre og Romsdal.",
+      "outlet": "Atlas Report",
+      "url": "https://example.com/atlas/elin-outages",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T07:55:00Z",
+      "category": "World"
+    },
+    {
+      "title": "Is Storm Elin a sign of things to come? Scientists weigh in on warmer seas",
+      "snippet": "Meteorologists say unusually warm North Sea temperatures gave the storm extra energy, though linking a single event to climate change is hard.",
+      "outlet": "The Northern Ledger",
+      "url": "https://example.com/ledger/elin-climate",
+      "imageURL": "https://picsum.photos/seed/elin4/1600/900",
+      "publishedAt": "2026-10-24T07:20:00Z",
+      "category": "Science"
+    },
+    {
+      "title": "Insurers brace for storm claims after Elin hits Norway",
+      "snippet": "Early estimates put insured damage from the storm in the hundreds of millions of kroner, with roofs, boats and cars worst hit.",
+      "outlet": "Harbor Times",
+      "url": "https://example.com/harbor/elin-insurers",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T06:50:00Z",
+      "category": "Business"
+    },
+    {
+      "title": "Swedish rail workers walk out in nationwide strike over pay",
+      "snippet": "Trains across Sweden stood still on Saturday morning as the rail union began a 48-hour strike after talks with operators broke down.",
+      "outlet": "Meridian Wire",
+      "url": "https://example.com/meridian/sweden-rail-strike",
+      "imageURL": "https://picsum.photos/seed/rail1/1600/900",
+      "publishedAt": "2026-10-24T08:30:00Z",
+      "category": "World"
+    },
+    {
+      "title": "Rail strike halts Swedish trains, stranding weekend travellers",
+      "snippet": "Commuters and tourists were left looking for buses as the rail strike shut down most services between Stockholm, Gothenburg and Malmö.",
+      "outlet": "Civic Post",
+      "url": "https://example.com/civic/rail-strike-travellers",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T08:05:00Z",
+      "category": "World"
+    },
+    {
+      "title": "Operators call Swedish rail strike 'irresponsible' as union demands inflation-linked raises",
+      "snippet": "Train companies say the union's pay demand would force fare increases; the union says members have lost real income for three years.",
+      "outlet": "Harbor Times",
+      "url": "https://example.com/harbor/rail-strike-operators",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T07:40:00Z",
+      "category": "Business"
+    },
+    {
+      "title": "Why Sweden's train drivers are striking, explained",
+      "snippet": "The dispute is about pay, shift lengths and staffing on night trains. Here's what each side wants and how long it could last.",
+      "outlet": "Daily Sextant",
+      "url": "https://example.com/sextant/rail-strike-explained",
+      "imageURL": "https://picsum.photos/seed/rail4/1600/900",
+      "publishedAt": "2026-10-24T06:30:00Z",
+      "category": "World"
+    },
+    {
+      "title": "Chipmaker Halden Semiconductor beats forecasts on AI demand",
+      "snippet": "Quarterly revenue rose 38 percent as data-centre customers bought more of its accelerator chips, sending shares up in early trading.",
+      "outlet": "Harbor Times",
+      "url": "https://example.com/harbor/halden-earnings",
+      "imageURL": "https://picsum.photos/seed/chip1/1600/900",
+      "publishedAt": "2026-10-24T08:20:00Z",
+      "category": "Business"
+    },
+    {
+      "title": "Halden Semiconductor shares jump after record quarter",
+      "snippet": "The chip designer reported record revenue and raised its full-year outlook, citing strong orders for AI servers.",
+      "outlet": "Atlas Report",
+      "url": "https://example.com/atlas/halden-shares",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T07:50:00Z",
+      "category": "Business"
+    },
+    {
+      "title": "Halden's AI chip boom hides a weak consumer business, analysts warn",
+      "snippet": "Sales of chips for phones and laptops fell for a fourth quarter, leaving the company more dependent on a handful of cloud customers.",
+      "outlet": "The Northern Ledger",
+      "url": "https://example.com/ledger/halden-consumer",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T07:10:00Z",
+      "category": "Business"
+    },
+    {
+      "title": "Halden Semiconductor earnings: revenue surges on data-centre orders",
+      "snippet": "Results beat expectations on both revenue and profit; the company plans a new fabrication partnership in 2027.",
+      "outlet": "Meridian Wire",
+      "url": "https://example.com/meridian/halden-results",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T06:45:00Z",
+      "category": "Business"
+    },
+    {
+      "title": "European lunar lander touches down near the Moon's south pole",
+      "snippet": "The robotic lander Selene-2 confirmed a soft landing on Saturday and sent back its first images of the cratered terrain.",
+      "outlet": "Daily Sextant",
+      "url": "https://example.com/sextant/selene-landing",
+      "imageURL": "https://picsum.photos/seed/moon1/1600/900",
+      "publishedAt": "2026-10-24T08:50:00Z",
+      "category": "Science"
+    },
+    {
+      "title": "Selene-2 lands on the Moon in a first for the European Space Agency",
+      "snippet": "Mission control erupted in applause as the lander's signal confirmed it had survived the descent near Shackleton crater.",
+      "outlet": "Civic Post",
+      "url": "https://example.com/civic/selene-first",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T08:35:00Z",
+      "category": "Science"
+    },
+    {
+      "title": "Moon landing: what Selene-2 will look for in the lunar ice",
+      "snippet": "The lander carries a drill and a small lab to test whether water ice near the south pole could one day supply future crews.",
+      "outlet": "The Northern Ledger",
+      "url": "https://example.com/ledger/selene-ice",
+      "imageURL": "https://picsum.photos/seed/moon3/1600/900",
+      "publishedAt": "2026-10-24T07:30:00Z",
+      "category": "Science"
+    },
+    {
+      "title": "Critics question the cost of Europe's Moon lander after successful touchdown",
+      "snippet": "The Selene-2 mission ran two years late and over budget, and some lawmakers ask whether robotic landers are the best use of space funds.",
+      "outlet": "Fjord Herald",
+      "url": "https://example.com/fjord-herald/selene-cost",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T06:40:00Z",
+      "category": "Science"
+    },
+    {
+      "title": "Oslo city council approves a higher congestion charge for petrol cars",
+      "snippet": "Drivers of petrol and diesel cars will pay more at rush hour from January, while electric cars keep a reduced rate.",
+      "outlet": "Fjord Herald",
+      "url": "https://example.com/fjord-herald/oslo-toll",
+      "imageURL": "https://picsum.photos/seed/oslo1/1600/900",
+      "publishedAt": "2026-10-24T08:00:00Z",
+      "category": "Local"
+    },
+    {
+      "title": "Oslo raises rush-hour road tolls in vote on congestion charge",
+      "snippet": "The council voted 32 to 27 for the new toll rates; opponents say the charge hits commuters from outside the city hardest.",
+      "outlet": "Civic Post",
+      "url": "https://example.com/civic/oslo-toll-vote",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T07:35:00Z",
+      "category": "Local"
+    },
+    {
+      "title": "Business groups warn Oslo's new congestion charge will hurt city-centre shops",
+      "snippet": "Retailers say higher road tolls will push shoppers to malls outside the city, while the council expects cleaner air and fewer cars.",
+      "outlet": "Harbor Times",
+      "url": "https://example.com/harbor/oslo-toll-shops",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T06:20:00Z",
+      "category": "Local"
+    },
+    {
+      "title": "Striker Marco Vidal completes record transfer to Bergen United",
+      "snippet": "The forward signed a four-year contract after the club agreed a fee believed to be the highest in the league's history.",
+      "outlet": "Atlas Report",
+      "url": "https://example.com/atlas/vidal-transfer",
+      "imageURL": "https://picsum.photos/seed/foot1/1600/900",
+      "publishedAt": "2026-10-24T08:25:00Z",
+      "category": "Sport"
+    },
+    {
+      "title": "Bergen United smash transfer record to sign Marco Vidal",
+      "snippet": "Supporters gathered outside the stadium as the club unveiled its new striker, who scored 21 goals last season.",
+      "outlet": "Daily Sextant",
+      "url": "https://example.com/sextant/vidal-record",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T07:45:00Z",
+      "category": "Sport"
+    },
+    {
+      "title": "Is Marco Vidal worth the record fee? The numbers behind the transfer",
+      "snippet": "Expected-goals data suggests the striker's finishing is elite, but injuries kept him out of a third of matches in two seasons.",
+      "outlet": "The Northern Ledger",
+      "url": "https://example.com/ledger/vidal-numbers",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T06:55:00Z",
+      "category": "Sport"
+    },
+    {
+      "title": "Pop star Lumi and actor Jonas Brekke marry in secret ceremony",
+      "snippet": "The couple wed in front of 40 guests at a lakeside chapel, according to people at the event.",
+      "outlet": "Civic Post",
+      "url": "https://example.com/civic/lumi-wedding",
+      "imageURL": "https://picsum.photos/seed/wed1/1600/900",
+      "publishedAt": "2026-10-24T08:15:00Z",
+      "category": "Culture"
+    },
+    {
+      "title": "Lumi and Jonas Brekke wedding: inside the celebrity couple's lakeside ceremony",
+      "snippet": "Guests included musicians and film stars; the bride wore a dress by a young Copenhagen designer.",
+      "outlet": "Fjord Herald",
+      "url": "https://example.com/fjord-herald/lumi-brekke",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T07:25:00Z",
+      "category": "Culture"
+    },
+    {
+      "title": "National Museum reopens its design wing after two-year renovation",
+      "snippet": "The new galleries put Scandinavian furniture and posters from the 1950s next to work by young designers.",
+      "outlet": "The Northern Ledger",
+      "url": "https://example.com/ledger/museum-design-wing",
+      "imageURL": "https://picsum.photos/seed/museum/1600/900",
+      "publishedAt": "2026-10-24T08:45:00Z",
+      "category": "Culture"
+    },
+    {
+      "title": "Review: the new Aurora phone has the best screen we've tested this year",
+      "snippet": "Battery life is excellent and the camera is good in daylight, but the price makes it a hard sell against last year's model.",
+      "outlet": "Daily Sextant",
+      "url": "https://example.com/sextant/aurora-review",
+      "imageURL": "https://picsum.photos/seed/phone/1600/900",
+      "publishedAt": "2026-10-24T07:05:00Z",
+      "category": "Technology"
+    },
+    {
+      "title": "Fermented foods are the year's biggest home cooking trend",
+      "snippet": "Sales of jars, airlocks and starter cultures doubled as home cooks turned to kimchi, kefir and sourdough.",
+      "outlet": "Harbor Times",
+      "url": "https://example.com/harbor/fermented-trend",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T06:10:00Z",
+      "category": "Life"
+    },
+    {
+      "title": "Wildfire in southern Spain forces evacuation of three villages",
+      "snippet": "Firefighters are fighting the blaze from the air as dry winds push it toward farmland near Ronda.",
+      "outlet": "Meridian Wire",
+      "url": "https://example.com/meridian/spain-wildfire",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T08:55:00Z",
+      "category": "World"
+    },
+    {
+      "title": "Bitcoin slides below key level as traders take profits",
+      "snippet": "The cryptocurrency fell 6 percent in a day, dragging other digital tokens lower after a month-long rally.",
+      "outlet": "Atlas Report",
+      "url": "https://example.com/atlas/bitcoin-slide",
+      "imageURL": null,
+      "publishedAt": "2026-10-24T06:35:00Z",
+      "category": "Business"
+    },
+    {
+      "title": "Study finds a daily walk cuts heart disease risk more than expected",
+      "snippet": "Researchers followed 60,000 adults for ten years and found 30 minutes of brisk walking lowered risk by a quarter.",
+      "outlet": "Civic Post",
+      "url": "https://example.com/civic/walk-study",
+      "imageURL": "https://picsum.photos/seed/walk/1600/900",
+      "publishedAt": "2026-10-24T05:50:00Z",
+      "category": "Health"
+    }
+  ]
+}

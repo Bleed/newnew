@@ -1,0 +1,7 @@
+.DS_Store
+DerivedData/
+build/
+*.xcodeproj/
+xcuserdata/
+github-scraper/node_modules/
+github-scraper/public/
