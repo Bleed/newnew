@@ -91,8 +91,9 @@ struct FeedView: View {
       .dotRefreshable(isSyncing: pipeline.isSyncing) { await pipeline.sync() }
       .navigationDestination(for: StoryCluster.self) { StoryDetailView(cluster: $0) }
       .toolbar {
-        // The middle of the bar belongs to the refresh board (PullToRefresh), which also keeps
-        // the title hidden.
+        // Nothing in the middle: the page's own top is the title.
+        ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+          .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
           Button("Topics", systemImage: "line.3.horizontal.decrease") { topicsKind = .follow }
         }

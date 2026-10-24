@@ -2,8 +2,8 @@ import SwiftUI
 import UIKit
 
 /// Pull to refresh in the dot language (Figma: newnew › Pull to refresh), in place of the system
-/// spinner: a small dot board in the middle of the top bar, level with its button, around "new"
-/// over "new" as on the icon. As you pull, its
+/// spinner: a small dot board, around "new" over "new" as on the icon, in the middle of a blank
+/// band that opens at the top of the page. As you pull, its
 /// faint dots fill in from the left. Let go past `threshold` and it loops like an old departures
 /// board while the feed loads: the first "new" rolls in, then the second, then the first rolls
 /// out, then the second, and again. It always ends with both words in, then folds away, also
@@ -20,6 +20,8 @@ struct PullToRefresh: ViewModifier {
   @Environment(\.accessibilityReduceMotion) var reduceMotion
 
   static let threshold: CGFloat = 72
+  /// The blank band the board sits in while loading.
+  static let gap: CGFloat = 96
 
   /// What the running loop changes, in an object so the changes reach the screen.
   @MainActor @Observable final class BoardState {
@@ -30,25 +32,25 @@ struct PullToRefresh: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .toolbar {
-        // In the middle of the top bar, level with its button: filling in as you pull, then
-        // looping the words while loading. Empty otherwise, which also keeps the title hidden.
-        ToolbarItem(placement: .principal) {
-          Group {
-            if board.isShowing {
-              MiniDotBoard(fill: 1, first: board.loop.first, second: board.loop.second)
-            } else if pull > 2 {
-              MiniDotBoard(fill: min(pull / Self.threshold, 1), first: false, second: false)
-            } else {
-              Color.clear.frame(width: 1, height: 1)
-            }
-          }
-          // Top edge level with the button's top edge.
-          .frame(height: CGFloat(MiniDotBoard.rows) * MiniDotBoard.pitch, alignment: .top)
-          .transition(.opacity)
-          .animation(.easeOut(duration: 0.2), value: board.isShowing)
+      .safeAreaInset(edge: .top, spacing: 0) {
+        // While loading, the page opens a blank band at its top with the board in its middle.
+        if board.isShowing {
+          MiniDotBoard(fill: 1, first: board.loop.first, second: board.loop.second)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.gap)
+            .background(Swiss.canvas)
+            .transition(.opacity)
         }
-        .sharedBackgroundVisibility(.hidden)
+      }
+      .overlay(alignment: .top) {
+        // While pulling, it fills in, centred in the gap the pull opens.
+        if !board.isShowing, pull > 2 {
+          MiniDotBoard(fill: min(pull / Self.threshold, 1), first: false, second: false)
+            .frame(maxWidth: .infinity)
+            .frame(height: min(pull, Self.gap))
+            .clipped()
+            .allowsHitTesting(false)
+        }
       }
       .onScrollGeometryChange(for: CGFloat.self) { geometry in
         -(geometry.contentOffset.y + geometry.contentInsets.top)
@@ -98,16 +100,14 @@ extension View {
   }
 }
 
-/// A small dot board around "new" over "new": 19 × 13 dots, one dot of margin round the words,
-/// as tall as the top bar's button. Faint dots fill to `fill` from the left; each line rolls in when it turns
+/// A small dot board around "new" over "new": 19 × 13 dots, one dot of margin round the words. Faint dots fill to `fill` from the left; each line rolls in when it turns
 /// on and rolls out when it turns off.
 struct MiniDotBoard: View {
   var fill: CGFloat
   var first: Bool
   var second: Bool
 
-  /// 13 rows × 3.4 pt ≈ 44 pt: the height of the top bar's button, so their tops line up.
-  static let pitch: CGFloat = 3.4
+  static let pitch: CGFloat = 4
   static let cols = StackedWords.cols + 2
   static let rows = StackedWords.rows + 2
 

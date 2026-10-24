@@ -111,8 +111,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Launch and pull to refresh share one animation (`WordLoop`, `StackedWords`): a fine 4 pt dot
   board with a small "new" over "new"; first line rolls in, then the second, then they roll out
   in the same order, looping until loaded, always ending with both in. Pull to refresh
-  (`dotRefreshable`) replaces the system spinner; the same small board shows in the middle of the
-  top bar, top edge level with the filter button's, for any sync, and empties after. The
+  (`dotRefreshable`) replaces the system spinner; for any sync the page opens a blank 96 pt band
+  at its top with the small board in its middle, and closes it after. The
   sentence top sits below the bar (figure 44 pt, words 17 pt). The launch
   sync waits until the launch board is gone; the board's dot field is an Equatable `DotGrid`
   drawn in two fills. Regions are tagged only for new articles (main-actor time).
