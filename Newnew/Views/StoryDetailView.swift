@@ -28,23 +28,15 @@ struct StoryDetailView: View {
             .accessibilityAddTraits(.isHeader)
         }
 
-        // The three newest videos and podcast episodes first, as links out to where they play;
-        // any more stay in Coverage, so the comparison isn't pushed far down.
-        let media = Array(cluster.sortedArticles.filter(\.isMedia).prefix(3))
-        let mediaIDs = Set(media.map(\.url))
-        if !media.isEmpty {
-          Eyebrow("Watch and listen").padding(.top, 6)
-          ForEach(media) { article in
-            ArticleRow(article: article) {
-              if let url = article.videoURL ?? URL(string: article.url) { openURL(url) }
-            }
-          }
-        }
+        // Videos and podcast episodes, folded into one row under the headline; opened, each links
+        // out to where it plays.
+        let media = cluster.sortedArticles.filter(\.isMedia)
+        if !media.isEmpty { MediaFold(media: media).padding(.top, 6) }
 
         if cluster.outlets.count > 1 { perspective.padding(.top, 6) }
 
         Eyebrow("Coverage").padding(.top, 14)
-        ForEach(cluster.sortedArticles.filter { !mediaIDs.contains($0.url) }) { article in
+        ForEach(cluster.sortedArticles.filter { !$0.isMedia }) { article in
           ArticleRow(article: article) {
             if let url = URL(string: article.url) { openURL(url) }
           }
@@ -240,5 +232,72 @@ struct ArticleRow: View {
     .accessibilityAddTraits(.isButton)
     .accessibilityAction(named: "Open", open)
     .accessibilityHint(destination)
+  }
+}
+
+/// Videos and podcast episodes, linking out. Up to three show as they are; more fold into one
+/// "Watch and listen · 4 videos, 1 episode" row that opens on a tap.
+struct MediaFold: View {
+  let media: [ArticleItem]
+  @State private var isOpen = false
+  @Environment(\.openURL) var openURL
+
+  static let foldsAbove = 3
+
+  var summary: String {
+    let videos = media.filter { $0.videoID != nil }.count
+    let episodes = media.count - videos
+    var parts: [String] = []
+    if videos > 0 { parts.append("\(videos) \(videos == 1 ? "video" : "videos")") }
+    if episodes > 0 { parts.append("\(episodes) \(episodes == 1 ? "episode" : "episodes")") }
+    return parts.joined(separator: ", ")
+  }
+
+  var body: some View {
+    if media.count <= Self.foldsAbove {
+      VStack(alignment: .leading, spacing: 10) {
+        Eyebrow("Watch and listen")
+        rows
+      }
+    } else {
+      folded
+    }
+  }
+
+  var rows: some View {
+    ForEach(media) { article in
+      ArticleRow(article: article) {
+        if let url = article.videoURL ?? URL(string: article.url) { openURL(url) }
+      }
+    }
+  }
+
+  var folded: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Button {
+        withAnimation(.snappy(duration: 0.25)) { isOpen.toggle() }
+      } label: {
+        HStack(spacing: 8) {
+          Image(systemName: "play.rectangle").font(.subheadline.weight(.medium))
+          Text("Watch and listen").font(.subheadline.weight(.medium))
+          Text(summary).font(.subheadline).foregroundStyle(Swiss.muted)
+          Spacer(minLength: 6)
+          Image(systemName: "chevron.down")
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Swiss.muted)
+            .rotationEffect(.degrees(isOpen ? 180 : 0))
+        }
+        .foregroundStyle(Swiss.ink)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tile(.plain, radius: 16)
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+      }
+      .buttonStyle(.plain)
+      .accessibilityValue(isOpen ? "Open" : "Closed")
+      if isOpen {
+        rows.transition(.opacity.combined(with: .move(edge: .top)))
+      }
+    }
   }
 }
