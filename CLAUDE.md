@@ -107,6 +107,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   skipped), `"podcast"` (`audioURL`, `audioSeconds`, no picture) or `"chart"` (`isChart`: shown
   whole on white, kept 14 days). Cards get "Listen · n min" (AudioPlayer, background audio, Lock
   Screen) and "Watch · outlet" (opens YouTube) pills. Lead article prefers written articles.
+  On a story's page the three newest videos/episodes come first, under the headline, as links
+  out ("Watch and listen"); no in-page player.
 - Hero images are 5:4. The small pills on a card share one height (`pillHeight()`).
 - Launch and pull to refresh share one animation (`WordLoop`, `StackedWords`): a fine 4 pt dot
   board with a small "new" over "new"; first line rolls in, then the second, then they roll out

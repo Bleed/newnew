@@ -28,10 +28,23 @@ struct StoryDetailView: View {
             .accessibilityAddTraits(.isHeader)
         }
 
+        // The three newest videos and podcast episodes first, as links out to where they play;
+        // any more stay in Coverage, so the comparison isn't pushed far down.
+        let media = Array(cluster.sortedArticles.filter(\.isMedia).prefix(3))
+        let mediaIDs = Set(media.map(\.url))
+        if !media.isEmpty {
+          Eyebrow("Watch and listen").padding(.top, 6)
+          ForEach(media) { article in
+            ArticleRow(article: article) {
+              if let url = article.videoURL ?? URL(string: article.url) { openURL(url) }
+            }
+          }
+        }
+
         if cluster.outlets.count > 1 { perspective.padding(.top, 6) }
 
         Eyebrow("Coverage").padding(.top, 14)
-        ForEach(cluster.sortedArticles) { article in
+        ForEach(cluster.sortedArticles.filter { !mediaIDs.contains($0.url) }) { article in
           ArticleRow(article: article) {
             if let url = URL(string: article.url) { openURL(url) }
           }
@@ -193,7 +206,10 @@ struct ArticleRow: View {
   var open: () -> Void
 
   /// Where tapping the row goes: the video on YouTube, else the article (or episode page).
-  var destination: String { article.videoID != nil ? "Opens the video on YouTube" : "Opens \(article.outlet) in Safari" }
+  var destination: String {
+    article.videoID != nil ? "Opens the video on YouTube"
+      : article.audioURL != nil ? "Opens the episode on \(article.outlet)'s site" : "Opens \(article.outlet) in Safari"
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 6) {
@@ -201,7 +217,7 @@ struct ArticleRow: View {
         Text(article.outlet).font(.footnote.weight(.medium)).foregroundStyle(Swiss.ink)
         Text(article.publishedAt.shortAgo).font(Swiss.smallFigure).foregroundStyle(Swiss.muted)
         Spacer(minLength: 6)
-        Image(systemName: article.videoID != nil ? "play.rectangle" : "arrow.up.right")
+        Image(systemName: article.videoID != nil ? "play.rectangle" : article.audioURL != nil ? "headphones" : "arrow.up.right")
           .font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted)
       }
       Text(article.title)
@@ -214,8 +230,6 @@ struct ArticleRow: View {
         .foregroundStyle(Swiss.muted)
         .multilineTextAlignment(.leading)
         .lineLimit(3)
-      // The episode plays here; the row itself still opens its page.
-      if article.audioURL != nil { ListenPill(episode: article).padding(.top, 2) }
     }
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
