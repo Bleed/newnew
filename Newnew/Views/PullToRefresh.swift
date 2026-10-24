@@ -13,6 +13,8 @@ struct PullToRefresh: ViewModifier {
   var action: @MainActor () async -> Void
   /// A sync started elsewhere: show the board for it too.
   var isSyncing: Bool
+  /// Whether the board is up, for the page to make room for it.
+  @Binding var isShowing: Bool
   @State private var pull: CGFloat = 0
   @State private var board = BoardState()
   @Environment(\.accessibilityReduceMotion) var reduceMotion
@@ -59,6 +61,9 @@ struct PullToRefresh: ViewModifier {
         }
       }
       .sensoryFeedback(.impact(weight: .light), trigger: pull >= Self.threshold) { _, full in full }
+      .onChange(of: board.isShowing) { _, showing in
+        withAnimation(.snappy(duration: 0.3)) { isShowing = showing }
+      }
       .onChange(of: isSyncing, initial: true) { _, syncing in
         board.waitingForSync = syncing
         guard syncing, !board.isShowing else { return }
@@ -86,8 +91,10 @@ struct PullToRefresh: ViewModifier {
 }
 
 extension View {
-  func dotRefreshable(isSyncing: Bool, _ action: @escaping @MainActor () async -> Void) -> some View {
-    modifier(PullToRefresh(action: action, isSyncing: isSyncing))
+  func dotRefreshable(
+    isSyncing: Bool, isShowing: Binding<Bool> = .constant(false), _ action: @escaping @MainActor () async -> Void
+  ) -> some View {
+    modifier(PullToRefresh(action: action, isSyncing: isSyncing, isShowing: isShowing))
   }
 }
 
