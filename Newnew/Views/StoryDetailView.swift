@@ -8,7 +8,6 @@ struct StoryDetailView: View {
   @Environment(\.openURL) var openURL
   @State private var isWriting = false
   @State private var failure: String?
-  @ScaledMetric(relativeTo: .title) var headlineSize: CGFloat = 30
 
   var body: some View {
     ScrollView {
@@ -23,8 +22,7 @@ struct StoryDetailView: View {
           }
           .foregroundStyle(Swiss.muted)
           Text(lead.title)
-            .font(.system(size: headlineSize, weight: .regular))
-            .tracking(-headlineSize * 0.02)
+            .font(Swiss.headline(34, relativeTo: .title))
             .foregroundStyle(Swiss.ink)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityAddTraits(.isHeader)
@@ -51,8 +49,11 @@ struct StoryDetailView: View {
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Menu("More", systemImage: "ellipsis") {
+          Button("Follow stories like this", systemImage: "plus.circle") {
+            Task { await pipeline.addTopic(like: cluster, kind: .follow) }
+          }
           Button("Mute stories like this", systemImage: "speaker.slash") {
-            Task { await pipeline.muteStoriesLike(cluster) }
+            Task { await pipeline.addTopic(like: cluster, kind: .mute) }
           }
         }
       }
@@ -201,7 +202,7 @@ struct ArticleRow: View {
           Image(systemName: "arrow.up.right").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted)
         }
         Text(article.title)
-          .font(.body)
+          .font(Swiss.headline(20, relativeTo: .body))
           .foregroundStyle(Swiss.ink)
           .multilineTextAlignment(.leading)
           .fixedSize(horizontal: false, vertical: true)

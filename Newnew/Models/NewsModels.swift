@@ -16,6 +16,10 @@ import SwiftData
   /// the corpus mean when compared; see `Vec.centred`.
   var embedding: Data?
   var isRead = false
+  /// The outlet's country when the scraper knows it ("NO"), for Local.
+  var country: String?
+  /// `Region` raw values, comma-separated (see `RegionTagger`).
+  var regionsRaw: String = ""
   var cluster: StoryCluster?
 
   init(_ dto: FeedArticleDTO, fetchedAt: Date) {
@@ -25,11 +29,14 @@ import SwiftData
     outlet = dto.outlet
     imageURL = dto.imageURL
     category = dto.category
+    country = dto.country
     publishedAt = dto.publishedAt
     self.fetchedAt = fetchedAt
   }
 
   var text: String { "\(title). \(snippet)" }
+
+  var regions: Set<Region> { Set(regionsRaw.split(separator: ",").compactMap { Region(rawValue: String($0)) }) }
 }
 
 /// Articles from different outlets about the same event.
@@ -43,6 +50,8 @@ import SwiftData
   var readAt: Date?
   /// The mute topic that hides it, if any.
   var mutedBy: String?
+  /// The followed topic that raises it, if any (never set while muted).
+  var followedBy: String?
   /// `ClusterPerspectiveBrief` as JSON, made on demand and kept.
   var cachedPerspectiveBriefJSON: Data?
 
@@ -53,6 +62,7 @@ import SwiftData
   }
 
   var isMuted: Bool { mutedBy != nil }
+  var isFollowed: Bool { followedBy != nil }
 
   /// Newest first.
   var sortedArticles: [ArticleItem] { articles.sorted { $0.publishedAt > $1.publishedAt } }
@@ -63,6 +73,15 @@ import SwiftData
   var outlets: [String] {
     var seen = Set<String>()
     return sortedArticles.map(\.outlet).filter { seen.insert($0).inserted }
+  }
+
+  /// The regions at least a third of its articles are about (any, for one article). World is
+  /// always included.
+  var regions: Set<Region> {
+    var counts: [Region: Int] = [:]
+    for article in articles { for region in article.regions { counts[region, default: 0] += 1 } }
+    let needed = max(1, Int((Double(articles.count) / 3).rounded(.up)))
+    return Set(counts.filter { $0.value >= needed }.keys).union([.world])
   }
 
   var newSinceRead: Int {
@@ -76,23 +95,36 @@ import SwiftData
   }
 }
 
-/// A topic you don't want to see, matched by idea rather than by word: it's kept as a few
-/// example headlines (written on device when you add it) and stories that read like them are
-/// hidden.
-@Model final class SemanticMuteFilter {
+/// What a topic does to the stories that match it.
+nonisolated enum TopicKind: String, Codable, CaseIterable {
+  /// Raised into "Following" at the top of the feed.
+  case follow
+  /// Hidden.
+  case mute
+}
+
+/// A topic you follow or mute, matched by idea rather than by word: it's kept as a few example
+/// headlines (written on device when you add it), and stories that read like them are raised
+/// or hidden.
+@Model final class SemanticTopic {
   var phrase: String
+  /// `TopicKind`, as text.
+  var kindRaw: String = TopicKind.mute.rawValue
   var exampleHeadlines: [String]
   var keywords: [String]
   /// The example headlines' vectors, one after another (Float32).
   var exampleEmbeddings: Data?
   var createdAt: Date
 
-  init(phrase: String, exampleHeadlines: [String], keywords: [String]) {
+  init(phrase: String, kind: TopicKind, exampleHeadlines: [String], keywords: [String]) {
     self.phrase = phrase
+    kindRaw = kind.rawValue
     self.exampleHeadlines = exampleHeadlines
     self.keywords = keywords
     createdAt = .now
   }
+
+  var kind: TopicKind { TopicKind(rawValue: kindRaw) ?? .mute }
 }
 
 // MARK: - Transfer
@@ -111,6 +143,8 @@ nonisolated struct FeedArticleDTO: Decodable {
   var imageURL: String?
   var publishedAt: Date
   var category: String?
+  /// The outlet's country (ISO code), when the scraper's feed list says.
+  var country: String?
 }
 
 /// What Apple Intelligence says about how outlets covered one story.

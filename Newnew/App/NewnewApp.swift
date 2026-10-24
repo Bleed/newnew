@@ -11,13 +11,13 @@ struct NewnewApp: App {
   init() {
     let container: ModelContainer
     do {
-      container = try ModelContainer(for: ArticleItem.self, StoryCluster.self, SemanticMuteFilter.self)
+      container = try ModelContainer(for: ArticleItem.self, StoryCluster.self, SemanticTopic.self)
     } catch {
       // A store from an older build that can't be migrated: start over (it's only a cache of
-      // the feed, plus mute topics).
+      // the feed, plus your topics).
       let url = URL.applicationSupportDirectory.appending(path: "default.store")
       try? FileManager.default.removeItem(at: url)
-      container = try! ModelContainer(for: ArticleItem.self, StoryCluster.self, SemanticMuteFilter.self)
+      container = try! ModelContainer(for: ArticleItem.self, StoryCluster.self, SemanticTopic.self)
     }
     self.container = container
     _pipeline = State(initialValue: FeedSyncPipeline(context: container.mainContext))

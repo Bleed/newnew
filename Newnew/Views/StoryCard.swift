@@ -4,7 +4,6 @@ import SwiftUI
 /// outlets as quiet pills and the source count in the dot face.
 struct StoryCard: View {
   let cluster: StoryCluster
-  @ScaledMetric(relativeTo: .title3) var headlineSize: CGFloat = 21
 
   var body: some View {
     if let lead = cluster.lead {
@@ -14,11 +13,10 @@ struct StoryCard: View {
           meta(lead)
           Spacer(minLength: 6)
           signal
-          DotChip("\(cluster.outlets.count) SOURCES")
+          DotChip("\(cluster.outlets.count) \(cluster.outlets.count == 1 ? "SOURCE" : "SOURCES")")
         }
         Text(lead.title)
-          .font(.system(size: headlineSize, weight: .regular))
-          .tracking(-headlineSize * 0.01)
+          .font(Swiss.headline(24, relativeTo: .title3))
           .foregroundStyle(isSettled ? Swiss.muted : Swiss.ink)
           .multilineTextAlignment(.leading)
           .fixedSize(horizontal: false, vertical: true)
@@ -47,7 +45,10 @@ struct StoryCard: View {
 
   func meta(_ lead: ArticleItem) -> some View {
     HStack(spacing: 6) {
-      if let category = lead.category {
+      // A followed story says which topic brought it up, in ink; others their section.
+      if let topic = cluster.followedBy {
+        Text(topic).font(.footnote.weight(.medium)).foregroundStyle(Swiss.ink)
+      } else if let category = lead.category {
         Text(category).font(.footnote.weight(.medium))
       }
       Text(cluster.updatedAt.shortAgo).font(Swiss.smallFigure)
@@ -94,7 +95,7 @@ struct BriefRow: View {
           .foregroundStyle(Swiss.muted)
           .lineLimit(1)
           Text(lead.title)
-            .font(.body)
+            .font(Swiss.headline(20, relativeTo: .body))
             .foregroundStyle(cluster.readAt == nil ? Swiss.ink : Swiss.muted)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)

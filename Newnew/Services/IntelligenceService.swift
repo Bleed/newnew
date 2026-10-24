@@ -90,18 +90,18 @@ enum IntelligenceService {
       sourceCount: sources.count, isGenerated: false, createdAt: .now)
   }
 
-  // MARK: Mute topics
+  // MARK: Topics
 
-  /// A mute topic as example headlines (compared with stories by meaning) and a few telling
-  /// words or names (matched exactly).
-  static func muteTopic(_ phrase: String) async -> (headlines: [String], keywords: [String]) {
+  /// A followed or muted topic as example headlines (compared with stories by meaning) and a
+  /// few telling words or names (matched exactly).
+  static func topicExamples(_ phrase: String) async -> (headlines: [String], keywords: [String]) {
     refreshAvailability()
     #if canImport(FoundationModels)
       if isAvailable {
         let session = LanguageModelSession(instructions: """
-          You help someone hide a topic from their news feed. Write realistic, varied, neutral \
-          headlines a news site might publish about the topic, and list words that only stories \
-          about this topic would use.
+          You help someone describe a topic for their news feed, to follow or to hide. Write \
+          realistic, varied, neutral headlines a news site might publish about the topic, and \
+          list words that only stories about this topic would use.
           """)
         if let response = try? await session.respond(to: "Topic: \(phrase)", generating: GeneratedMuteTopic.self) {
           let keywords = response.content.keywords.map { $0.lowercased() }.filter { $0.count > 2 }

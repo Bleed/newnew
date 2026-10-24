@@ -1,8 +1,9 @@
 // Polls the curated RSS feeds in feeds.json and writes one static file, public/latest_news.json,
 // that the Newnew app downloads. Runs every 30 minutes in GitHub Actions; costs nothing.
 //
-// What goes out per article: headline, a short snippet (≤ 280 characters), outlet, link, picture
-// and time. Never the article body: the app links out to the publisher.
+// What goes out per article: headline, a short snippet (≤ 280 characters), outlet, link, picture,
+// time, category and, for local-news feeds, the country. Never the article body: the app links
+// out to the publisher.
 //
 // Pictures come from a waterfall:
 //   1. The feed itself: <media:content>, <media:thumbnail>, <enclosure>, or an <img> in the item.
@@ -112,6 +113,8 @@ function toArticle(item, feed) {
     // Never in the future: some feeds stamp tomorrow's print date.
     publishedAt: new Date(Math.min(date, Date.now())).toISOString(),
     category: feed.category ?? null,
+    // Only on local-news feeds (The Local Norway → "NO"): the app's Local region.
+    country: feed.country ?? null,
   }
 }
 

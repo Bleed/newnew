@@ -36,6 +36,13 @@ enum Swiss {
   /// Small figures beside text (times, counts).
   static let smallFigure = Font.footnote.monospaced().weight(.regular)
 
+  /// News headlines: Times New Roman, the newspaper voice against the app's SF and SF Mono. It
+  /// sets smaller than SF at the same size, so headlines run a few points larger than the SF
+  /// text they'd otherwise match. Scales with `style` for Dynamic Type.
+  static func headline(_ size: CGFloat, relativeTo style: Font.TextStyle) -> Font {
+    .custom("Times New Roman", size: size, relativeTo: style)
+  }
+
   static let tileRadius: CGFloat = 20
   /// Side margin of every page, so headers and cards line up.
   static let pageInset: CGFloat = 20

@@ -30,7 +30,7 @@ SIMCTL_CHILD_NEWNEW_FEED_URL=http://127.0.0.1:8765/latest_news.json xcrun simctl
 | Path | What |
 | --- | --- |
 | `Newnew/Design` | Atelier CRM's look, copied: `Swiss` tokens and tiles, the 5×7 `DotMatrix` face, `Rebus` sentence top |
-| `Newnew/Models` | SwiftData `ArticleItem`, `StoryCluster`, `SemanticMuteFilter`; feed DTOs; `ClusterPerspectiveBrief` |
+| `Newnew/Models` | SwiftData `ArticleItem`, `StoryCluster`, `SemanticTopic` (followed or muted); feed DTOs; `ClusterPerspectiveBrief` |
 | `Newnew/Services` | `OnDeviceVectorEngine` (embeddings), `StoryClusterer`, `FeedSyncPipeline`, `IntelligenceService` (FoundationModels), `ImagePipeline` |
 | `Newnew/Views` | Feed, story card, story detail with the brief, mute sheet, hero image |
 | `github-scraper/` | Node RSS poller → `public/latest_news.json` + `status.json`; feeds in `feeds.json` |
@@ -62,10 +62,17 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   almost all single events. At 0.08 broad themes chained into 40-article blobs. The tiny sample
   splits one story at 0.12; that's expected. On the Mac it takes 0.6 s for 900 articles;
   embedding them takes ~9 s (first sync only).
-- **Mute topics**: Apple Intelligence turns the phrase into 4 example headlines + keywords, once,
-  when it's added. A story is hidden when ≥ ⅓ of its articles match: example-headline cosine
-  > **0.40** (contextual) / 0.42 (sentence model), or 2 keyword hits, or 1 keyword + 0.30.
-  Phrase-vs-article cosine alone could not tell "crypto" from a chip maker.
+- **Topics** (`SemanticTopic`, kind follow or mute): Apple Intelligence turns the phrase into 4
+  example headlines + keywords, once, when it's added. An article matches with 2 topic words
+  (the phrase counts as one, whole-word), or 1 word + example-headline cosine > 0.38 (0.40 on
+  the sentence model; an oil spill in "satellite images" scored 0.36), or, with
+  the contextual model only, cosine > 0.55 alone. A story matches when ≥ ⅓ of its articles do;
+  muting wins over following. Meaning alone was too loose on a real feed: for "space" a
+  supervolcano and the Dead Sea scored 0.51–0.53; the sentence model put cricket first for "AI".
+- **Regions** (`RegionTagger`): a word list of places, people and institutions per region
+  (Europe, US, Asia), plus Local = the iPhone's region setting (country name, some cities, and
+  outlets the scraper marks with `country`). A story is in a region when ≥ ⅓ of its articles
+  are. Middle East, Africa, Latin America and Oceania only show under World.
 - **"Already read"** comes from cluster membership (`readAt`, `newSinceRead`), not a 0.80 cutoff.
 - In the Simulator `NLContextualEmbedding` fails to compile its model (sandbox), so the engine
   falls back to `NLEmbedding.sentenceEmbedding`. Real devices use the contextual model.
@@ -87,6 +94,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Near-white page (#FAFAFA), grey tiles (#F1F1F1), black in dark mode; type carries contrast.
 - The page top is Atelier's one-sentence top (`OneSentenceTop`): date line, a big mono figure,
   a detail line, and a rotating last line with a tap target.
+- News headlines are Times New Roman (`Swiss.headline`), everywhere a headline appears; all
+  other text stays SF.
 - SF Mono for figures, only Light or Regular, never heavier.
 - The 5×7 dot face only inside pills, chips and panels, never loose and never for warnings.
 - Signals: mint pill = attention ("Developing", "2 new"), red dot and words = act now. Rare.

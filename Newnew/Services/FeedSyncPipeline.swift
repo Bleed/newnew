@@ -52,16 +52,22 @@ import SwiftData
     do {
       let feed = try await loadFeed()
       let source = Self.feedURL?.absoluteString ?? "sample"
-      if storedSource != source {
-        try? context.delete(model: ArticleItem.self)
-        try? context.delete(model: StoryCluster.self)
+      let articles = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
+      // The sample's links all go to example.com; none of them belong next to real news.
+      let hasSample = source != "sample" && articles.contains { $0.url.hasPrefix("https://example.com/") }
+      if storedSource != source || hasSample {
+        // One by one: the bulk delete fails silently on the article–story relationship.
+        for cluster in (try? context.fetch(FetchDescriptor<StoryCluster>())) ?? [] { context.delete(cluster) }
+        for article in articles { context.delete(article) }
+        try context.save()
         storedSource = source
       }
       upsert(feed.articles)
       prune()
+      tagRegions()
       await embedMissing()
       await recluster()
-      applyMutes()
+      applyTopics()
       try context.save()
       lastSync = .now
       lastError = nil
@@ -97,6 +103,17 @@ import SwiftData
     }
   }
 
+  /// Cheap (a word list), so every article is tagged again each sync and word-list fixes apply
+  /// at once.
+  func tagRegions() {
+    let local = RegionTagger.localCountry
+    for article in (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? [] {
+      let raw = RegionTagger.regions(title: article.title, snippet: article.snippet, country: article.country, local: local)
+        .map(\.rawValue).sorted().joined(separator: ",")
+      if article.regionsRaw != raw { article.regionsRaw = raw }
+    }
+  }
+
   func prune() {
     let cutoff = Date.now.addingTimeInterval(-Self.retention)
     try? context.delete(model: ArticleItem.self, where: #Predicate { $0.publishedAt < cutoff })
@@ -119,16 +136,16 @@ import SwiftData
     }
     corpusMean = Vec.mean(articles.compactMap { Vec.vector($0.embedding) }.filter { $0.count == dimension })
 
-    let filters = (try? context.fetch(FetchDescriptor<SemanticMuteFilter>())) ?? []
-    for filter in filters where filter.exampleEmbeddings?.count != filter.exampleHeadlines.count * bytes {
-      await embedExamples(filter)
+    let topics = (try? context.fetch(FetchDescriptor<SemanticTopic>())) ?? []
+    for topic in topics where topic.exampleEmbeddings?.count != topic.exampleHeadlines.count * bytes {
+      await embedExamples(topic)
     }
   }
 
-  private func embedExamples(_ filter: SemanticMuteFilter) async {
-    let vectors = await engine.embed(filter.exampleHeadlines.map { $0.hasSuffix(".") ? $0 : $0 + "." })
+  private func embedExamples(_ topic: SemanticTopic) async {
+    let vectors = await engine.embed(topic.exampleHeadlines.map { $0.hasSuffix(".") ? $0 : $0 + "." })
     let flat = vectors.compactMap { $0 }.flatMap { $0 }
-    filter.exampleEmbeddings = flat.isEmpty ? nil : Vec.data(flat)
+    topic.exampleEmbeddings = flat.isEmpty ? nil : Vec.data(flat)
   }
 
   private func centredVector(_ data: Data?) -> [Float]? {
@@ -181,68 +198,85 @@ import SwiftData
     try? context.save()
   }
 
-  // MARK: Mute topics
+  // MARK: Topics
 
-  /// Example headline vs story ("Headline. Snippet") on centred vectors. Real matches score
-  /// 0.42–0.52 on the sample; the nearest non-match about 0.38. The older sentence model
-  /// spreads less, so it needs a little more.
-  var muteThreshold: Float { kind == .contextual ? 0.40 : 0.42 }
+  /// Example headline vs story ("Headline. Snippet") on centred vectors. Measured on a real
+  /// feed (1,063 articles): with the contextual model, true matches for "space" reach 0.60, but
+  /// a supervolcano and the Dead Sea sit at 0.51–0.53 and a weather story at 0.49; the older
+  /// sentence model ranks a cricket story first for "AI". So meaning alone only counts when it
+  /// is very close, and only with the contextual model; otherwise a topic word must appear too.
+  var meaningAloneThreshold: Float? { kind == .contextual ? 0.55 : nil }
+  /// Meaning needed alongside one topic word. Among articles that say "satellite", "moon" or
+  /// "space", real space stories score ≥ 0.40 (contextual) and an oil spill seen in "satellite
+  /// images" 0.36; the sentence model separates them less well (0.32 for the spill).
+  var meaningWithWordThreshold: Float { kind == .contextual ? 0.38 : 0.40 }
 
-  func addMuteTopic(_ phrase: String) async {
+  func addTopic(_ phrase: String, kind topicKind: TopicKind) async {
     let phrase = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !phrase.isEmpty else { return }
-    let topic = await IntelligenceService.muteTopic(phrase)
-    let filter = SemanticMuteFilter(phrase: phrase, exampleHeadlines: topic.headlines, keywords: topic.keywords)
-    context.insert(filter)
-    await embedExamples(filter)
-    applyMutes()
+    let examples = await IntelligenceService.topicExamples(phrase)
+    let topic = SemanticTopic(phrase: phrase, kind: topicKind, exampleHeadlines: examples.headlines, keywords: examples.keywords)
+    context.insert(topic)
+    await embedExamples(topic)
+    applyTopics()
     try? context.save()
   }
 
-  /// "Mute stories like this": the story's own coverage is the example, its names the keywords.
-  func muteStoriesLike(_ cluster: StoryCluster) async {
+  /// "Follow / mute stories like this": the story's own coverage is the example, its shared
+  /// names the keywords.
+  func addTopic(like cluster: StoryCluster, kind topicKind: TopicKind) async {
     guard let lead = cluster.lead else { return }
     let names = cluster.articles.flatMap { StoryClusterer.terms($0.title).filter { $0.hasPrefix("#") } }
     let counts = Dictionary(names.map { ($0, 1) }, uniquingKeysWith: +)
     let shared = counts.filter { $0.value >= min(2, cluster.articles.count) * 2 }.keys.map { String($0.dropFirst()) }
-    let filter = SemanticMuteFilter(
-      phrase: "Like “\(lead.title)”", exampleHeadlines: cluster.sortedArticles.prefix(4).map(\.title),
+    let topic = SemanticTopic(
+      phrase: "Like “\(lead.title)”", kind: topicKind, exampleHeadlines: cluster.sortedArticles.prefix(4).map(\.title),
       keywords: Array(shared.prefix(4)))
-    context.insert(filter)
-    await embedExamples(filter)
-    applyMutes()
+    context.insert(topic)
+    await embedExamples(topic)
+    applyTopics()
     try? context.save()
   }
 
-  func remove(_ filter: SemanticMuteFilter) {
-    context.delete(filter)
-    applyMutes()
+  func remove(_ topic: SemanticTopic) {
+    context.delete(topic)
+    applyTopics()
     try? context.save()
   }
 
-  /// A story is hidden when at least a third of its articles match a topic, so one stray
-  /// article doesn't take a big story with it.
-  func applyMutes() {
-    let filters = (try? context.fetch(FetchDescriptor<SemanticMuteFilter>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
-    let prepared = filters.map { filter in
-      (filter, Vec.vectors(filter.exampleEmbeddings, dimension: dimension).map { Vec.centred($0, mean: corpusMean) })
+  /// A story matches a topic when at least a third of its articles do, so one stray article
+  /// doesn't hide or raise a big story. Muting wins over following.
+  func applyTopics() {
+    let topics = (try? context.fetch(FetchDescriptor<SemanticTopic>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+    let prepared = topics.map { topic in
+      (topic, Vec.vectors(topic.exampleEmbeddings, dimension: dimension).map { Vec.centred($0, mean: corpusMean) })
     }
     for cluster in (try? context.fetch(FetchDescriptor<StoryCluster>())) ?? [] {
       let articles = cluster.articles
-      let mutedBy = prepared.first { filter, examples in
-        let hits = articles.filter { matches($0, filter, examples) }.count
-        return hits > 0 && Double(hits) / Double(articles.count) >= 0.34
-      }?.0.phrase
+      func first(_ topicKind: TopicKind) -> String? {
+        prepared.first { topic, examples in
+          guard topic.kind == topicKind else { return false }
+          let hits = articles.filter { matches($0, topic, examples) }.count
+          return hits > 0 && Double(hits) / Double(articles.count) >= 0.34
+        }?.0.phrase
+      }
+      let mutedBy = first(.mute)
+      let followedBy = mutedBy == nil ? first(.follow) : nil
       if cluster.mutedBy != mutedBy { cluster.mutedBy = mutedBy }
+      if cluster.followedBy != followedBy { cluster.followedBy = followedBy }
     }
   }
 
-  private func matches(_ article: ArticleItem, _ filter: SemanticMuteFilter, _ examples: [[Float]]) -> Bool {
+  private func matches(_ article: ArticleItem, _ topic: SemanticTopic, _ examples: [[Float]]) -> Bool {
     let text = article.text.lowercased()
-    if text.contains(filter.phrase.lowercased()) { return true }
-    let keywordHits = filter.keywords.filter { text.range(of: "\\b\(NSRegularExpression.escapedPattern(for: $0))\\b", options: .regularExpression) != nil }.count
+    // The phrase counts as one of the topic's words, as a whole word ("space", not "spaceport").
+    let words = Set(topic.keywords + [topic.phrase.lowercased()])
+    let wordHits = words.filter { text.range(of: "\\b\(NSRegularExpression.escapedPattern(for: $0))\\b", options: .regularExpression) != nil }.count
     let score = centredVector(article.embedding).map { vector in examples.map { Vec.cosine(vector, $0) }.max() ?? 0 } ?? 0
-    // Two telling words, a close match by meaning, or one word with a near match.
-    return keywordHits >= 2 || score > muteThreshold || (keywordHits == 1 && score > muteThreshold * 0.75)
+    // Two topic words; one word and close in meaning; or, with the contextual model only, very
+    // close in meaning alone.
+    return wordHits >= 2 || (wordHits == 1 && score > meaningWithWordThreshold)
+      || meaningAloneThreshold.map { score > $0 } == true
   }
+
 }
