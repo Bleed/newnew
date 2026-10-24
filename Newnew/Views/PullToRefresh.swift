@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 
 /// Pull to refresh in the dot language (Figma: newnew › Pull to refresh), in place of the system
-/// spinner: a small dot board, just around "new" over "new" as on the icon. As you pull, its
+/// spinner: a small dot board just under the top bar, around "new" over "new" as on the icon. As you pull, its
 /// faint dots fill in from the left. Let go past `threshold` and it loops like an old departures
 /// board while the feed loads: the first "new" rolls in, then the second, then the first rolls
 /// out, then the second, and again. It always ends with both words in, then folds away, also
@@ -28,17 +28,17 @@ struct PullToRefresh: ViewModifier {
   func body(content: Content) -> some View {
     content
       .safeAreaInset(edge: .top, spacing: 0) {
-        // While loading, the board takes its own room at the top of the feed.
+        // Just under the top bar, above the page, only while loading; folds away after.
         if board.isShowing {
           MiniDotBoard(fill: 1, first: board.loop.first, second: board.loop.second)
             .frame(maxWidth: .infinity)
             .frame(height: MiniDotBoard.slot)
             .background(Swiss.canvas)
-            .transition(.opacity.combined(with: .move(edge: .top)))
+            .transition(.opacity)
         }
       }
       .overlay(alignment: .top) {
-        // While pulling, it appears in the gap the pull makes.
+        // While pulling, it fills in, in the gap the pull opens under the top bar.
         if !board.isShowing, pull > 2 {
           MiniDotBoard(fill: min(pull / Self.threshold, 1), first: false, second: false)
             .frame(maxWidth: .infinity)
@@ -101,8 +101,8 @@ struct MiniDotBoard: View {
   static let pitch: CGFloat = 4
   static let cols = StackedWords.cols + 2
   static let rows = StackedWords.rows + 2
-  /// The room it takes at the top of the feed.
-  static let slot: CGFloat = 68
+  /// The room it takes under the top bar.
+  static let slot: CGFloat = 64
 
   var body: some View {
     let p = Self.pitch, d = p * 0.82

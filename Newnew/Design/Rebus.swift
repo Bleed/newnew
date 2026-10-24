@@ -150,13 +150,19 @@ struct OneSentenceTop: View {
   let detail: [RebusToken]
   var messages: [KeyMessage] = []
   var lead: [RebusToken]?
+  /// Off when the page shows the date elsewhere (the feed has it in its top bar).
+  var showsDate = true
   @ScaledMetric var size: CGFloat
   @ScaledMetric var figureSize: CGFloat
   @State private var messageIndex = 0
   @State private var figureShown = false
   @Environment(\.accessibilityReduceMotion) var reduceMotion
 
-  init(figure: String, detail: [RebusToken], messages: [KeyMessage] = [], lead: [RebusToken]? = nil, size: CGFloat, figureSize: CGFloat) {
+  init(
+    figure: String, detail: [RebusToken], messages: [KeyMessage] = [], lead: [RebusToken]? = nil, showsDate: Bool = true,
+    size: CGFloat, figureSize: CGFloat
+  ) {
+    self.showsDate = showsDate
     self.figure = figure
     self.detail = detail
     self.messages = messages
@@ -169,7 +175,7 @@ struct OneSentenceTop: View {
     VStack(alignment: .leading, spacing: size * 0.5) {
       if let lead {
         RebusLine(tokens: lead, size: size, delay: 0.2)
-      } else {
+      } else if showsDate {
         TimelineView(.everyMinute) { context in
           RebusLine(tokens: Self.dateTokens(context.date), size: size, delay: 0.2)
         }

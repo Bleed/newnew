@@ -103,7 +103,9 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Launch and pull to refresh share one animation (`WordLoop`, `StackedWords`): a fine 4 pt dot
   board with a small "new" over "new"; first line rolls in, then the second, then they roll out
   in the same order, looping until loaded, always ending with both in. Pull to refresh
-  (`dotRefreshable`) replaces the system spinner; the same small board shows for any sync.
+  (`dotRefreshable`) replaces the system spinner; the same small board opens just under the top
+  bar for any sync and folds away after. The sentence top's date line lives in the top bar, level
+  with the filter button and in line with the page's left edge; the bar has no background.
   Keep loop state in an object: a ViewModifier's @State written from a task it started never
   reached the screen.
 

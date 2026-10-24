@@ -44,7 +44,7 @@ struct FeedView: View {
           } showMutes: {
             topicsKind = .mute
           }
-          .padding(.top, 8)
+          .padding(.top, 18)
           .padding(.bottom, 14)
 
           FilterBar(selection: Binding(get: { filter }, set: { filterRaw = $0.raw }), topics: followedTopics)
@@ -101,10 +101,27 @@ struct FeedView: View {
       }
       }
       .swissCanvas()
-      .swissNavigationTitle("Today")
+      .navigationTitle("Today")
+      .navigationBarTitleDisplayMode(.inline)
+      // No opaque bar or hairline: the page fades softly under the date and the button.
+      .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+      .scrollEdgeEffectStyle(.soft, for: .top)
       .dotRefreshable(isSyncing: pipeline.isSyncing) { await pipeline.sync() }
       .navigationDestination(for: StoryCluster.self) { StoryDetailView(cluster: $0) }
       .toolbar {
+        // The sentence top's date line, level with the button on the right.
+        ToolbarItem(placement: .topBarLeading) {
+          TimelineView(.everyMinute) { context in
+            RebusLine(tokens: OneSentenceTop.dateTokens(context.date), size: 15, delay: 0.2)
+              .fixedSize()
+              // In line with the page's left edge below.
+              .padding(.leading, Swiss.pageInset - 16)
+          }
+        }
+        .sharedBackgroundVisibility(.hidden)
+        // Nothing in the middle: the page's own top is the title.
+        ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
+          .sharedBackgroundVisibility(.hidden)
         ToolbarItem(placement: .topBarTrailing) {
           Button("Topics", systemImage: "line.3.horizontal.decrease") { topicsKind = .follow }
         }
@@ -235,7 +252,8 @@ struct NewsTop: View {
   }
 
   var body: some View {
-    OneSentenceTop(figure: figure, detail: detail, messages: messages, size: 15, figureSize: 38)
+    // The date line sits in the top bar, level with its button.
+    OneSentenceTop(figure: figure, detail: detail, messages: messages, showsDate: false, size: 15, figureSize: 38)
       .frame(maxWidth: .infinity, alignment: .leading)
   }
 }
