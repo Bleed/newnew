@@ -10,7 +10,7 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_APPROACHABLE_CONCURRENCY: YES
     MARKETING_VERSION: "0.1"
-    CURRENT_PROJECT_VERSION: "11"
+    CURRENT_PROJECT_VERSION: "12"
     CODE_SIGN_STYLE: Automatic
     # The published latest_news.json (GitHub Pages, from .github/workflows/update_feed.yml).
     # Empty: the app uses its bundled sample instead.

@@ -26,9 +26,9 @@ struct FeedView: View {
 
   /// Lifts the sentence top into the top bar's row, so its date line is level with the middle
   /// of the filter button. The loading band, when it opens, pushes it down.
-  static let headerTop: CGFloat = -42
+  static let headerTop: CGFloat = -37
   /// Below the loading band while it shows, so the band never covers the date.
-  static let headerBelowBand: CGFloat = 8
+  static let headerBelowBand: CGFloat = 13
   @State private var boardShowing = false
 
   var body: some View {
