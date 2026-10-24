@@ -12,9 +12,9 @@ settings:
     MARKETING_VERSION: "0.1"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
-    # The published latest_news.json, e.g. https://<user>.github.io/<repo>/latest_news.json.
-    # Empty: the app uses its bundled sample.
-    NEWNEW_FEED_URL: ""
+    # The published latest_news.json (GitHub Pages, from .github/workflows/update_feed.yml).
+    # Empty: the app uses its bundled sample instead.
+    NEWNEW_FEED_URL: "https://bleed.github.io/newnew/latest_news.json"
     DEVELOPMENT_TEAM: W533Y4V578
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES

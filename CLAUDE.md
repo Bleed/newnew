@@ -12,9 +12,10 @@ open Newnew.xcodeproj
 ```
 
 iOS 26, Swift 6, default actor isolation `MainActor` (plain data types and pure math are marked
-`nonisolated`). Until `NEWNEW_FEED_URL` in `project.yml` is set, the app reads
-`Newnew/Resources/sample_news.json` (invented outlets; times are moved up to "now"). Switching
-source clears stored articles.
+`nonisolated`). The app reads the live feed at `NEWNEW_FEED_URL` in `project.yml`
+(https://bleed.github.io/newnew/latest_news.json, repo github.com/Bleed/newnew). Set it empty to
+use `Newnew/Resources/sample_news.json` instead (invented outlets; times moved up to "now").
+Switching source clears stored articles. Feed health: https://bleed.github.io/newnew/status.json
 
 To try real news in the Simulator without publishing anything:
 
