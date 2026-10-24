@@ -44,9 +44,11 @@ struct NewnewApp: App {
       }
       .environment(pipeline)
       .task {
-        // With stories to show, the sync waits for the board to fade, so its work on the main
-        // actor can't hold the board up.
-        if hadStories { try? await Task.sleep(for: .seconds(1.5)) }
+        // With stories to show, the sync waits for the launch board to be gone, so its work on
+        // the main actor can't freeze the roll.
+        if hadStories {
+          while LaunchState.shared.isShowing { try? await Task.sleep(for: .milliseconds(100)) }
+        }
         await syncInForeground()
         await Alerts.updateSubscriptions()
       }

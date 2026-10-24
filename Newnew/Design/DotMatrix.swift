@@ -384,13 +384,9 @@ struct LoadingBoard: View {
       let place = { (col: Int, row: Int) in CGSize(width: ox + CGFloat(col) * p - d / 2 - (p - d) / 2, height: oy + CGFloat(row) * p - d / 2 - (p - d) / 2) }
       ZStack(alignment: .topLeading) {
         Swiss.canvas
-        Canvas { ctx, _ in
-          for r in 0..<rows { for c in 0..<cols {
-            let rect = CGRect(x: ox + CGFloat(c) * p - d / 2, y: oy + CGFloat(r) * p - d / 2, width: d, height: d)
-            let isLit = waitsForFeed && r == barRow && c < lit
-            ctx.fill(Path(ellipseIn: rect), with: .color(isLit ? Self.ink : Swiss.ink.opacity(0.1)))
-          } }
-        }
+        // Its own view: drawn again only when the progress row changes, not on every roll.
+        DotGrid(cols: cols, rows: rows, origin: CGPoint(x: ox, y: oy), pitch: p, litRow: waitsForFeed ? barRow : -1, litCols: lit)
+          .equatable()
         StackedWords(first: loop.first, second: loop.second, pitch: p)
           .foregroundStyle(Self.ink)
           .offset(place(wordCol, wordRow))
@@ -431,6 +427,31 @@ struct LoadingBoard: View {
     withAnimation(.easeOut(duration: 0.3)) { faded = true } completion: {
       isShowing = false
       LaunchState.shared.isShowing = false
+    }
+  }
+}
+
+/// A full-screen field of faint dots, with one row lit up to `litCols`: about 20,000 dots, so
+/// it's Equatable and only redrawn when its numbers change.
+struct DotGrid: View, Equatable {
+  let cols: Int
+  let rows: Int
+  let origin: CGPoint
+  let pitch: CGFloat
+  let litRow: Int
+  let litCols: Int
+
+  var body: some View {
+    Canvas { ctx, _ in
+      let d = pitch * 0.82
+      var faint = Path(), lit = Path()
+      for r in 0..<rows { for c in 0..<cols {
+        let rect = CGRect(x: origin.x + CGFloat(c) * pitch - d / 2, y: origin.y + CGFloat(r) * pitch - d / 2, width: d, height: d)
+        if r == litRow && c < litCols { lit.addEllipse(in: rect) } else { faint.addEllipse(in: rect) }
+      } }
+      // Two fills in all, not one per dot.
+      ctx.fill(faint, with: .color(Swiss.ink.opacity(0.1)))
+      ctx.fill(lit, with: .color(LoadingBoard.ink))
     }
   }
 }

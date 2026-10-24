@@ -2,7 +2,8 @@ import SwiftUI
 import UIKit
 
 /// Pull to refresh in the dot language (Figma: newnew › Pull to refresh), in place of the system
-/// spinner: a small dot board just under the top bar, around "new" over "new" as on the icon. As you pull, its
+/// spinner: a small dot board in the middle of the top bar, level with its button, around "new"
+/// over "new" as on the icon. As you pull, its
 /// faint dots fill in from the left. Let go past `threshold` and it loops like an old departures
 /// board while the feed loads: the first "new" rolls in, then the second, then the first rolls
 /// out, then the second, and again. It always ends with both words in, then folds away, also
@@ -27,25 +28,25 @@ struct PullToRefresh: ViewModifier {
 
   func body(content: Content) -> some View {
     content
-      .safeAreaInset(edge: .top, spacing: 0) {
-        // Just under the top bar, above the page, only while loading; folds away after.
-        if board.isShowing {
-          MiniDotBoard(fill: 1, first: board.loop.first, second: board.loop.second)
-            .frame(maxWidth: .infinity)
-            .frame(height: MiniDotBoard.slot)
-            .background(Swiss.canvas)
-            .transition(.opacity)
+      .toolbar {
+        // In the middle of the top bar, level with its button: filling in as you pull, then
+        // looping the words while loading. Empty otherwise, which also keeps the title hidden.
+        ToolbarItem(placement: .principal) {
+          Group {
+            if board.isShowing {
+              MiniDotBoard(fill: 1, first: board.loop.first, second: board.loop.second)
+            } else if pull > 2 {
+              MiniDotBoard(fill: min(pull / Self.threshold, 1), first: false, second: false)
+            } else {
+              Color.clear.frame(width: 1, height: 1)
+            }
+          }
+          // Top edge level with the button's top edge.
+          .frame(height: CGFloat(MiniDotBoard.rows) * MiniDotBoard.pitch, alignment: .top)
+          .transition(.opacity)
+          .animation(.easeOut(duration: 0.2), value: board.isShowing)
         }
-      }
-      .overlay(alignment: .top) {
-        // While pulling, it fills in, in the gap the pull opens under the top bar.
-        if !board.isShowing, pull > 2 {
-          MiniDotBoard(fill: min(pull / Self.threshold, 1), first: false, second: false)
-            .frame(maxWidth: .infinity)
-            .frame(height: min(pull, MiniDotBoard.slot))
-            .clipped()
-            .allowsHitTesting(false)
-        }
+        .sharedBackgroundVisibility(.hidden)
       }
       .onScrollGeometryChange(for: CGFloat.self) { geometry in
         -(geometry.contentOffset.y + geometry.contentInsets.top)
@@ -90,29 +91,29 @@ extension View {
   }
 }
 
-/// A small dot board around "new" over "new": 19 × 13 dots at a 4 pt pitch, one dot of margin
-/// round the words. Faint dots fill to `fill` from the left; each line rolls in when it turns
+/// A small dot board around "new" over "new": 19 × 13 dots, one dot of margin round the words,
+/// as tall as the top bar's button. Faint dots fill to `fill` from the left; each line rolls in when it turns
 /// on and rolls out when it turns off.
 struct MiniDotBoard: View {
   var fill: CGFloat
   var first: Bool
   var second: Bool
 
-  static let pitch: CGFloat = 4
+  /// 13 rows × 3.4 pt ≈ 44 pt: the height of the top bar's button, so their tops line up.
+  static let pitch: CGFloat = 3.4
   static let cols = StackedWords.cols + 2
   static let rows = StackedWords.rows + 2
-  /// The room it takes under the top bar.
-  static let slot: CGFloat = 64
 
   var body: some View {
     let p = Self.pitch, d = p * 0.82
     let filled = Int((CGFloat(Self.cols) * fill).rounded())
     ZStack(alignment: .topLeading) {
       Canvas { ctx, _ in
+        var dots = Path()
         for r in 0..<Self.rows { for c in 0..<min(filled, Self.cols) {
-          let rect = CGRect(x: CGFloat(c) * p + (p - d) / 2, y: CGFloat(r) * p + (p - d) / 2, width: d, height: d)
-          ctx.fill(Path(ellipseIn: rect), with: .color(Swiss.ink.opacity(0.1)))
+          dots.addEllipse(in: CGRect(x: CGFloat(c) * p + (p - d) / 2, y: CGFloat(r) * p + (p - d) / 2, width: d, height: d))
         } }
+        ctx.fill(dots, with: .color(Swiss.ink.opacity(0.1)))
       }
       StackedWords(first: first, second: second, pitch: p)
         .foregroundStyle(Swiss.ink)

@@ -94,7 +94,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 
 - Top stories are ordered by `FeedSections.importance`: log(outlets) + 0.6·log(outlets in the
   last 2 h), times freshness (6 h half-life, floor 25 %), × 0.4 once read with nothing new.
-  Followed stories use the same order; "In brief" is newest first.
+  One order for all stories, followed or not (a followed story only keeps its topic label);
+  "In brief" is newest first.
 - Feeds can be `"kind": "video"` (YouTube channel feed: `videoID`, HD thumbnail, Shorts
   skipped), `"podcast"` (`audioURL`, `audioSeconds`, no picture) or `"chart"` (`isChart`: shown
   whole on white, kept 14 days). Cards get "Listen · n min" (AudioPlayer, background audio, Lock
@@ -103,9 +104,10 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Launch and pull to refresh share one animation (`WordLoop`, `StackedWords`): a fine 4 pt dot
   board with a small "new" over "new"; first line rolls in, then the second, then they roll out
   in the same order, looping until loaded, always ending with both in. Pull to refresh
-  (`dotRefreshable`) replaces the system spinner; the same small board opens just under the top
-  bar for any sync and folds away after. The sentence top's date line lives in the top bar, level
-  with the filter button and in line with the page's left edge; the bar has no background.
+  (`dotRefreshable`) replaces the system spinner; the same small board shows in the middle of the
+  top bar, top edge level with the filter button's, for any sync, and empties after. The launch
+  sync waits until the launch board is gone; the board's dot field is an Equatable `DotGrid`
+  drawn in two fills. Regions are tagged only for new articles (main-actor time).
   Keep loop state in an object: a ViewModifier's @State written from a task it started never
   reached the screen.
 

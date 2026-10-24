@@ -73,9 +73,9 @@ import SwiftData
         try context.save()
         storedSource = source
       }
-      upsert(feed.articles)
+      let added = upsert(feed.articles)
       prune()
-      tagRegions()
+      tagRegions(added)
       await embedMissing()
       phase = .grouping
       await recluster()
@@ -109,23 +109,30 @@ import SwiftData
     return feed
   }
 
-  func upsert(_ incoming: [FeedArticleDTO]) {
+  /// Inserts the articles not stored yet and returns them.
+  @discardableResult
+  func upsert(_ incoming: [FeedArticleDTO]) -> [ArticleItem] {
     let known = Set(((try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []).map(\.url))
     let now = Date.now
+    var added: [ArticleItem] = []
     for dto in incoming where !known.contains(dto.url) {
-      context.insert(ArticleItem(dto, fetchedAt: now))
+      let article = ArticleItem(dto, fetchedAt: now)
+      context.insert(article)
+      added.append(article)
+    }
+    return added
+  }
+
+
+  /// Tags the new articles' regions (a word list). Only new ones: tagging all of them each sync
+  /// held the main actor up for too long. A word-list fix applies as articles come in.
+  func tagRegions(_ articles: [ArticleItem]) {
+    for article in articles {
+      article.regionsRaw = RegionTagger.regions(title: article.title, snippet: article.snippet)
+        .map(\.rawValue).sorted().joined(separator: ",")
     }
   }
 
-  /// Cheap (a word list), so every article is tagged again each sync and word-list fixes apply
-  /// at once.
-  func tagRegions() {
-    for article in (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? [] {
-      let raw = RegionTagger.regions(title: article.title, snippet: article.snippet)
-        .map(\.rawValue).sorted().joined(separator: ",")
-      if article.regionsRaw != raw { article.regionsRaw = raw }
-    }
-  }
 
   func prune() {
     let cutoff = Date.now.addingTimeInterval(-Self.retention)

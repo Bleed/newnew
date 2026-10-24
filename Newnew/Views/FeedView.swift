@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 
 /// Today: the one-sentence top (what's new since you last looked, and the top story), the
-/// filter switch (regions, then the topics you follow), then stories on topics you follow, top
-/// stories (most important first; see `FeedSections.importance`), and stories in brief.
+/// filter switch (regions, then the topics you follow), then top stories (most important first,
+/// followed or not; see `FeedSections.importance`), and stories in brief.
 struct FeedView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Query(sort: \StoryCluster.updatedAt, order: .reverse) var clusters: [StoryCluster]
@@ -28,23 +28,20 @@ struct FeedView: View {
     // Worked out once per render: these were computed properties, re-run on every read, and
     // with 400+ stories that held up the main thread for seconds.
     let sections = FeedSections(clusters: clusters, filter: filter)
-    let visible = sections.visible, following = sections.following, wide = sections.wide
+    let visible = sections.visible, wide = sections.wide
     let brief = sections.brief, hiddenCount = sections.hiddenCount
     NavigationStack(path: $path) {
-      ScrollViewReader { scroller in
+      ScrollViewReader { _ in
       ScrollView {
         LazyVStack(alignment: .leading, spacing: 12) {
           NewsTop(
-            since: since ?? .distantPast, visible: visible, top: wide.first, followingCount: following.count,
-            hiddenCount: hiddenCount
+            since: since ?? .distantPast, visible: visible, top: wide.first, hiddenCount: hiddenCount
           ) {
             path.append($0)
-          } showFollowing: {
-            withAnimation(.snappy) { scroller.scrollTo("following", anchor: .top) }
           } showMutes: {
             topicsKind = .mute
           }
-          .padding(.top, 18)
+          .padding(.top, 8)
           .padding(.bottom, 14)
 
           FilterBar(selection: Binding(get: { filter }, set: { filterRaw = $0.raw }), topics: followedTopics)
@@ -57,23 +54,8 @@ struct FeedView: View {
               .font(.subheadline)
               .foregroundStyle(Swiss.muted)
           }
-          if !following.isEmpty {
-            HStack {
-              Eyebrow("Following")
-              Spacer()
-              Button("Edit") { topicsKind = .follow }
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(Swiss.muted)
-            }
-            .id("following")
-            ForEach(following) { cluster in
-              NavigationLink(value: cluster) { StoryCard(cluster: cluster) }
-                .buttonStyle(.plain)
-                .contextMenu { menu(cluster) }
-            }
-          }
           if !wide.isEmpty {
-            Eyebrow("Top stories").padding(.top, following.isEmpty ? 4 : 16)
+            Eyebrow("Top stories").padding(.top, 4)
             ForEach(wide) { cluster in
               NavigationLink(value: cluster) { StoryCard(cluster: cluster) }
                 .buttonStyle(.plain)
@@ -103,25 +85,11 @@ struct FeedView: View {
       .swissCanvas()
       .navigationTitle("Today")
       .navigationBarTitleDisplayMode(.inline)
-      // No opaque bar or hairline: the page fades softly under the date and the button.
-      .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
-      .scrollEdgeEffectStyle(.soft, for: .top)
       .dotRefreshable(isSyncing: pipeline.isSyncing) { await pipeline.sync() }
       .navigationDestination(for: StoryCluster.self) { StoryDetailView(cluster: $0) }
       .toolbar {
-        // The sentence top's date line, level with the button on the right.
-        ToolbarItem(placement: .topBarLeading) {
-          TimelineView(.everyMinute) { context in
-            RebusLine(tokens: OneSentenceTop.dateTokens(context.date), size: 15, delay: 0.2)
-              .fixedSize()
-              // In line with the page's left edge below.
-              .padding(.leading, Swiss.pageInset - 16)
-          }
-        }
-        .sharedBackgroundVisibility(.hidden)
-        // Nothing in the middle: the page's own top is the title.
-        ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
-          .sharedBackgroundVisibility(.hidden)
+        // The middle of the bar belongs to the refresh board (PullToRefresh), which also keeps
+        // the title hidden.
         ToolbarItem(placement: .topBarTrailing) {
           Button("Topics", systemImage: "line.3.horizontal.decrease") { topicsKind = .follow }
         }
@@ -189,17 +157,21 @@ struct FeedView: View {
 ///     ARE (NEW) IN (13) STORIES
 ///     (TOP) STORM ELIN BATTERS… (clock) ⌊20 MIN (→)
 ///
-/// The last line takes turns with the stories on topics you follow and how many your mutes
-/// hide.
+/// The last line takes turns with how many stories your mutes hide. The top story's headline
+/// gets all the room the line has.
 struct NewsTop: View {
   let since: Date
   let visible: [StoryCluster]
   let top: StoryCluster?
-  let followingCount: Int
   let hiddenCount: Int
   var open: (StoryCluster) -> Void
-  var showFollowing: () -> Void
   var showMutes: () -> Void
+  @State private var width: CGFloat = 360
+  @ScaledMetric(relativeTo: .body) var size: CGFloat = 17
+
+  /// How many characters of the top headline fit beside (TOP), the clock, "nn MIN" and the
+  /// arrow. SF Mono is 0.6 em wide; the rest takes about 10 em.
+  var headlineChars: Int { max(12, Int((width - size * 10) / (size * 0.6))) }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
   var fresh: [ArticleItem] { articles.filter { $0.publishedAt > since } }
@@ -227,14 +199,8 @@ struct NewsTop: View {
     if let top, let lead = top.lead {
       messages.append(KeyMessage(
         id: "top-\(top.id)",
-        tokens: [.pill("TOP"), .name(lead.title, max: 20), .clock, .minutes(Self.age(top.updatedAt)), .arrow],
+        tokens: [.pill("TOP"), .name(lead.title, max: headlineChars), .clock, .minutes(Self.age(top.updatedAt)), .arrow],
         action: { open(top) }))
-    }
-    if followingCount > 0 {
-      messages.append(KeyMessage(
-        id: "following-\(followingCount)",
-        tokens: [.number("\(followingCount)"), .word(followingCount == 1 ? "STORY ON" : "STORIES ON"), .pill("TOPICS YOU FOLLOW"), .arrow],
-        action: showFollowing))
     }
     if hiddenCount > 0 {
       messages.append(KeyMessage(
@@ -252,9 +218,10 @@ struct NewsTop: View {
   }
 
   var body: some View {
-    // The date line sits in the top bar, level with its button.
-    OneSentenceTop(figure: figure, detail: detail, messages: messages, showsDate: false, size: 15, figureSize: 38)
+    // Larger than Atelier's phone top (15 / 38), so the lines run across the page.
+    OneSentenceTop(figure: figure, detail: detail, messages: messages, size: 17, figureSize: 46)
       .frame(maxWidth: .infinity, alignment: .leading)
+      .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
   }
 }
 
@@ -265,9 +232,6 @@ extension TopicKind: Identifiable {
 /// The feed's sections under the current filter.
 struct FeedSections {
   var visible: [StoryCluster] = []
-  /// Stories on topics you follow, newest first; shown once, above the rest. Empty while a
-  /// topic is the filter, where every story is one.
-  var following: [StoryCluster] = []
   var wide: [StoryCluster] = []
   var brief: [StoryCluster] = []
   var hiddenCount = 0
@@ -287,10 +251,9 @@ struct FeedSections {
     let outlets = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Set($0.articles.map(\.outlet)).count) })
     let importance = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Self.importance($0, outlets: outlets[$0.id] ?? 0, now: now)) })
     let byImportance = { (a: StoryCluster, b: StoryCluster) in importance[a.id, default: 0] > importance[b.id, default: 0] }
-    let byTopic: Bool
-    if case .topic = filter { byTopic = true } else { byTopic = false }
-    following = byTopic ? [] : visible.filter(\.isFollowed).sorted(by: byImportance)
-    let rest = byTopic ? visible : visible.filter { !$0.isFollowed }
+    // One order for everything, by importance; a story on a topic you follow keeps its topic as
+    // its label but gets no head start.
+    let rest = visible
     wide = rest.filter { outlets[$0.id, default: 0] > 1 }.sorted(by: byImportance)
     brief = rest.filter { outlets[$0.id, default: 0] <= 1 }.sorted { $0.updatedAt > $1.updatedAt }
   }
