@@ -64,6 +64,8 @@ struct TopicsSheet: View {
             }
           }
 
+          AlertSettings().padding(.top, 10)
+
           Text(explanation)
             .font(.footnote)
             .foregroundStyle(Swiss.muted)
@@ -165,5 +167,52 @@ struct TopicRow: View {
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
     .tile(.plain, radius: 16)
+  }
+}
+
+/// Alerts: breaking news and new stories on followed topics. Both off until switched on; the
+/// first one switched on asks for permission.
+struct AlertSettings: View {
+  @AppStorage(Alerts.breakingKey) var breaking = false
+  @AppStorage(Alerts.followingKey) var following = false
+  @State private var denied = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Eyebrow("Alerts")
+      row("Breaking news", detail: "A story five or more outlets are covering within the hour. A few a day at most.", isOn: $breaking)
+      row("Topics you follow", detail: "A new story on something you follow. Decided on this iPhone; your topics never leave it.", isOn: $following)
+      if denied {
+        Text("Notifications are off for newnew. Turn them on in Settings › Notifications.")
+          .font(.footnote)
+          .foregroundStyle(Swiss.alert)
+      }
+    }
+  }
+
+  func row(_ title: String, detail: String, isOn: Binding<Bool>) -> some View {
+    Toggle(isOn: Binding(get: { isOn.wrappedValue }, set: { on in
+      isOn.wrappedValue = on
+      Task { await apply(on, isOn: isOn) }
+    })) {
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title).font(.body.weight(.medium))
+        Text(detail).font(.footnote).tileSecondary().fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .tint(Swiss.ink)
+    .padding(14)
+    .tile(.plain, radius: 16)
+  }
+
+  func apply(_ on: Bool, isOn: Binding<Bool>) async {
+    if on, !(await Alerts.requestPermission()) {
+      isOn.wrappedValue = false
+      denied = true
+      return
+    }
+    denied = false
+    Alerts.scheduleRefresh()
+    await Alerts.updateSubscriptions()
   }
 }

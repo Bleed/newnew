@@ -272,12 +272,16 @@ struct DotBoard: View {
   }
 }
 
-/// Shown once when the app opens: a narrow dot band through the middle of a white screen, as
-/// tall as the top panel's board and at the same dot density as the app's numbers, with
-/// "newnew" rolling in on one line: grey dots, the letters almost black.
-/// It holds a beat and fades away; a tap skips it.
-struct LaunchBoard: View {
+/// The loading board (Figma: Newnew › Loading animation). The whole screen becomes a board of
+/// faint dots, 28 across; "new" over "new" rolls in on it like a departures board, as on the
+/// icon. With stories already stored it holds a beat and fades. On a first launch (nothing
+/// stored) it stays while the feed is read: a figure flips through outlets, articles read and
+/// stories found, and the bottom row of dots fills with progress. A tap skips it.
+struct LoadingBoard: View {
   @Binding var isShowing: Bool
+  /// Nothing to show yet: stay up and show progress until the first sync is done.
+  let waitsForFeed: Bool
+  @Environment(FeedSyncPipeline.self) var pipeline
   @Environment(\.accessibilityReduceMotion) var reduceMotion
   @State private var faded = false
   @State private var start = Date()
@@ -285,53 +289,93 @@ struct LaunchBoard: View {
   /// Once per launch, not every time the window is reopened.
   @MainActor static var hasPlayed = false
 
-  static let text = Array("newnew")
-  /// Board rows, as on the top panel (7 for the glyph, one above and below).
-  static let rows = 9
+  static let columns = 28
+  static let word = "new"
   static let ink = Color.adaptive(light: 0x1E1E1E, dark: 0xEDEDED)
-  static let boardPitch: CGFloat = 5
+
+  /// The figure under the word: outlets, then articles read, then stories.
+  var figure: String? {
+    guard waitsForFeed else { return nil }
+    switch pipeline.phase {
+    case .reading(let outlets): return "\(outlets)"
+    case .embedding(let done, _): return "\(done)"
+    case .grouping: return nil
+    case .done(let stories): return "\(stories)"
+    default: return nil
+    }
+  }
 
   var body: some View {
     GeometryReader { proxy in
-      let textCols = Self.text.count * 6 - 1
-      // The top panel's pitch, shrunk only if the line wouldn't fit.
-      let pitch = min(proxy.size.width * 0.9 / CGFloat(textCols), Self.boardPitch)
-      let cols = Int(proxy.size.width / pitch)
-      let bandHeight = CGFloat(Self.rows) * pitch
-      let ox = (proxy.size.width - CGFloat(cols - 1) * pitch) / 2
-      let oy = (proxy.size.height - bandHeight) / 2 + pitch / 2
-      let startCol = (cols - textCols) / 2
+      let pitch = proxy.size.width / CGFloat(Self.columns)
+      let rows = Int(proxy.size.height / pitch)
+      let ox = pitch / 2
+      let oy = (proxy.size.height - CGFloat(rows - 1) * pitch) / 2
       let d = pitch * 0.82
+      // "new" is 17 columns; its glyphs leave their top two rows blank (lower case), so the
+      // second line sits 6 rows down, one blank row between the lines, as on the icon.
+      let wordCol = (Self.columns - (Self.word.count * 6 - 1)) / 2
+      let wordRow = Int(Double(rows) * 0.26) - 2
+      let figureRow = wordRow + 16
+      let barRow = rows - 8
+      let lit = Int((pipeline.phase.progress * Double(Self.columns)).rounded())
+      let place = { (col: Int, row: Int) in CGSize(width: ox + CGFloat(col) * pitch - d / 2, height: oy + CGFloat(row) * pitch - d / 2) }
       ZStack(alignment: .topLeading) {
         Swiss.canvas
-        // The faint band; the word rolls in on it with the same roll as the numbers and the
-        // onboarding welcome.
         Canvas { ctx, _ in
-          for r in 0..<Self.rows { for c in 0..<cols {
+          for r in 0..<rows { for c in 0..<Self.columns {
             let rect = CGRect(x: ox + CGFloat(c) * pitch - d / 2, y: oy + CGFloat(r) * pitch - d / 2, width: d, height: d)
-            ctx.fill(Path(ellipseIn: rect), with: .color(Swiss.ink.opacity(0.1)))
+            let isLit = waitsForFeed && r == barRow && c < lit
+            ctx.fill(Path(ellipseIn: rect), with: .color(isLit ? Self.ink : Swiss.ink.opacity(0.1)))
           } }
         }
-        TimelineView(.animation(paused: reduceMotion)) { context in
-          DotText(String(Self.text), pitch: pitch, motion: .roll, scales: false, clock: (start.addingTimeInterval(0.2), context.date))
-            .foregroundStyle(Self.ink)
+        ForEach(0..<2, id: \.self) { line in
+          TimelineView(.animation(paused: reduceMotion)) { context in
+            DotText(Self.word, pitch: pitch, motion: .roll, scales: false,
+              clock: (start.addingTimeInterval(0.2 + Double(line) * 0.25), context.date))
+              .foregroundStyle(Self.ink)
+          }
+          .offset(place(wordCol, wordRow + line * 6))
         }
-        .offset(x: ox + CGFloat(startCol) * pitch - d / 2, y: oy + pitch - d / 2)
+        if let figure {
+          DotText(figure, pitch: pitch, motion: .roll, scales: false)
+            .foregroundStyle(Self.ink)
+            .offset(place((Self.columns - (figure.count * 6 - 1)) / 2, figureRow))
+            .transition(.opacity)
+        }
       }
+      .animation(.easeOut(duration: 0.2), value: figure == nil)
     }
     .ignoresSafeArea()
     .opacity(faded ? 0 : 1)
     .contentShape(Rectangle())
     .onTapGesture { finish() }
     .accessibilityElement()
-    .accessibilityLabel("Newnew")
+    .accessibilityLabel(waitsForFeed ? "newnew, reading the news" : "newnew")
     .task {
       Self.hasPlayed = true
       start = Date()
-      // The roll settles in just over a second; then a short hold before fading.
-      try? await Task.sleep(for: .seconds(reduceMotion ? 0.8 : 2.3))
-      finish()
+      // The roll settles in about 1.3 s; then a short hold.
+      try? await Task.sleep(for: .seconds(reduceMotion ? 0.8 : 2.0))
+      if !waitsForFeed || isFinished(pipeline.phase) { await settleAndFinish() }
     }
+    .onChange(of: pipeline.phase) { _, phase in
+      guard waitsForFeed, isFinished(phase), Date.now.timeIntervalSince(start) > 1.6 else { return }
+      Task { await settleAndFinish() }
+    }
+  }
+
+  func isFinished(_ phase: SyncPhase) -> Bool {
+    switch phase {
+    case .done, .failed: true
+    default: false
+    }
+  }
+
+  /// Lets the story count land before fading.
+  func settleAndFinish() async {
+    if waitsForFeed, case .done = pipeline.phase { try? await Task.sleep(for: .seconds(0.9)) }
+    finish()
   }
 
   func finish() {

@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 
 /// Today: the one-sentence top (what's new since you last looked, and the top story), the
-/// region switch, then stories on topics you follow, stories covered widely, and stories in
-/// brief.
+/// filter switch (regions, then the topics you follow), then stories on topics you follow,
+/// stories covered widely, and stories in brief.
 struct FeedView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Query(sort: \StoryCluster.updatedAt, order: .reverse) var clusters: [StoryCluster]
@@ -11,24 +11,25 @@ struct FeedView: View {
   @Environment(\.scenePhase) var scenePhase
   @State private var topicsKind: TopicKind?
   @State private var path: [StoryCluster] = []
-  @AppStorage("region") var regionRaw = Region.world.rawValue
+  @AppStorage("feedFilter") var filterRaw = FeedFilter.region(.world).raw
+  @Query(sort: \SemanticTopic.createdAt) var topics: [SemanticTopic]
   /// Held while the page is open, so the count doesn't drop to zero as you read.
   @State private var since: Date?
 
-  var region: Region { Region(rawValue: regionRaw) ?? .world }
-  var visible: [StoryCluster] {
-    clusters.filter { !$0.isMuted && !$0.articles.isEmpty && (region == .world || $0.regions.contains(region)) }
+  var followedTopics: [String] { topics.filter { $0.kind == .follow }.map(\.phrase) }
+  /// The chosen filter; a topic you've since unfollowed falls back to World.
+  var filter: FeedFilter {
+    let filter = FeedFilter(raw: filterRaw)
+    if case .topic(let phrase) = filter, !followedTopics.contains(phrase) { return .region(.world) }
+    return filter
   }
-  /// Stories on topics you follow, newest first; shown once, above the rest.
-  var following: [StoryCluster] { visible.filter(\.isFollowed) }
-  var wide: [StoryCluster] {
-    visible.filter { !$0.isFollowed && $0.outlets.count > 1 }
-      .sorted { ($0.outlets.count, $0.updatedAt) > ($1.outlets.count, $1.updatedAt) }
-  }
-  var brief: [StoryCluster] { visible.filter { !$0.isFollowed && $0.outlets.count <= 1 } }
-  var hiddenCount: Int { clusters.filter(\.isMuted).count }
 
   var body: some View {
+    // Worked out once per render: these were computed properties, re-run on every read, and
+    // with 400+ stories that held up the main thread for seconds.
+    let sections = FeedSections(clusters: clusters, filter: filter)
+    let visible = sections.visible, following = sections.following, wide = sections.wide
+    let brief = sections.brief, hiddenCount = sections.hiddenCount
     NavigationStack(path: $path) {
       ScrollViewReader { scroller in
       ScrollView {
@@ -46,13 +47,13 @@ struct FeedView: View {
           .padding(.top, 8)
           .padding(.bottom, 14)
 
-          RegionBar(selection: Binding(get: { region }, set: { regionRaw = $0.rawValue }))
+          FilterBar(selection: Binding(get: { filter }, set: { filterRaw = $0.raw }), topics: followedTopics)
             .padding(.bottom, 10)
 
           if clusters.isEmpty {
             emptyState
           } else if visible.isEmpty {
-            Text("Nothing about \(region == .local ? Locale(identifier: "en").localizedString(forRegionCode: RegionTagger.localCountry) ?? "here" : region.title) right now.")
+            Text("Nothing on \(filter.title) right now.")
               .font(.subheadline)
               .foregroundStyle(Swiss.muted)
           }
@@ -111,13 +112,32 @@ struct FeedView: View {
       .sheet(item: $topicsKind) { TopicsSheet(kind: $0) }
     }
     .tint(Swiss.ink)
-    .onAppear { if since == nil { since = Date(timeIntervalSince1970: lastLookedAt) } }
+    .onAppear {
+      if since == nil { since = Date(timeIntervalSince1970: lastLookedAt) }
+      openRoutedStory()
+    }
+    .onChange(of: Router.shared.storyID) { openRoutedStory() }
+    .onChange(of: Router.shared.articleURL) { openRoutedStory() }
+    // A pushed story may only be grouped after the sync it triggered.
+    .onChange(of: clusters.count) { openRoutedStory() }
     .onChange(of: scenePhase) { _, phase in
       switch phase {
       case .background: lastLookedAt = Date.now.timeIntervalSince1970
       case .active: since = Date(timeIntervalSince1970: lastLookedAt)
       default: break
       }
+    }
+  }
+
+  /// A tapped alert: open its story.
+  func openRoutedStory() {
+    let router = Router.shared
+    if let id = router.storyID, let cluster = clusters.first(where: { $0.id == id }) {
+      router.storyID = nil
+      path = [cluster]
+    } else if let url = router.articleURL, let cluster = clusters.first(where: { $0.articles.contains { $0.url == url } }) {
+      router.articleURL = nil
+      path = [cluster]
     }
   }
 
@@ -179,7 +199,7 @@ struct NewsTop: View {
       return [.word("THE NEWS, ON"), .pill("THIS IPHONE")]
     }
     if fresh.isEmpty {
-      return [.word("IN"), .number("\(visible.count)"), .word("STORIES"), .grey("·"), .word("NOTHING"), .pill("NEW")]
+      return [.word("IN"), .number("\(visible.count)"), .word(visible.count == 1 ? "STORY" : "STORIES"), .grey("·"), .word("NOTHING"), .pill("NEW")]
     }
     let stories = Set(fresh.compactMap { $0.cluster?.id }).count
     return [.word(fresh.count == 1 ? "IS" : "ARE"), .pill("NEW"), .word("IN"), .number("\(stories)"), .word(stories == 1 ? "STORY" : "STORIES")]
@@ -224,34 +244,104 @@ extension TopicKind: Identifiable {
   var id: String { rawValue }
 }
 
-/// World · Europe · US · Asia · Local. The chosen region is an ink outline (selection never
-/// reads as the black primary action); the rest are quiet pills.
-struct RegionBar: View {
-  @Binding var selection: Region
+/// The feed's sections under the current filter.
+struct FeedSections {
+  var visible: [StoryCluster] = []
+  /// Stories on topics you follow, newest first; shown once, above the rest. Empty while a
+  /// topic is the filter, where every story is one.
+  var following: [StoryCluster] = []
+  var wide: [StoryCluster] = []
+  var brief: [StoryCluster] = []
+  var hiddenCount = 0
+
+  init(clusters: [StoryCluster], filter: FeedFilter) {
+    for cluster in clusters {
+      if cluster.isMuted { hiddenCount += 1; continue }
+      guard !cluster.articles.isEmpty else { continue }
+      switch filter {
+      case .region(.world): visible.append(cluster)
+      case .region(let region): if cluster.regions.contains(region) { visible.append(cluster) }
+      case .topic(let phrase): if cluster.followedBy == phrase { visible.append(cluster) }
+      }
+    }
+    // Each story's outlet count once, not on every comparison of the sort.
+    let outlets = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Set($0.articles.map(\.outlet)).count) })
+    let byTopic: Bool
+    if case .topic = filter { byTopic = true } else { byTopic = false }
+    following = byTopic ? [] : visible.filter(\.isFollowed)
+    let rest = byTopic ? visible : visible.filter { !$0.isFollowed }
+    wide = rest.filter { outlets[$0.id, default: 0] > 1 }
+      .sorted { (outlets[$0.id, default: 0], $0.updatedAt) > (outlets[$1.id, default: 0], $1.updatedAt) }
+    brief = rest.filter { outlets[$0.id, default: 0] <= 1 }
+  }
+}
+
+/// What the feed shows: everything, a region, or one topic you follow.
+enum FeedFilter: Hashable {
+  case region(Region)
+  case topic(String)
+
+  init(raw: String) {
+    if raw.hasPrefix("topic:") {
+      self = .topic(String(raw.dropFirst("topic:".count)))
+    } else {
+      self = .region(Region(rawValue: raw) ?? .world)
+    }
+  }
+
+  var raw: String {
+    switch self {
+    case .region(let region): region.rawValue
+    case .topic(let phrase): "topic:\(phrase)"
+    }
+  }
+
+  var title: String {
+    switch self {
+    case .region(let region): region.title
+    case .topic(let phrase): phrase
+    }
+  }
+}
+
+/// World · Europe · US · Middle East · Asia, then the topics you follow. The chosen one is an
+/// ink outline (selection never reads as the black primary action); the rest are quiet pills.
+struct FilterBar: View {
+  @Binding var selection: FeedFilter
+  let topics: [String]
 
   var body: some View {
     ScrollView(.horizontal) {
       HStack(spacing: 6) {
-        ForEach(Region.allCases) { region in
-          let isOn = region == selection
-          Button {
-            withAnimation(.snappy(duration: 0.2)) { selection = region }
-          } label: {
-            Text(region.title)
-              .font(.callout.weight(.medium))
-              .padding(.horizontal, 14)
-              .padding(.vertical, 8)
-              .foregroundStyle(Swiss.ink)
-              .background(isOn ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
-              .overlay { if isOn { Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5) } }
-              .contentShape(Capsule())
-          }
-          .buttonStyle(.plain)
-          .accessibilityAddTraits(isOn ? .isSelected : [])
+        ForEach(Region.allCases) { region in pill(.region(region)) }
+        if !topics.isEmpty {
+          // A short rule between the regions and your topics.
+          Capsule().fill(Swiss.ink.opacity(0.15)).frame(width: 1.5, height: 22).padding(.horizontal, 4)
+          ForEach(topics, id: \.self) { topic in pill(.topic(topic)) }
         }
       }
     }
     .scrollIndicators(.hidden)
     .scrollClipDisabled()
+  }
+
+  func pill(_ filter: FeedFilter) -> some View {
+    let isOn = filter == selection
+    return Button {
+      withAnimation(.snappy(duration: 0.2)) { selection = filter }
+    } label: {
+      Text(filter.title)
+        .font(.callout.weight(.medium))
+        .lineLimit(1)
+        .frame(maxWidth: 200)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .foregroundStyle(Swiss.ink)
+        .background(isOn ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
+        .overlay { if isOn { Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5) } }
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isOn ? .isSelected : [])
   }
 }

@@ -16,7 +16,7 @@ import SwiftData
   /// the corpus mean when compared; see `Vec.centred`.
   var embedding: Data?
   var isRead = false
-  /// The outlet's country when the scraper knows it ("NO"), for Local.
+  /// The outlet's country when the scraper knows it ("NO": local-news outlets).
   var country: String?
   /// `Region` raw values, comma-separated (see `RegionTagger`).
   var regionsRaw: String = ""

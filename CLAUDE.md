@@ -70,12 +70,36 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   muting wins over following. Meaning alone was too loose on a real feed: for "space" a
   supervolcano and the Dead Sea scored 0.51–0.53; the sentence model put cricket first for "AI".
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
-  (Europe, US, Asia), plus Local = the iPhone's region setting (country name, some cities, and
-  outlets the scraper marks with `country`). A story is in a region when ≥ ⅓ of its articles
-  are. Middle East, Africa, Latin America and Oceania only show under World.
+  (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The
+  feed's filter switch is World, the regions, then the topics you follow (`FeedFilter`); a
+  topic filter shows the stories that topic raised. There is no Local region (removed on
+  request); local-news outlets still carry `country` from the scraper.
 - **"Already read"** comes from cluster membership (`readAt`, `newSinceRead`), not a 0.80 cutoff.
 - In the Simulator `NLContextualEmbedding` fails to compile its model (sandbox), so the engine
   falls back to `NLEmbedding.sentenceEmbedding`. Real devices use the contextual model.
+
+## Loading board and alerts
+
+- `LoadingBoard` (Design/DotMatrix.swift; Figma › Loading animation) replaces the launch board on
+  every launch: a 28-column dot board with "new" over "new" rolling in. With stories stored it
+  fades after 2 s (the launch sync waits 2.4 s so it can't hold the board up). On a first launch
+  it shows `FeedSyncPipeline.phase`: outlets, then articles read, then stories, with the bottom
+  row of dots as progress.
+- Alerts (Services/Alerts.swift), off until switched on in Topics:
+  1. Background refresh (`BGAppRefreshTask` "com.svein.newnew.refresh"): sync, then a local
+     alert for new stories on followed topics, and for breaking stories while push isn't set
+     up. Seen stories never alert; ≤ 3 per check, ≤ 8 a day.
+  2. Breaking push: the scraper (scripts/alerts.mjs) finds stories from ≥ 5 outlets with ≥ 3
+     articles in 45 min and writes a `Breaking` record to the CloudKit public database; the app's
+     subscription makes Apple push it. ≤ 2 per run, 6 a day; state in public/alerts.json.
+- To turn on push: create the CloudKit container (e.g. iCloud.com.svein.newnew) for team
+  W533Y4V578, set `NEWNEW_CLOUDKIT_CONTAINER` and `NEWNEW_ENTITLEMENTS =
+  Newnew/App/Newnew-CloudKit.entitlements` in project.yml; in CloudKit Console create a
+  server-to-server key and add GitHub variable `CLOUDKIT_CONTAINER` and secrets
+  `CLOUDKIT_KEY_ID`, `CLOUDKIT_PRIVATE_KEY`. Records go to the development environment unless
+  `CLOUDKIT_ENVIRONMENT` is `production` (deploy the schema first).
+- Feed performance: `FeedSections` works the sections out once per render. Computed
+  properties re-run on every read froze the main thread for seconds with 400+ stories.
 
 ## Rules
 
@@ -91,6 +115,9 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 
 ## Look (from Atelier CRM)
 
+- The name is lower case: "newnew" (home screen, prompts, accessibility).
+- Icon: "new" over "new" in the dot face, reversed (near-white dots on black), from
+  `Scripts/render-app-icon.swift`.
 - Near-white page (#FAFAFA), grey tiles (#F1F1F1), black in dark mode; type carries contrast.
 - The page top is Atelier's one-sentence top (`OneSentenceTop`): date line, a big mono figure,
   a detail line, and a rotating last line with a tap target.

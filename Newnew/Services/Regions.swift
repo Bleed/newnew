@@ -2,7 +2,7 @@ import Foundation
 
 /// Where a story is about, for the feed's region switch. World is everything.
 nonisolated enum Region: String, CaseIterable, Identifiable, Sendable {
-  case world, europe, us, middleEast, asia, local
+  case world, europe, us, middleEast, asia
 
   var id: String { rawValue }
 
@@ -13,20 +13,14 @@ nonisolated enum Region: String, CaseIterable, Identifiable, Sendable {
     case .us: "US"
     case .middleEast: "Middle East"
     case .asia: "Asia"
-    case .local: "Local"
     }
   }
 }
 
 /// Tags an article with the regions it's about, from the places, people and institutions it
 /// names: a word list, not a model, so it's instant for a thousand articles and easy to fix.
-/// Local is the iPhone's own country (its region setting), plus articles from outlets the
-/// scraper marks with that country.
 nonisolated enum RegionTagger {
-  /// The country Local means: the iPhone's region setting ("NO").
-  static var localCountry: String { Locale.current.region?.identifier ?? "US" }
-
-  static func regions(title: String, snippet: String, country: String?, local: String = localCountry) -> Set<Region> {
+  static func regions(title: String, snippet: String) -> Set<Region> {
     let original = "\(title) \(snippet)"
     let text = " " + original.lowercased().map { $0.isLetter || $0.isNumber ? $0 : " " }.reduce(into: "") { $0.append($1) } + " "
     func mentions(_ terms: [String]) -> Bool { terms.contains { text.contains(" \($0) ") } }
@@ -38,25 +32,8 @@ nonisolated enum RegionTagger {
     }
     if mentions(middleEast) { regions.insert(.middleEast) }
     if mentions(asia) { regions.insert(.asia) }
-    if country == local || mentions(localTerms(local)) { regions.insert(.local) }
     return regions
   }
-
-  /// The local country's name and, for some countries, its cities and institutions.
-  static func localTerms(_ country: String) -> [String] {
-    let name = Locale(identifier: "en").localizedString(forRegionCode: country)?.lowercased()
-    return (name.map { [$0] } ?? []) + (localExtras[country] ?? [])
-  }
-
-  static let localExtras: [String: [String]] = [
-    "NO": ["norwegian", "norwegians", "oslo", "bergen", "trondheim", "stavanger", "tromsø", "tromso", "kristiansand", "drammen", "storting", "nrk", "equinor", "støre"],
-    "SE": ["swedish", "swede", "swedes", "stockholm", "gothenburg", "malmö", "malmo", "uppsala", "riksdag"],
-    "DK": ["danish", "dane", "danes", "copenhagen", "aarhus", "odense", "folketing"],
-    "FI": ["finnish", "finn", "finns", "helsinki", "tampere", "turku"],
-    "GB": ["uk", "british", "britain", "england", "scotland", "wales", "london", "manchester", "birmingham", "glasgow", "edinburgh", "starmer", "westminster"],
-    "DE": ["german", "germans", "berlin", "munich", "hamburg", "frankfurt", "cologne", "bundestag", "merz"],
-    "US": ["america", "american", "americans", "washington", "white house", "congress"],
-  ]
 
   static let europe = [
     "europe", "european", "europeans", "eu", "brussels", "strasbourg",

@@ -2,6 +2,9 @@
 # GitHub Pages: https://<owner>.github.io/<repo>/latest_news.json
 #
 # One-time setup: Settings → Pages → Source: "GitHub Actions". Pages is free for public repos.
+# Breaking-news pushes (optional): repository variable CLOUDKIT_CONTAINER, secrets
+# CLOUDKIT_KEY_ID and CLOUDKIT_PRIVATE_KEY (a CloudKit server-to-server key). Without them the
+# run only logs which stories it would push.
 # GitHub pauses scheduled workflows in repos with no activity for 60 days; re-enable it under
 # Actions if the feed stops updating.
 name: Update feed
@@ -45,6 +48,10 @@ jobs:
         env:
           # Pictures found last run are reused, so only new articles are looked up.
           PREVIOUS_FEED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest_news.json
+          CLOUDKIT_CONTAINER: ${{ vars.CLOUDKIT_CONTAINER }}
+          CLOUDKIT_ENVIRONMENT: ${{ vars.CLOUDKIT_ENVIRONMENT }}
+          CLOUDKIT_KEY_ID: ${{ secrets.CLOUDKIT_KEY_ID }}
+          CLOUDKIT_PRIVATE_KEY: ${{ secrets.CLOUDKIT_PRIVATE_KEY }}
         run: node scripts/poll_feeds.mjs
 
       - uses: actions/configure-pages@v5

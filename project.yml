@@ -15,6 +15,11 @@ settings:
     # The published latest_news.json (GitHub Pages, from .github/workflows/update_feed.yml).
     # Empty: the app uses its bundled sample instead.
     NEWNEW_FEED_URL: "https://bleed.github.io/newnew/latest_news.json"
+    # The CloudKit container for breaking-news pushes, e.g. iCloud.com.svein.newnew. Empty: no
+    # push; breaking alerts come from background refresh. Set it together with
+    # NEWNEW_ENTITLEMENTS = Newnew/App/Newnew-CloudKit.entitlements.
+    NEWNEW_CLOUDKIT_CONTAINER: ""
+    NEWNEW_ENTITLEMENTS: Newnew/App/Newnew.entitlements
     DEVELOPMENT_TEAM: W533Y4V578
     DEAD_CODE_STRIPPING: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
@@ -33,16 +38,21 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: Newnew
+        INFOPLIST_KEY_CFBundleDisplayName: newnew
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.news
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
+        CODE_SIGN_ENTITLEMENTS: $(NEWNEW_ENTITLEMENTS)
     info:
       path: Newnew/App/Info.plist
       properties:
         NewnewFeedURL: $(NEWNEW_FEED_URL)
+        NewnewCloudKitContainer: $(NEWNEW_CLOUDKIT_CONTAINER)
+        # Background refresh (local alerts) and pushes (breaking news) wake the app to sync.
+        UIBackgroundModes: [fetch, remote-notification]
+        BGTaskSchedulerPermittedIdentifiers: [com.svein.newnew.refresh]
         # ProMotion: scrolling at up to 120 Hz.
         CADisableMinimumFrameDurationOnPhone: true
         CFBundleShortVersionString: $(MARKETING_VERSION)

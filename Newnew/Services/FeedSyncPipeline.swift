@@ -9,6 +9,8 @@ import SwiftData
   let context: ModelContext
   private let engine = OnDeviceVectorEngine.shared
   private(set) var isSyncing = false
+  /// Where a sync is, for the loading board.
+  private(set) var phase: SyncPhase = .idle
   private(set) var lastSync: Date?
   private(set) var lastError: String?
   /// The mean article vector, taken away before comparing (see `Vec.centred`).
@@ -40,6 +42,11 @@ import SwiftData
 
   // MARK: Sync
 
+  /// Stories with at least one article that isn't muted.
+  var storyCount: Int {
+    ((try? context.fetch(FetchDescriptor<StoryCluster>())) ?? []).filter { !$0.isMuted && !$0.articles.isEmpty }.count
+  }
+
   func syncIfNeeded() async {
     if let lastSync, Date.now.timeIntervalSince(lastSync) < Self.refreshInterval { return }
     await sync()
@@ -48,9 +55,11 @@ import SwiftData
   func sync() async {
     guard !isSyncing else { return }
     isSyncing = true
+    phase = .downloading
     defer { isSyncing = false }
     do {
       let feed = try await loadFeed()
+      phase = .reading(outlets: Set(feed.articles.map(\.outlet)).count)
       let source = Self.feedURL?.absoluteString ?? "sample"
       let articles = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
       // The sample's links all go to example.com; none of them belong next to real news.
@@ -66,13 +75,16 @@ import SwiftData
       prune()
       tagRegions()
       await embedMissing()
+      phase = .grouping
       await recluster()
       applyTopics()
       try context.save()
       lastSync = .now
       lastError = nil
+      phase = .done(stories: storyCount)
     } catch {
       lastError = error.localizedDescription
+      phase = .failed
     }
   }
 
@@ -106,9 +118,8 @@ import SwiftData
   /// Cheap (a word list), so every article is tagged again each sync and word-list fixes apply
   /// at once.
   func tagRegions() {
-    let local = RegionTagger.localCountry
     for article in (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? [] {
-      let raw = RegionTagger.regions(title: article.title, snippet: article.snippet, country: article.country, local: local)
+      let raw = RegionTagger.regions(title: article.title, snippet: article.snippet)
         .map(\.rawValue).sorted().joined(separator: ",")
       if article.regionsRaw != raw { article.regionsRaw = raw }
     }
@@ -130,9 +141,12 @@ import SwiftData
 
     let articles = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
     let missing = articles.filter { $0.embedding?.count != bytes }
-    if !missing.isEmpty {
-      let vectors = await engine.embed(missing.map(\.text))
-      for (article, vector) in zip(missing, vectors) { article.embedding = vector.map(Vec.data) }
+    // In batches, so the loading board can count articles as they're read.
+    for start in stride(from: 0, to: missing.count, by: 40) {
+      phase = .embedding(done: start, total: missing.count)
+      let batch = Array(missing[start..<min(start + 40, missing.count)])
+      let vectors = await engine.embed(batch.map(\.text))
+      for (article, vector) in zip(batch, vectors) { article.embedding = vector.map(Vec.data) }
     }
     corpusMean = Vec.mean(articles.compactMap { Vec.vector($0.embedding) }.filter { $0.count == dimension })
 
@@ -279,4 +293,29 @@ import SwiftData
       || meaningAloneThreshold.map { score > $0 } == true
   }
 
+}
+
+/// The steps of a sync, as the loading board shows them.
+enum SyncPhase: Equatable {
+  case idle
+  case downloading
+  /// The feed is in: how many outlets it has.
+  case reading(outlets: Int)
+  /// Articles read into vectors on the device.
+  case embedding(done: Int, total: Int)
+  case grouping
+  case done(stories: Int)
+  case failed
+
+  /// 0…1, for the board's bottom row.
+  var progress: Double {
+    switch self {
+    case .idle, .failed: 0
+    case .downloading: 0.04
+    case .reading: 0.1
+    case .embedding(let done, let total): 0.1 + 0.8 * Double(done) / Double(max(total, 1))
+    case .grouping: 0.94
+    case .done: 1
+    }
+  }
 }

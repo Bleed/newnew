@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import Parser from 'rss-parser'
 import * as cheerio from 'cheerio'
+import { findStories, selectNew, cloudKitConfig, sendToCloudKit } from './alerts.mjs'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const OUT_DIR = path.resolve(process.env.OUT_DIR ?? path.join(root, 'public'))
@@ -305,6 +306,31 @@ async function main() {
   if (results.length - failed.length < Math.ceil(results.length / 2)) {
     console.error('Fewer than half the feeds answered; not publishing.')
     process.exit(1)
+  }
+
+  await sendBreaking(articles)
+}
+
+/** Breaking-news pushes (see alerts.mjs). A failure here never stops the feed publishing. */
+async function sendBreaking(articles) {
+  const statePath = path.join(OUT_DIR, 'alerts.json')
+  let previous = null
+  try {
+    const source = process.env.PREVIOUS_FEED_URL?.replace(/latest_news\.json$/, 'alerts.json')
+    previous = JSON.parse(source ? await (await fetchWithTimeout(source, { timeout: FEED_TIMEOUT })).text() : await readFile(statePath, 'utf8'))
+  } catch {
+    // First run: nothing sent yet.
+  }
+  const stories = findStories(articles)
+  const { send, state } = selectNew(stories, previous)
+  const config = cloudKitConfig()
+  for (const s of send) console.log(`breaking: ${s.outlets} outlets | ${s.headline}${config ? '' : ' (not sent: no CloudKit key)'}`)
+  try {
+    if (config && send.length) console.log(`CloudKit: ${(await sendToCloudKit(send, config)).created} sent`)
+    await writeFile(statePath, JSON.stringify(config ? state : previous ?? { sent: [] }, null, 2))
+  } catch (error) {
+    console.error(`Breaking alerts failed: ${error.message}`)
+    await writeFile(statePath, JSON.stringify(previous ?? { sent: [] }, null, 2))
   }
 }
 

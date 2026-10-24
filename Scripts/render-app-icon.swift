@@ -3,9 +3,9 @@
 
 import AppKit
 
-// As Atelier's icon: dotted letters on a dot matrix, straight on white, no border, no shadow.
-// Here "new" over "new", in the lower-case 5×7 face the app uses (rows 2–6 of each glyph), on a
-// square grid of faint grey dots; the letters are almost black.
+// As Atelier's icon, reversed: dotted letters on a dot matrix, straight on black, no border, no
+// shadow. "new" over "new", in the lower-case 5×7 face the app uses (rows 2–6 of each glyph),
+// on a square grid of faint dots; the letters are almost white.
 //
 // iOS gets full-bleed square artwork, masked by the system; the grid keeps a margin so no dot
 // is cut by the rounded corners.
@@ -45,7 +45,7 @@ func render(size: CGFloat, to path: String) {
   NSGraphicsContext.current = ctx
   let cg = ctx.cgContext
   let tile = CGRect(x: 0, y: 0, width: size, height: size)
-  cg.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+  cg.setFillColor(CGColor(red: 0, green: 0, blue: 0, alpha: 1))
   cg.fill(tile)
   // The dots keep clear of the mask's rounded corners.
   let field = tile.insetBy(dx: size * 0.09, dy: size * 0.09)
@@ -55,8 +55,10 @@ func render(size: CGFloat, to path: String) {
   let lit = litCells(gridSize: n)
   let pitch = field.width / CGFloat(n)
   let dot = pitch * 0.82
-  let ink = CGColor(red: 0.118, green: 0.118, blue: 0.118, alpha: 1)
-  let faint = CGColor(red: 0, green: 0, blue: 0, alpha: 0.1)
+  // The app's dark-mode ink (0xF5F5F5) and its unlit dots (ink at 14 %, a touch more than on
+  // white so they still read on black).
+  let ink = CGColor(red: 0.961, green: 0.961, blue: 0.961, alpha: 1)
+  let faint = CGColor(red: 1, green: 1, blue: 1, alpha: 0.14)
   for row in 0..<n {
     for column in 0..<n {
       cg.setFillColor(lit.contains([row, column]) ? ink : faint)
