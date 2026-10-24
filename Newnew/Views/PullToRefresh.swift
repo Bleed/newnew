@@ -22,6 +22,7 @@ struct PullToRefresh: ViewModifier {
   static let threshold: CGFloat = 72
   /// The blank band the board sits in while loading.
   static let gap: CGFloat = 96
+  static let lift: CGFloat = 20
 
   /// What the running loop changes, in an object so the changes reach the screen.
   @MainActor @Observable final class BoardState {
@@ -36,6 +37,8 @@ struct PullToRefresh: ViewModifier {
         // While loading, the page opens a blank band at its top with the board in its middle.
         if board.isShowing {
           MiniDotBoard(fill: 1, first: board.loop.first, second: board.loop.second)
+            // A little above the middle of the band, closer to the top bar.
+            .offset(y: -Self.lift)
             .frame(maxWidth: .infinity)
             .frame(height: Self.gap)
             .background(Swiss.canvas)

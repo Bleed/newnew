@@ -24,8 +24,12 @@ struct FeedView: View {
     return filter
   }
 
-  /// The sentence top sits below the top bar, clear of the refresh board.
-  static let headerTop: CGFloat = 8
+  /// Lifts the sentence top into the top bar's row, so its date line is level with the middle
+  /// of the filter button. The loading band, when it opens, pushes it down.
+  static let headerTop: CGFloat = -42
+  /// Below the loading band while it shows, so the band never covers the date.
+  static let headerBelowBand: CGFloat = 8
+  @State private var boardShowing = false
 
   var body: some View {
     // Worked out once per render: these were computed properties, re-run on every read, and
@@ -44,8 +48,8 @@ struct FeedView: View {
           } showMutes: {
             topicsKind = .mute
           }
-          .padding(.top, Self.headerTop)
-          .padding(.bottom, 14)
+          .padding(.top, boardShowing ? Self.headerBelowBand : Self.headerTop)
+          .padding(.bottom, 28)
 
           FilterBar(selection: Binding(get: { filter }, set: { filterRaw = $0.raw }), topics: followedTopics)
             .padding(.bottom, 10)
@@ -88,7 +92,9 @@ struct FeedView: View {
       .swissCanvas()
       .navigationTitle("Today")
       .navigationBarTitleDisplayMode(.inline)
-      .dotRefreshable(isSyncing: pipeline.isSyncing) { await pipeline.sync() }
+      // The header shares the bar's row: no fade over it.
+      .scrollEdgeEffectHidden(true, for: .top)
+      .dotRefreshable(isSyncing: pipeline.isSyncing, isShowing: $boardShowing) { await pipeline.sync() }
       .navigationDestination(for: StoryCluster.self) { StoryDetailView(cluster: $0) }
       .toolbar {
         // Nothing in the middle: the page's own top is the title.
