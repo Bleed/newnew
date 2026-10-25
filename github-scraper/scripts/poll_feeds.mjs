@@ -12,6 +12,14 @@
 //   "chart"    a data-journalism feed: the picture is a chart, to be shown whole, not cropped;
 //              charts come weekly, so they're kept for 14 days instead of 48 hours.
 //
+// The editorial mix: news (World, Business, Science, Politics, …) is kept whole, because the
+// app groups it into stories across outlets. The lighter pillars (Technology, Entertainment,
+// Fashion & Style, Gaming, Lifestyle & Food) publish many small items, so each of their feeds
+// gives its newest 8, and each of those categories but Technology at most 15 in all (Technology
+// keeps more: gadget launches are covered across outlets, like news). The app mixes the
+// pillars on the page. Their articles also carry `galleryURLs`: up to 6 pictures from the item
+// (lookbooks, interiors, recipes), when it has more than one.
+//
 // Output, so the app downloads little (GitHub Pages replaces the whole site each run, so the
 // small files are rebuilt from the snapshot every time):
 //   latest_news.json   the snapshot: every article of the last 48 h, each stamped `changedAt`
@@ -50,6 +58,12 @@ const PAGE_TIMEOUT = 6_000
 const PAGE_BYTES = 25_000
 /// Tier 2 is the slow part; keep each run well inside its schedule.
 const MAX_PAGE_FETCHES = 400
+/// The lighter pillars (see the top): per-feed and per-category caps.
+const LIGHT_CATEGORIES = new Set(['Technology', 'Entertainment', 'Fashion & Style', 'Gaming', 'Lifestyle & Food'])
+const LIGHT_PER_FEED = 8
+const LIGHT_PER_CATEGORY = 15
+const UNCAPPED_CATEGORIES = new Set(['Technology'])
+const GALLERY_SIZE = 6
 
 const parser = new Parser({
   customFields: {
@@ -106,7 +120,7 @@ async function pollFeed(feed) {
     for (const item of parsed.items ?? []) {
       const article = toArticle(item, feed)
       if (article && Date.parse(article.publishedAt) >= cutoff) articles.push(article)
-      if (articles.length >= PER_FEED) break
+      if (articles.length >= (LIGHT_CATEGORIES.has(feed.category) ? LIGHT_PER_FEED : PER_FEED)) break
     }
     return { feed, articles, ms: Date.now() - started }
   } catch (error) {
@@ -144,6 +158,7 @@ function toArticle(item, feed) {
     outlet: feed.outlet,
     url,
     imageURL: 'imageURL' in media ? media.imageURL : feedImage(item, url),
+    galleryURLs: LIGHT_CATEGORIES.has(feed.category) && !feed.kind ? gallery(item, url) : null,
     videoID: media.videoID ?? null,
     audioURL: media.audioURL ?? null,
     audioSeconds: media.audioSeconds ?? null,
@@ -238,6 +253,40 @@ function feedImage(item, articleURL) {
   return best ? upgrade(absolute(best.url, articleURL)) : null
 }
 
+/** Up to 6 distinct pictures from the item, for a lookbook or a recipe's steps; null for
+ * fewer than two. Tracking pixels, icons and avatars are skipped, and renditions of one picture
+ * (the same path with other sizes) count once. */
+function gallery(item, articleURL) {
+  const urls = []
+  for (const media of item.mediaContent ?? []) {
+    const a = media?.$ ?? {}
+    if (a.url && (!a.medium || a.medium === 'image') && (!a.type || a.type.startsWith('image'))) urls.push(a.url)
+  }
+  const html = item.contentEncoded ?? item.content ?? ''
+  for (const m of html.matchAll(/<img\b[^>]*>/gi)) {
+    const tag = m[0]
+    const src = /\ssrc=["']([^"']+)["']/i.exec(tag)?.[1]
+    const width = Number(/\swidth=["']?(\d+)/i.exec(tag)?.[1] ?? 0)
+    if (src && (width === 0 || width >= 300)) urls.push(src)
+  }
+  const seen = new Set()
+  const out = []
+  for (const raw of urls) {
+    const url = upgrade(absolute(raw.replace(/&amp;/g, '&'), articleURL))
+    if (!url || !/^https:/.test(url) || /pixel|feedburner|gravatar|emoji|avatar|logo|icon|\.gif(\?|$)|\.svg(\?|$)/i.test(url)) continue
+    // WordPress thumbnails name their size: "-300x200.jpg" is too small to swipe through.
+    const named = /-(\d+)x\d+\.\w+$/.exec(url.replace(/\?.*$/, ''))
+    if (named && Number(named[1]) < 600) continue
+    // One picture, many sizes: "photo-1024x683.jpg", "…/w_640/…", "?w=…" all key to the same.
+    const key = url.replace(/\?.*$/, '').replace(/-\d+x\d+(?=\.\w+$)/, '').replace(/\/(w|h|c)_[^/]+/g, '').toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(url)
+    if (out.length >= GALLERY_SIZE) break
+  }
+  return out.length > 1 ? out : null
+}
+
 /** Feeds often carry a small thumbnail where a larger rendition exists at a known address. */
 function upgrade(url) {
   if (!url) return url
@@ -308,13 +357,13 @@ async function previousFeed() {
 }
 
 /** What counts as a change: anything the app shows. */
-const CONTENT_KEYS = ['title', 'snippet', 'imageURL', 'videoID', 'audioURL', 'audioSeconds', 'isChart', 'category', 'country']
+const CONTENT_KEYS = ['title', 'snippet', 'imageURL', 'galleryURLs', 'videoID', 'audioURL', 'audioSeconds', 'isChart', 'category', 'country']
 
 /** Stamps each article with the run it was new or last changed in. */
 function stampChanges(articles, previous, runID) {
   for (const article of articles) {
     const before = previous.get(article.url)
-    const same = before?.changedAt && CONTENT_KEYS.every(k => (before[k] ?? null) === (article[k] ?? null))
+    const same = before?.changedAt && CONTENT_KEYS.every(k => JSON.stringify(before[k] ?? null) === JSON.stringify(article[k] ?? null))
     article.changedAt = same ? before.changedAt : runID
   }
 }
@@ -361,6 +410,26 @@ async function main() {
     articles.push(article)
   }
   articles.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+  // The lighter pillars' caps. Outlets take turns (each one's newest, then each one's second
+  // newest, …), so two busy sneaker blogs don't fill Fashion & Style on their own.
+  const rankInFeed = new Map()
+  const perOutlet = new Map()
+  for (const article of articles) {
+    const key = `${article.category}|${article.outlet}`
+    const rank = perOutlet.get(key) ?? 0
+    perOutlet.set(key, rank + 1)
+    rankInFeed.set(article, rank)
+  }
+  const kept = new Set()
+  for (const category of LIGHT_CATEGORIES) {
+    if (UNCAPPED_CATEGORIES.has(category)) continue
+    articles
+      .filter(article => article.category === category)
+      .sort((a, b) => rankInFeed.get(a) - rankInFeed.get(b) || Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+      .slice(0, LIGHT_PER_CATEGORY)
+      .forEach(article => kept.add(article))
+  }
+  articles = articles.filter(article => !LIGHT_CATEGORIES.has(article.category) || UNCAPPED_CATEGORIES.has(article.category) || kept.has(article))
   articles = articles.slice(0, TOTAL)
 
   // Video thumbnails: check the HD one exists (reusing last run's answer).
