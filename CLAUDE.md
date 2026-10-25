@@ -82,12 +82,17 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   splits one story at 0.12; that's expected. On the Mac it takes 0.6 s for 900 articles;
   embedding them takes ~9 s (first sync only).
 - **Topics** (`SemanticTopic`, kind follow or mute): Apple Intelligence turns the phrase into 4
-  example headlines + keywords, once, when it's added. An article matches with 2 topic words
-  (the phrase counts as one, whole-word), or 1 word + example-headline cosine > 0.38 (0.40 on
-  the sentence model; an oil spill in "satellite images" scored 0.36), or, with
-  the contextual model only, cosine > 0.55 alone. A story matches when ≥ ⅓ of its articles do;
-  muting wins over following. Meaning alone was too loose on a real feed: for "space" a
-  supervolcano and the Dead Sea scored 0.51–0.53; the sentence model put cricket first for "AI".
+  example headlines + keywords, once, when it's added. What the person typed decides: all its
+  words (less broad ones like "news", plural s optional) must appear, and in the headline that
+  alone is a match. The model's keywords are close to random ("device, service, forum" for
+  "Apple news", "jordan" for Space, invented drivers for F1), so one counts only as a name the
+  feed ties to the typed words (capitalised mid-sentence in snippets, and used in articles that
+  also use the typed words): it matches in the headline with cosine > 0.22. Either one only in
+  the snippet needs cosine > 0.38 (passing mentions); cosine > 0.55 alone (contextual model)
+  also matches. Meaning is a weak signal against the model's examples: real Apple stories
+  scored −0.1 to 0.4, an unrelated Jordan story 0.37. A story matches when ≥ ⅓ of its
+  articles do; muting wins over following. Tested with a temporary launch-argument probe on
+  the live feed (Apple news, Space, electric cars, Ukraine).
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
   (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The
   feed's filter switch is World, the regions, then the topics you follow (`FeedFilter`); a

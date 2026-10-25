@@ -321,15 +321,16 @@ import SwiftData
   /// doesn't hide or raise a big story. Muting wins over following.
   func applyTopics() {
     let topics = (try? context.fetch(FetchDescriptor<SemanticTopic>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
+    let corpus = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
     let prepared = topics.map { topic in
-      (topic, Vec.vectors(topic.exampleEmbeddings, dimension: dimension).map { Vec.centred($0, mean: corpusMean) })
+      (topic, Vec.vectors(topic.exampleEmbeddings, dimension: dimension).map { Vec.centred($0, mean: corpusMean) }, Self.topicWords(topic, corpus: corpus))
     }
     for cluster in (try? context.fetch(FetchDescriptor<StoryCluster>())) ?? [] {
       let articles = cluster.articles
       func first(_ topicKind: TopicKind) -> String? {
-        prepared.first { topic, examples in
+        prepared.first { topic, examples, words in
           guard topic.kind == topicKind else { return false }
-          let hits = articles.filter { matches($0, topic, examples) }.count
+          let hits = articles.filter { matches($0, words: words, examples) }.count
           return hits > 0 && Double(hits) / Double(articles.count) >= 0.34
         }?.0.phrase
       }
@@ -340,15 +341,82 @@ import SwiftData
     }
   }
 
-  private func matches(_ article: ArticleItem, _ topic: SemanticTopic, _ examples: [[Float]]) -> Bool {
-    let text = article.text.lowercased()
-    // The phrase counts as one of the topic's words, as a whole word ("space", not "spaceport").
-    let words = Set(topic.keywords + [topic.phrase.lowercased()])
-    let wordHits = words.filter { text.range(of: "\\b\(NSRegularExpression.escapedPattern(for: $0))\\b", options: .regularExpression) != nil }.count
-    let score = centredVector(article.embedding).map { vector in examples.map { Vec.cosine(vector, $0) }.max() ?? 0 } ?? 0
-    // Two topic words; one word and close in meaning; or, with the contextual model only, very
-    // close in meaning alone.
-    return wordHits >= 2 || (wordHits == 1 && score > meaningWithWordThreshold)
+  /// Words too broad to tell a topic apart: "tech" brought datacentre, drone and market stories
+  /// into "Apple". They count only when the person typed them in the topic itself.
+  static let broadWords: Set<String> = [
+    "tech", "technology", "technologies", "news", "update", "updates", "latest", "business", "market",
+    "markets", "company", "companies", "industry", "economy", "politics", "world", "science",
+    "health", "sport", "sports", "government", "innovation", "digital", "device", "devices", "app",
+    "apps", "software", "hardware", "smartphone", "smartphones", "phone", "phones", "gadget",
+    "gadgets", "product", "products", "launch", "release", "stocks", "shares", "investors", "ai",
+  ]
+
+  /// The topic's words, in two kinds. What the person typed decides: all of its words (less
+  /// "news" and the like) must appear, so "electric cars" isn't any story that says "electric".
+  /// The on-device model's keywords are close to random ("jordan" for Space, "denver" for
+  /// electric cars), so one counts only as a name the feed itself ties to the typed words.
+  struct TopicWords {
+    var typed: [String]
+    var names: Set<String>
+  }
+
+  static func topicWords(_ topic: SemanticTopic, corpus: [ArticleItem]) -> TopicWords {
+    // "Stories like this": nothing typed; the names its coverage shared are the words.
+    if topic.phrase.hasPrefix("Like “") { return TopicWords(typed: [], names: Set(topic.keywords)) }
+    let phrase = topic.phrase.lowercased()
+    let own = phrase.split { !$0.isLetter && !$0.isNumber }.map(String.init)
+    let kept = own.filter { $0.count > 1 && !broadWords.contains($0) }
+    let typed = kept.isEmpty ? [phrase] : kept
+    let suggested = Set(topic.keywords.filter { !broadWords.contains($0) && !typed.contains($0) })
+    return TopicWords(typed: typed, names: suggested.filter { isName($0, in: corpus, with: typed) })
+  }
+
+  /// Whole word, case-insensitive, with or without a plural s ("car" finds "cars").
+  static func contains(_ text: String, _ word: String) -> Bool {
+    let stem = word.count > 3 && word.hasSuffix("s") ? String(word.dropLast()) : word
+    return text.range(
+      of: "\\b\(NSRegularExpression.escapedPattern(for: stem))s?\\b", options: [.regularExpression, .caseInsensitive]) != nil
+  }
+
+  /// A keyword that is a name tied to the topic: the feed writes it with a capital letter
+  /// mid-sentence ("iPhone", "NASA", "Tim Cook") at least two times in three (snippets only;
+  /// many outlets capitalise every headline word), and articles that use it also use the
+  /// typed words (two of them, or a quarter).
+  static func isName(_ word: String, in corpus: [ArticleItem], with typed: [String]) -> Bool {
+    guard let pattern = try? NSRegularExpression(
+      pattern: "(?<![.!?:]\\s)(?<!^)\\b\(NSRegularExpression.escapedPattern(for: word))\\b", options: [.caseInsensitive])
+    else { return false }
+    var capital = 0, total = 0, using = 0, together = 0
+    for article in corpus where contains(article.text, word) {
+      using += 1
+      if typed.allSatisfy({ contains(article.text, $0) }) { together += 1 }
+      let text = article.snippet as NSString
+      for match in pattern.matches(in: article.snippet, range: NSRange(location: 0, length: text.length)) {
+        total += 1
+        if text.substring(with: match.range).contains(where: \.isUppercase) { capital += 1 }
+      }
+    }
+    return total > 0 && capital * 3 >= total * 2 && (together >= 2 || (together >= 1 && together * 4 >= using))
+  }
+
+  private func matches(_ article: ArticleItem, words: TopicWords, _ examples: [[Float]]) -> Bool {
+    let typedAnywhere = !words.typed.isEmpty && words.typed.allSatisfy { Self.contains(article.text, $0) }
+    let typedInHeadline = typedAnywhere && words.typed.contains { Self.contains(article.title, $0) }
+    let nameInHeadline = words.names.contains { Self.contains(article.title, $0) }
+    let nameAnywhere = nameInHeadline || words.names.contains { Self.contains(article.snippet, $0) }
+    guard let vector = centredVector(article.embedding) else {
+      // No vectors on this iPhone: the words in the headline.
+      return typedInHeadline || nameInHeadline
+    }
+    let score = examples.map { Vec.cosine(vector, $0) }.max() ?? 0
+    // What the person typed, in the headline, is enough. A name from the model in the headline
+    // must also be roughly on topic; meaning varies with the model's made-up examples ("Apple"
+    // stories scored 0.13–0.29 against them), so only roughly. Either one only in the snippet
+    // is often a passing mention ("Apple, Samsung and Google wallets"), so it must be close. Or,
+    // contextual model only, very close in meaning alone.
+    return typedInHeadline
+      || (nameInHeadline && score > meaningWithWordThreshold - 0.16)
+      || ((typedAnywhere || nameAnywhere) && score > meaningWithWordThreshold)
       || meaningAloneThreshold.map { score > $0 } == true
   }
 

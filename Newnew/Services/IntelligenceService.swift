@@ -165,7 +165,10 @@ enum IntelligenceService {
         let session = LanguageModelSession(instructions: """
           You help someone describe a topic for their news feed, to follow or to hide. Write \
           realistic, varied, neutral headlines a news site might publish about the topic, and \
-          list words that only stories about this topic would use.
+          list the names and specific terms that only stories about this topic would use: \
+          the people, companies, products, places, agencies and events this topic is about. \
+          Never broad words like device, service, tool, developer, conference, technology, \
+          business, market, news or update.
           """)
         if let response = try? await session.respond(to: "Topic: \(phrase)", generating: GeneratedMuteTopic.self) {
           let keywords = response.content.keywords.map { $0.lowercased() }.filter { $0.count > 2 }
@@ -201,9 +204,9 @@ enum IntelligenceService {
 
   @Generable
   struct GeneratedMuteTopic {
-    @Guide(description: "Realistic news headlines about the topic, each a different kind of story.", .count(4))
+    @Guide(description: "Realistic news headlines about the topic, each a different kind of story, each naming a specific person, product or event.", .count(4))
     var exampleHeadlines: [String]
-    @Guide(description: "Single words or names that strongly signal this topic, lower case.", .maximumCount(6))
+    @Guide(description: "Names of people, products, places or events that rarely appear outside this topic, lower case. Never broad words like device, service or tech.", .maximumCount(6))
     var keywords: [String]
   }
 #endif
