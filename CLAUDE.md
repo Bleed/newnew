@@ -77,7 +77,12 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   vectors are raw; `Vec.centred` is applied at use.
 - **Clustering** (`StoryClusterer`): 0.9 × TF-IDF over lemmas (names from `NLTagger` count double)
   + 0.1 × centred embedding, pairs from the same outlet at half weight, average linkage,
-  threshold **0.12**, 36 h window. Tuned on a real run (897 articles): 161 multi-outlet stories,
+  threshold **0.12**, 36 h window. A pair is only compared when it shares **2 telling words**
+  (words ≤ 1.5 % of the day's articles use; a name counts as its words): one rare word had
+  paired Dezeen's Dutch Design Week with a Dutch researcher's electric planes, and two common
+  ones ("police", "dies") unrelated crime stories. On the 2026-10-25 feed (1,027 articles)
+  that cut small stray groups from ~40 of 101 to a handful; requiring 3 words lost real
+  stories (Musk/Starlink, the MotoGP washout). Tuned on a real run (897 articles): 161 multi-outlet stories,
   almost all single events. At 0.08 broad themes chained into 40-article blobs. The tiny sample
   splits one story at 0.12; that's expected. On the Mac it takes 0.6 s for 900 articles;
   embedding them takes ~9 s (first sync only).

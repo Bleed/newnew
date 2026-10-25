@@ -23,6 +23,14 @@ nonisolated enum StoryClusterer {
   static let sameOutletWeight: Float = 0.5
   /// Articles further apart in time than this are never the same story.
   static let window: TimeInterval = 36 * 3600
+  /// Telling words two articles must share to be compared at all: words few articles that day
+  /// use (see `rareShare`). With short texts one rare word was enough: "Dutch" put a Dutch
+  /// Design Week table next to a Dutch researcher's electric planes, "Poland" an abortion law
+  /// next to gold sales; and two common ones ("police", "dies") joined unrelated crime stories.
+  /// A name counts as its words.
+  static let minSharedWords = 2
+  /// A word is telling when at most this share of the articles use it (at least 8 articles).
+  static let rareShare: Float = 0.015
 
   struct Input: Sendable {
     var text: String
@@ -34,10 +42,13 @@ nonisolated enum StoryClusterer {
   }
 
   /// Indices of `inputs`, grouped; every input is in exactly one group.
-  static func groups(_ inputs: [Input], threshold: Float = threshold, sameOutletWeight: Float = sameOutletWeight) -> [[Int]] {
+  static func groups(
+    _ inputs: [Input], threshold: Float = threshold, sameOutletWeight: Float = sameOutletWeight,
+    minSharedWords: Int = minSharedWords, rareShare: Float = rareShare
+  ) -> [[Int]] {
     let n = inputs.count
     guard n > 1 else { return inputs.indices.map { [$0] } }
-    let similarity = pairwise(inputs, sameOutletWeight: sameOutletWeight)
+    let similarity = pairwise(inputs, sameOutletWeight: sameOutletWeight, minSharedWords: minSharedWords, rareShare: rareShare)
 
     // Average linkage over the pairs that have any similarity at all (most have none).
     var members = (0..<n).map { [$0] }
@@ -74,8 +85,23 @@ nonisolated enum StoryClusterer {
   struct Pair: Hashable { var a: Int, b: Int }
 
   /// Similarity of every pair that has any, within the time window.
-  static func pairwise(_ inputs: [Input], sameOutletWeight: Float = sameOutletWeight) -> [Pair: Float] {
+  static func pairwise(
+    _ inputs: [Input], sameOutletWeight: Float = sameOutletWeight, minSharedWords: Int = minSharedWords,
+    rareShare: Float = rareShare
+  ) -> [Pair: Float] {
     let documents = inputs.map { terms($0.text) }
+    // The plain words of each article ("#dutch design week" is dutch, design, week), and how
+    // many telling ones each pair shares.
+    let words = documents.map { document in
+      Set(document.flatMap { $0.hasPrefix("#") ? $0.dropFirst().split(separator: " ").map(String.init) : [$0] })
+    }
+    var wordPostings: [String: [Int]] = [:]
+    for (index, set) in words.enumerated() { for word in set { wordPostings[word, default: []].append(index) } }
+    var shared: [Pair: Int] = [:]
+    let rareLimit = max(8, Int(Float(inputs.count) * rareShare))
+    for (_, list) in wordPostings where list.count > 1 && list.count <= rareLimit {
+      for x in 0..<list.count { for y in (x + 1)..<list.count { shared[Pair(a: list[x], b: list[y]), default: 0] += 1 } }
+    }
     var frequency: [String: Int] = [:]
     for document in documents { for term in Set(document) { frequency[term, default: 0] += 1 } }
     let count = Float(documents.count)
@@ -104,7 +130,9 @@ nonisolated enum StoryClusterer {
     let lexicalWeight = 1 - embeddingWeight
     for a in 0..<inputs.count {
       for b in (a + 1)..<inputs.count {
-        guard abs(inputs[a].publishedAt.timeIntervalSince(inputs[b].publishedAt)) <= window else { continue }
+        guard abs(inputs[a].publishedAt.timeIntervalSince(inputs[b].publishedAt)) <= window,
+          shared[Pair(a: a, b: b), default: 0] >= minSharedWords
+        else { continue }
         let words = lexical[Pair(a: a, b: b)] ?? 0
         let score: Float
         if let va = inputs[a].vector, let vb = inputs[b].vector {
