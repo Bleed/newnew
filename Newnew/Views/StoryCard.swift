@@ -8,7 +8,7 @@ struct StoryCard: View {
   var body: some View {
     if let lead = cluster.lead {
       VStack(alignment: .leading, spacing: 12) {
-        HeroImage(remote: lead.imageURL, article: lead.url, fits: lead.isChart, isVideo: lead.videoID != nil)
+        picture(lead)
         HStack(alignment: .center, spacing: 8) {
           meta(lead)
           Spacer(minLength: 6)
@@ -34,6 +34,20 @@ struct StoryCard: View {
       .contentShape(RoundedRectangle(cornerRadius: Swiss.tileRadius, style: .continuous))
       // Contain, not combine: the Listen and Watch pills stay buttons for VoiceOver.
       .accessibilityElement(children: .contain)
+    }
+  }
+
+  /// Fashion is shot upright: 4:5, cropped from the top. A piece with several pictures is a
+  /// gallery to swipe through.
+  @ViewBuilder func picture(_ lead: ArticleItem) -> some View {
+    let portrait = cluster.pillar.isPortrait
+    let aspect: CGFloat = portrait ? 4 / 5 : 5 / 4
+    if lead.galleryURLs.count > 1 {
+      GalleryImage(urls: lead.galleryURLs, article: lead.url, aspect: aspect, topAligned: portrait)
+    } else {
+      HeroImage(
+        remote: lead.imageURL, article: lead.url, aspect: aspect, fits: lead.isChart, isVideo: lead.videoID != nil,
+        topAligned: portrait)
     }
   }
 
@@ -105,7 +119,9 @@ struct BriefRow: View {
         }
         Spacer(minLength: 0)
         if lead.imageURL != nil {
-          HeroImage(remote: lead.imageURL, article: lead.url, height: 64, width: 64, radius: 10, fits: lead.isChart, isVideo: lead.videoID != nil)
+          HeroImage(
+            remote: lead.imageURL, article: lead.url, height: 64, width: 64, radius: 10, fits: lead.isChart,
+            isVideo: lead.videoID != nil, topAligned: cluster.pillar.isPortrait)
         }
       }
       .padding(14)

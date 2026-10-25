@@ -48,24 +48,46 @@ enum IntelligenceService {
 
   // MARK: Perspective brief
 
-  static func brief(for sources: [Source]) async throws -> ClusterPerspectiveBrief {
+  /// One story's read, by its pillar's mode: how outlets frame the news (perspective), what
+  /// reviewers make of a release (verdict), or the look and why it matters (trend). The three
+  /// share one shape: a summary, two lists, each outlet's angle, and for trends the takeaways.
+  static func brief(for sources: [Source], mode: BriefMode = .perspective) async throws -> ClusterPerspectiveBrief {
     refreshAvailability()
     #if canImport(FoundationModels)
       if isAvailable {
         do {
-          let session = LanguageModelSession(instructions: briefInstructions)
-          let response = try await session.respond(to: briefPrompt(sources), generating: GeneratedBrief.self)
-          let brief = response.content
-          return ClusterPerspectiveBrief(
-            summary: brief.summary, sharedFacts: brief.sharedFacts, differences: brief.differences,
-            angles: brief.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
-            sourceCount: sources.count, isGenerated: true, createdAt: .now)
+          let session = LanguageModelSession(instructions: instructions(mode))
+          let prompt = briefPrompt(sources, mode: mode)
+          var brief: ClusterPerspectiveBrief
+          switch mode {
+          case .perspective:
+            let r = try await session.respond(to: prompt, generating: GeneratedBrief.self).content
+            brief = ClusterPerspectiveBrief(
+              summary: r.summary, sharedFacts: r.sharedFacts, differences: r.differences,
+              angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
+              sourceCount: sources.count, isGenerated: true, createdAt: .now)
+          case .verdict:
+            let r = try await session.respond(to: prompt, generating: GeneratedVerdict.self).content
+            brief = ClusterPerspectiveBrief(
+              summary: r.verdict, sharedFacts: r.praised, differences: r.criticised,
+              angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
+              sourceCount: sources.count, isGenerated: true, createdAt: .now)
+          case .trend:
+            let r = try await session.respond(to: prompt, generating: GeneratedTrend.self).content
+            brief = ClusterPerspectiveBrief(
+              summary: r.shift, sharedFacts: r.names, differences: r.context,
+              angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
+              sourceCount: sources.count, isGenerated: true, createdAt: .now)
+            brief.takeaways = r.takeaways
+          }
+          brief.mode = mode
+          return brief
         } catch {
           // The default guardrails refuse a lot of hard news (war, riots, attacks). Comparing
           // headlines someone else wrote is what the permissive setting is for; it only answers
           // in text. Any other failure gets the same second try.
-            if let brief = try? await plainTextBrief(sources) { return brief }
-          var preview = previewBrief(sources)
+          if let brief = try? await plainTextBrief(sources, mode: mode) { return brief }
+          var preview = previewBrief(sources, mode: mode)
           preview.note = isDeclined(error)
             ? "Apple Intelligence declined to compare this story; it avoids some subjects, such as violence. Here is each outlet's headline instead."
             : "Apple Intelligence couldn't compare this story just now. Here is each outlet's headline instead."
@@ -73,7 +95,7 @@ enum IntelligenceService {
         }
       }
     #endif
-    return previewBrief(sources)
+    return previewBrief(sources, mode: mode)
   }
 
   #if canImport(FoundationModels)
@@ -88,21 +110,42 @@ enum IntelligenceService {
     }
 
     /// The same brief with the permissive guardrails, in a line format the app parses:
-    /// SUMMARY:, AGREE:, DIFFER: and ANGLE: outlet | focus.
-    static func plainTextBrief(_ sources: [Source]) async throws -> ClusterPerspectiveBrief? {
+    /// SUMMARY:, AGREE:, DIFFER:, TAKE: and ANGLE: outlet | focus.
+    static func plainTextBrief(_ sources: [Source], mode: BriefMode = .perspective) async throws -> ClusterPerspectiveBrief? {
       let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
-      let session = LanguageModelSession(model: model, instructions: briefInstructions)
-      let prompt = briefPrompt(sources) + """
+      let session = LanguageModelSession(model: model, instructions: instructions(mode))
+      let format: String
+      switch mode {
+      case .perspective:
+        format = """
+          SUMMARY: one or two sentences on what happened, using facts most outlets agree on
+          AGREE: a fact several outlets report (2 to 4 lines)
+          DIFFER: how one outlet's coverage differs, naming it once (1 to 3 lines)
+          """
+      case .verdict:
+        format = """
+          SUMMARY: the overall verdict, in one or two sentences
+          AGREE: something reviewers praise (1 to 4 lines)
+          DIFFER: something reviewers criticise (0 to 3 lines)
+          """
+      case .trend:
+        format = """
+          SUMMARY: the key shift in style or taste, in one or two sentences
+          AGREE: a designer, brand, piece or place it features (1 to 5 lines)
+          DIFFER: why people are talking about it (1 to 2 lines)
+          TAKE: something a reader could try or take from it (1 to 3 lines)
+          """
+      }
+      let prompt = briefPrompt(sources, mode: mode) + """
 
 
         Answer in exactly this format, one item per line, nothing else:
-        SUMMARY: one or two sentences on what happened, using facts most outlets agree on
-        AGREE: a fact several outlets report (2 to 4 lines)
-        DIFFER: how one outlet's coverage differs, naming it once (1 to 3 lines)
+        \(format)
         ANGLE: outlet name | what it focuses on, under 10 words (one line per outlet)
         """
       let text = try await session.respond(to: prompt).content
-      var summary = "", agree: [String] = [], differ: [String] = [], angles: [ClusterPerspectiveBrief.Angle] = []
+      var summary = "", agree: [String] = [], differ: [String] = [], take: [String] = []
+      var angles: [ClusterPerspectiveBrief.Angle] = []
       for line in text.split(whereSeparator: \.isNewline) {
         let line = line.trimmingCharacters(in: .whitespaces)
         func value(_ key: String) -> String? {
@@ -116,6 +159,7 @@ enum IntelligenceService {
         if let v = value("SUMMARY:") { summary = v }
         else if let v = value("AGREE:"), !v.isEmpty { agree.append(tidy(v)) }
         else if let v = value("DIFFER:"), !v.isEmpty { differ.append(tidy(v)) }
+        else if let v = value("TAKE:"), !v.isEmpty { take.append(tidy(v)) }
         else if let v = value("ANGLE:") {
           let parts = v.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
           if parts.count == 2 { angles.append(.init(outlet: parts[0], focus: parts[1])) }
@@ -123,8 +167,9 @@ enum IntelligenceService {
       }
       guard !summary.isEmpty else { return nil }
       return ClusterPerspectiveBrief(
-        summary: summary, sharedFacts: Array(agree.prefix(4)), differences: Array(differ.prefix(3)),
-        angles: angles, sourceCount: sources.count, isGenerated: true, createdAt: .now)
+        summary: summary, sharedFacts: Array(agree.prefix(5)), differences: Array(differ.prefix(3)),
+        angles: angles, sourceCount: sources.count, isGenerated: true, createdAt: .now, mode: mode,
+        takeaways: take.isEmpty ? nil : Array(take.prefix(3)))
     }
   #endif
 
@@ -134,16 +179,41 @@ enum IntelligenceService {
     numbers that aren't in the text. Don't take sides.
     """
 
+  static func instructions(_ mode: BriefMode) -> String {
+    switch mode {
+    case .perspective: briefInstructions
+    case .verdict: """
+      You sum up what reviewers and outlets make of one release: a gadget, film, show, album \
+      or game. You only see each outlet's headline and snippet, never the full review. Say \
+      what they praise, what they criticise and the overall verdict. Be brief. Use only what \
+      the text says; if it says little, keep the lists short. Don't invent scores or quotes.
+      """
+    case .trend: """
+      You read one fashion, design, food or travel story the way a magazine editor would: the \
+      key shift in style or taste, the designers, brands, pieces or places it features, why \
+      people are talking about it, and what a reader could take from it. You only see each \
+      outlet's headline and snippet. Be brief and concrete. Use only what the text says; if it \
+      says little, keep the lists short.
+      """
+    }
+  }
+
   /// Headlines and snippets only, trimmed so ten outlets fit well inside the context window.
-  static func briefPrompt(_ sources: [Source]) -> String {
+  static func briefPrompt(_ sources: [Source], mode: BriefMode = .perspective) -> String {
     let lines = sources.prefix(10).map { source in
       "- \(source.outlet): \(source.title). \(String(source.snippet.prefix(280)))"
     }
-    return "Coverage of one event by \(sources.count) outlets:\n" + lines.joined(separator: "\n")
+    let heading =
+      switch mode {
+      case .perspective: "Coverage of one event by \(sources.count) outlets:"
+      case .verdict: "What \(sources.count == 1 ? "one outlet says" : "\(sources.count) outlets say") about one release:"
+      case .trend: "\(sources.count == 1 ? "One story" : "\(sources.count) stories") about one look, place or dish:"
+      }
+    return heading + "\n" + lines.joined(separator: "\n")
   }
 
   /// Without the model: the facts are the snippets, each outlet's angle its own headline.
-  static func previewBrief(_ sources: [Source]) -> ClusterPerspectiveBrief {
+  static func previewBrief(_ sources: [Source], mode: BriefMode = .perspective) -> ClusterPerspectiveBrief {
     var seen = Set<String>()
     let unique = sources.filter { seen.insert($0.outlet).inserted }
     return ClusterPerspectiveBrief(
@@ -151,7 +221,7 @@ enum IntelligenceService {
       sharedFacts: [],
       differences: [],
       angles: unique.map { .init(outlet: $0.outlet, focus: $0.title) },
-      sourceCount: sources.count, isGenerated: false, createdAt: .now)
+      sourceCount: sources.count, isGenerated: false, createdAt: .now, mode: mode)
   }
 
   // MARK: Topics
@@ -191,6 +261,32 @@ enum IntelligenceService {
     @Guide(description: "How the coverage differs: emphasis, framing, or details only some outlets mention. Each is one sentence that names the outlet once, as its subject, like \"Fjord Herald focuses on the cost.\" Under 20 words.", .count(1...3))
     var differences: [String]
     @Guide(description: "Each outlet's angle on the story, one entry per outlet.")
+    var angles: [GeneratedAngle]
+  }
+
+  @Generable
+  struct GeneratedVerdict {
+    @Guide(description: "The overall verdict in one or two sentences, from what the outlets say.")
+    var verdict: String
+    @Guide(description: "What reviewers praise, each under 15 words.", .count(1...4))
+    var praised: [String]
+    @Guide(description: "What reviewers criticise, each under 15 words. Empty if nothing is criticised.", .maximumCount(3))
+    var criticised: [String]
+    @Guide(description: "Each outlet's take, one entry per outlet.")
+    var angles: [GeneratedAngle]
+  }
+
+  @Generable
+  struct GeneratedTrend {
+    @Guide(description: "The key shift in style or taste, in one or two sentences.")
+    var shift: String
+    @Guide(description: "Designers, brands, pieces, places or dishes it features, each a short phrase.", .count(1...5))
+    var names: [String]
+    @Guide(description: "Why people are talking about it: the cultural context, each one sentence under 20 words.", .count(1...2))
+    var context: [String]
+    @Guide(description: "What a reader could try or take from it, each under 15 words.", .count(1...3))
+    var takeaways: [String]
+    @Guide(description: "Each outlet's angle, one entry per outlet.")
     var angles: [GeneratedAngle]
   }
 

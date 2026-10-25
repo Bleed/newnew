@@ -25,6 +25,8 @@ import SwiftData
   var audioSeconds: Int?
   /// The picture is a chart: shown whole, never cropped.
   var isChart = false
+  /// Up to 6 pictures from the item (lookbooks, interiors, recipes), for the lighter pillars.
+  var galleryURLs: [String] = []
   /// `Region` raw values, comma-separated (see `RegionTagger`).
   var regionsRaw: String = ""
   var cluster: StoryCluster?
@@ -41,6 +43,7 @@ import SwiftData
     audioURL = dto.audioURL
     audioSeconds = dto.audioSeconds
     isChart = dto.isChart ?? false
+    galleryURLs = dto.galleryURLs ?? []
     publishedAt = dto.publishedAt
     self.fetchedAt = fetchedAt
   }
@@ -61,7 +64,10 @@ import SwiftData
     if audioURL != dto.audioURL { audioURL = dto.audioURL }
     if audioSeconds != dto.audioSeconds { audioSeconds = dto.audioSeconds }
     if isChart != (dto.isChart ?? false) { isChart = dto.isChart ?? false }
+    if galleryURLs != (dto.galleryURLs ?? []) { galleryURLs = dto.galleryURLs ?? [] }
   }
+
+  var pillar: Pillar { Pillar(category: category) }
 
   var isMedia: Bool { videoID != nil || audioURL != nil }
   var videoURL: URL? { videoID.flatMap { URL(string: "https://www.youtube.com/watch?v=\($0)") } }
@@ -120,6 +126,13 @@ import SwiftData
     for article in articles { for region in article.regions { counts[region, default: 0] += 1 } }
     let needed = max(1, Int((Double(articles.count) / 3).rounded(.up)))
     return Set(counts.filter { $0.value >= needed }.keys).union([.world])
+  }
+
+  /// The pillar most of its articles are in; ties go to the lead's.
+  var pillar: Pillar {
+    let counts = Dictionary(articles.map { ($0.pillar, 1) }, uniquingKeysWith: +)
+    let lead = lead?.pillar ?? .briefing
+    return counts.max { a, b in a.value != b.value ? a.value < b.value : b.key == lead }?.key ?? lead
   }
 
   var newSinceRead: Int {
@@ -202,6 +215,7 @@ nonisolated struct FeedArticleDTO: Decodable {
   var audioURL: String?
   var audioSeconds: Int?
   var isChart: Bool?
+  var galleryURLs: [String]?
 }
 
 /// What Apple Intelligence says about how outlets covered one story.
@@ -222,4 +236,9 @@ nonisolated struct ClusterPerspectiveBrief: Codable, Equatable {
   var createdAt: Date
   /// Why this is only a preview, when there's a reason other than Apple Intelligence being off.
   var note: String?
+  /// What kind of read it is (see `BriefMode`); nil for briefs made before the pillars, which
+  /// were all perspective briefs.
+  var mode: BriefMode?
+  /// Trend briefs: what to take from it ("Try a long skirt with a short jacket").
+  var takeaways: [String]?
 }

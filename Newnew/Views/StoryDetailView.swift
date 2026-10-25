@@ -13,7 +13,15 @@ struct StoryDetailView: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 14) {
         if let lead = cluster.lead {
-          HeroImage(remote: lead.imageURL, article: lead.url, radius: 20, fits: lead.isChart, isVideo: lead.videoID != nil)
+          if lead.galleryURLs.count > 1 {
+            GalleryImage(
+              urls: lead.galleryURLs, article: lead.url, aspect: cluster.pillar.isPortrait ? 4 / 5 : 5 / 4,
+              topAligned: cluster.pillar.isPortrait)
+          } else {
+            HeroImage(
+              remote: lead.imageURL, article: lead.url, radius: 20, aspect: cluster.pillar.isPortrait ? 4 / 5 : 5 / 4,
+              fits: lead.isChart, isVideo: lead.videoID != nil, topAligned: cluster.pillar.isPortrait)
+          }
           HStack(spacing: 8) {
             if let category = lead.category { Text(category).font(.footnote.weight(.medium)) }
             Text("Updated \(Text(cluster.updatedAt.shortAgo).font(Swiss.smallFigure)) ago").font(.footnote)
@@ -33,7 +41,8 @@ struct StoryDetailView: View {
         let media = cluster.sortedArticles.filter(\.isMedia)
         if !media.isEmpty { MediaFold(media: media).padding(.top, 6) }
 
-        if cluster.outlets.count > 1 { perspective.padding(.top, 6) }
+        // News needs several outlets to compare; a review or a style piece can be read from one.
+        if cluster.outlets.count > 1 || cluster.pillar.briefMode != .perspective { perspective.padding(.top, 6) }
 
         Eyebrow("Coverage").padding(.top, 14)
         ForEach(cluster.sortedArticles.filter { !$0.isMedia }) { article in
@@ -76,14 +85,18 @@ struct StoryDetailView: View {
       .opacity(isWriting ? 0.5 : 1)
     } else {
       VStack(alignment: .leading, spacing: 10) {
-        Text("See how \(cluster.outlets.count) outlets tell this story: what they agree on, and where they differ.")
+        Text(invitation)
           .font(.subheadline)
           .foregroundStyle(Swiss.muted)
         HStack(spacing: 10) {
           Button {
             Task { await write() }
           } label: {
-            Label("Compare coverage", systemImage: "square.split.2x1")
+            switch mode {
+            case .perspective: Label("Compare coverage", systemImage: "square.split.2x1")
+            case .verdict: Label("Sum up the reviews", systemImage: "star.leadinghalf.filled")
+            case .trend: Label("Read the trend", systemImage: "sparkles")
+            }
           }
           .buttonStyle(.swissPrimary)
           .disabled(isWriting)
@@ -99,6 +112,22 @@ struct StoryDetailView: View {
     }
   }
 
+  var mode: BriefMode { cluster.pillar.briefMode }
+
+  var invitation: String {
+    let count = cluster.outlets.count
+    switch mode {
+    case .perspective:
+      return "See how \(count) outlets tell this story: what they agree on, and where they differ."
+    case .verdict:
+      return count == 1
+        ? "What \(cluster.outlets[0]) makes of it: what's good, what isn't, and the verdict."
+        : "What \(count) outlets make of it: what they praise, what they criticise, and the verdict."
+    case .trend:
+      return "The look and the moment: the shift, the names and pieces, why it matters and what to take from it."
+    }
+  }
+
   func write() async {
     guard !isWriting else { return }
     isWriting = true
@@ -108,10 +137,10 @@ struct StoryDetailView: View {
       IntelligenceService.Source(outlet: $0.outlet, title: $0.title, snippet: $0.snippet)
     }
     do {
-      let brief = try await IntelligenceService.brief(for: sources)
+      let brief = try await IntelligenceService.brief(for: sources, mode: mode)
       withAnimation(.snappy) { pipeline.saveBrief(brief, for: cluster) }
     } catch {
-      failure = "Couldn't compare the coverage: \(error.localizedDescription)"
+      failure = "Couldn't write it: \(error.localizedDescription)"
     }
   }
 }
@@ -126,8 +155,9 @@ struct WritingChip: View {
   }
 }
 
-/// The comparison, in one tile: the summary, what outlets agree on, where they differ and each
-/// outlet's angle.
+/// The read, in one tile. News: the summary, what outlets agree on, where they differ and each
+/// outlet's angle. Releases: the verdict, praised, criticised. Style: the shift, the names, why
+/// it matters and what to take from it.
 struct BriefPanel: View {
   let brief: ClusterPerspectiveBrief
   var newSources: Int
@@ -136,7 +166,7 @@ struct BriefPanel: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       HStack {
-        Eyebrow(brief.isGenerated ? "How it's covered" : "Preview")
+        Eyebrow(brief.isGenerated ? titles.heading : "Preview")
         Spacer()
         if newSources > 0 {
           Button(action: refresh) { SignalBadge(.attention, "\(newSources) new · Update") }
@@ -147,14 +177,17 @@ struct BriefPanel: View {
         Text(brief.summary).font(.body).fixedSize(horizontal: false, vertical: true)
       }
       if !brief.sharedFacts.isEmpty {
-        section("They agree", brief.sharedFacts, mark: Swiss.mint)
+        section(titles.first, brief.sharedFacts, mark: Swiss.mint)
       }
       if !brief.differences.isEmpty {
-        section("They differ", brief.differences, mark: Swiss.orange)
+        section(titles.second, brief.differences, mark: Swiss.orange)
+      }
+      if let takeaways = brief.takeaways, !takeaways.isEmpty {
+        section("Take from it", takeaways, mark: Swiss.ink)
       }
       if !brief.angles.isEmpty {
         VStack(alignment: .leading, spacing: 10) {
-          Eyebrow("Each outlet's angle")
+          Eyebrow(brief.angles.count == 1 ? "The outlet's angle" : "Each outlet's angle")
           ForEach(brief.angles, id: \.self) { angle in
             VStack(alignment: .leading, spacing: 2) {
               Text(angle.outlet).font(.footnote.weight(.medium)).tileSecondary()
@@ -171,6 +204,14 @@ struct BriefPanel: View {
     .padding(18)
     .frame(maxWidth: .infinity, alignment: .leading)
     .tile(.plain)
+  }
+
+  var titles: (heading: String, first: String, second: String) {
+    switch brief.mode ?? .perspective {
+    case .perspective: ("How it's covered", "They agree", "They differ")
+    case .verdict: ("The verdict", "Praised", "Criticised")
+    case .trend: ("The takeaway", "Names and pieces", "Why it matters")
+    }
   }
 
   var footnote: String {

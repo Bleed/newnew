@@ -2,8 +2,9 @@ import SwiftData
 import SwiftUI
 
 /// Today: the one-sentence top (what's new since you last looked, and the top story), the
-/// filter switch (regions, then the topics you follow), then top stories (most important first,
-/// followed or not; see `FeedSections.importance`), and stories in brief.
+/// filter bar (All, the pillars, then the topics you follow; regions inside Briefing), then top
+/// stories and stories in brief. On All the top stories mix the pillars by share, most
+/// important first within each (see `FeedSections.balanced`).
 struct FeedView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Query(sort: \StoryCluster.updatedAt, order: .reverse) var clusters: [StoryCluster]
@@ -11,16 +12,16 @@ struct FeedView: View {
   @Environment(\.scenePhase) var scenePhase
   @State private var topicsKind: TopicKind?
   @State private var path: [StoryCluster] = []
-  @AppStorage("feedFilter") var filterRaw = FeedFilter.region(.world).raw
+  @AppStorage("feedFilter") var filterRaw = FeedFilter.all.raw
   @Query(sort: \SemanticTopic.createdAt) var topics: [SemanticTopic]
   /// Held while the page is open, so the count doesn't drop to zero as you read.
   @State private var since: Date?
 
   var followedTopics: [String] { topics.filter { $0.kind == .follow }.map(\.phrase) }
-  /// The chosen filter; a topic you've since unfollowed falls back to World.
+  /// The chosen filter; a topic you've since unfollowed falls back to All.
   var filter: FeedFilter {
     let filter = FeedFilter(raw: filterRaw)
-    if case .topic(let phrase) = filter, !followedTopics.contains(phrase) { return .region(.world) }
+    if case .topic(let phrase) = filter, !followedTopics.contains(phrase) { return .all }
     return filter
   }
 
@@ -30,6 +31,11 @@ struct FeedView: View {
   /// Below the loading band while it shows, so the band never covers the date.
   static let headerBelowBand: CGFloat = 13
   @State private var boardShowing = false
+  /// Where the top's bottom and the filter bar are on screen: once the top has scrolled above
+  /// the bar, the bar is pinned and its page colour reaches up over the status bar.
+  @State private var topBottom: CGFloat = 0
+  @State private var barTop: CGFloat = 0
+  var barPinned: Bool { topBottom < barTop - 1 }
 
   var body: some View {
     // Worked out once per render: these were computed properties, re-run on every read, and
@@ -40,7 +46,7 @@ struct FeedView: View {
     NavigationStack(path: $path) {
       ScrollViewReader { _ in
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: 12) {
+        LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
           NewsTop(
             since: since ?? .distantPast, visible: visible, top: wide.first, hiddenCount: hiddenCount
           ) {
@@ -49,11 +55,11 @@ struct FeedView: View {
             topicsKind = .mute
           }
           .padding(.top, boardShowing ? Self.headerBelowBand : Self.headerTop)
-          .padding(.bottom, 28)
+          .padding(.bottom, 18)
+          .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).maxY } action: { topBottom = $0 }
 
-          FilterBar(selection: Binding(get: { filter }, set: { filterRaw = $0.raw }), topics: followedTopics)
-            .padding(.bottom, 10)
-
+          // Stays at the top while the stories scroll under it.
+          Section {
           if clusters.isEmpty {
             emptyState
           } else if visible.isEmpty {
@@ -83,6 +89,14 @@ struct FeedView: View {
               .foregroundStyle(Swiss.muted)
               .padding(.top, 12)
               .frame(maxWidth: .infinity)
+          }
+          } header: {
+            FilterBar(selection: Binding(get: { filter }, set: { filterRaw = $0.raw }), topics: followedTopics)
+              .padding(.vertical, 10)
+              .background(alignment: .bottom) {
+                Swiss.canvas.frame(height: barPinned ? 400 : nil).padding(.horizontal, -Swiss.pageInset)
+              }
+              .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { barTop = $0 }
           }
         }
         .padding(.horizontal, Swiss.pageInset)
@@ -182,12 +196,17 @@ struct NewsTop: View {
   /// How many characters of the top headline fit on two lines beside (TOP), the clock,
   /// "nn MIN" and the arrow. SF Mono is 0.6 em wide; the rest takes about 7 em, and a couple of
   /// characters go to the gap where the first line breaks.
-  var headlineChars: Int { max(12, Int((width * 2 - size * 7) / (size * 0.6)) - 3) }
+  /// The 7 em fits a 3-character age ("1 H"); a longer one ("33 MIN") takes its extra
+  /// characters, and one more for its wider pill.
+  func headlineChars(age: String) -> Int {
+    max(12, Int((width * 2 - size * 7) / (size * 0.6)) - 3 - max(age.count - 3, 0) - (age.count > 3 ? 1 : 0))
+  }
 
   /// The headline as separate words, so the line can wrap onto a second line.
-  func headlineWords(_ title: String) -> [RebusToken] {
+  func headlineWords(_ title: String, age: String) -> [RebusToken] {
     let up = title.uppercased()
-    let cut = up.count > headlineChars ? String(up.prefix(headlineChars - 1)).trimmingCharacters(in: .whitespaces) + "…" : up
+    let budget = headlineChars(age: age)
+    let cut = up.count > budget ? String(up.prefix(budget - 1)).trimmingCharacters(in: .whitespaces) + "…" : up
     return cut.split(separator: " ").map { .word(String($0)) }
   }
 
@@ -220,7 +239,8 @@ struct NewsTop: View {
     if let top, let lead = top.lead {
       messages.append(KeyMessage(
         id: "top-\(top.id)",
-        tokens: [.pill("TOP")] + headlineWords(lead.title) + [.clock, .minutes(Self.age(top.updatedAt)), .arrow],
+        tokens: [.pill("TOP")] + headlineWords(lead.title, age: Self.age(top.updatedAt))
+          + [.clock, .minutes(Self.age(top.updatedAt)), .arrow],
         action: { open(top) }))
     }
     if hiddenCount > 0 {
@@ -258,12 +278,16 @@ struct FeedSections {
   var hiddenCount = 0
 
   init(clusters: [StoryCluster], filter: FeedFilter) {
+    var pillars: [UUID: Pillar] = [:]
     for cluster in clusters {
       if cluster.isMuted { hiddenCount += 1; continue }
       guard !cluster.articles.isEmpty else { continue }
+      let pillar = cluster.pillar
+      pillars[cluster.id] = pillar
       switch filter {
-      case .region(.world): visible.append(cluster)
-      case .region(let region): if cluster.regions.contains(region) { visible.append(cluster) }
+      case .all: visible.append(cluster)
+      case .pillar(let chosen): if pillar == chosen { visible.append(cluster) }
+      case .region(let region): if pillar == .briefing, cluster.regions.contains(region) { visible.append(cluster) }
       case .topic(let phrase): if cluster.followedBy == phrase { visible.append(cluster) }
       }
     }
@@ -272,11 +296,47 @@ struct FeedSections {
     let outlets = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Set($0.articles.map(\.outlet)).count) })
     let importance = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Self.importance($0, outlets: outlets[$0.id] ?? 0, now: now)) })
     let byImportance = { (a: StoryCluster, b: StoryCluster) in importance[a.id, default: 0] > importance[b.id, default: 0] }
-    // One order for everything, by importance; a story on a topic you follow keeps its topic as
-    // its label but gets no head start.
-    let rest = visible
-    wide = rest.filter { outlets[$0.id, default: 0] > 1 }.sorted(by: byImportance)
-    brief = rest.filter { outlets[$0.id, default: 0] <= 1 }.sorted { $0.updatedAt > $1.updatedAt }
+    let newestFirst = { (a: StoryCluster, b: StoryCluster) in a.updatedAt > b.updatedAt }
+    // A story on a topic you follow keeps its topic as its label but gets no head start.
+    switch filter {
+    case .all:
+      // News goes on top when several outlets cover it; a lighter pillar's single-outlet pieces
+      // (a review, a lookbook) are its stories too.
+      let top = visible.filter { pillars[$0.id] != .briefing || outlets[$0.id, default: 0] > 1 }
+      let queues = Dictionary(grouping: top) { pillars[$0.id] ?? .briefing }.mapValues { $0.sorted(by: byImportance) }
+      // Breaking news leads, whatever the mix.
+      let breaking = (queues[.briefing] ?? []).filter(Alerts.isBreaking)
+      let breakingIDs = Set(breaking.map(\.id))
+      wide = breaking + Self.balanced(queues.mapValues { $0.filter { !breakingIDs.contains($0.id) } })
+      let shown = Set(wide.map(\.id))
+      brief = visible.filter { !shown.contains($0.id) }.sorted(by: newestFirst)
+    case .pillar(let pillar) where pillar != .briefing:
+      // Lighter pillars are mostly one outlet per piece: all of them as cards.
+      wide = visible.sorted(by: byImportance)
+    default:
+      wide = visible.filter { outlets[$0.id, default: 0] > 1 }.sorted(by: byImportance)
+      brief = visible.filter { outlets[$0.id, default: 0] <= 1 }.sorted(by: newestFirst)
+    }
+  }
+
+  /// The pillars interleaved by share (smooth weighted round-robin), each queue most important
+  /// first: Briefing, Tech & Gear, Fashion & Style, Entertainment, Gaming, Lifestyle & Food, and
+  /// round again, Briefing and Tech a little more often. A pillar that runs out drops out and
+  /// the others share its place.
+  static func balanced(_ queues: [Pillar: [StoryCluster]]) -> [StoryCluster] {
+    var queues = queues.filter { !$0.value.isEmpty }
+    var credit: [Pillar: Double] = [:]
+    var out: [StoryCluster] = []
+    while !queues.isEmpty {
+      let active = Pillar.allCases.filter { queues[$0] != nil }
+      for pillar in active { credit[pillar, default: 0] += pillar.share }
+      // Ties go to the earlier pillar.
+      guard let next = active.max(by: { credit[$0, default: 0] < credit[$1, default: 0] }) else { break }
+      credit[next, default: 0] -= active.reduce(0) { $0 + $1.share }
+      out.append(queues[next]!.removeFirst())
+      if queues[next]!.isEmpty { queues[next] = nil; credit[next] = nil }
+    }
+    return out
   }
 
   /// How high a story goes: how widely it's covered, how fast coverage is growing right now,
@@ -296,21 +356,30 @@ struct FeedSections {
   }
 }
 
-/// What the feed shows: everything, a region, or one topic you follow.
+/// What the feed shows: everything, a pillar, a region (of the news), or one topic you follow.
 enum FeedFilter: Hashable {
+  case all
+  case pillar(Pillar)
   case region(Region)
   case topic(String)
 
   init(raw: String) {
     if raw.hasPrefix("topic:") {
       self = .topic(String(raw.dropFirst("topic:".count)))
+    } else if raw.hasPrefix("pillar:"), let pillar = Pillar(rawValue: String(raw.dropFirst("pillar:".count))) {
+      self = .pillar(pillar)
+    } else if let region = Region(rawValue: raw), region != .world {
+      self = .region(region)
     } else {
-      self = .region(Region(rawValue: raw) ?? .world)
+      // "all", and "world" from before the pillars.
+      self = .all
     }
   }
 
   var raw: String {
     switch self {
+    case .all: "all"
+    case .pillar(let pillar): "pillar:\(pillar.rawValue)"
     case .region(let region): region.rawValue
     case .topic(let phrase): "topic:\(phrase)"
     }
@@ -318,44 +387,69 @@ enum FeedFilter: Hashable {
 
   var title: String {
     switch self {
+    case .all: "All"
+    case .pillar(let pillar): pillar.title
     case .region(let region): region.title
     case .topic(let phrase): phrase
     }
   }
+
+  /// Briefing and its regions show the region row.
+  var isNews: Bool {
+    switch self {
+    case .pillar(.briefing), .region: true
+    default: false
+    }
+  }
 }
 
-/// World · Europe · US · Middle East · Asia, then the topics you follow. The chosen one is an
+/// All and the pillars, then the topics you follow; with Briefing chosen, a second row narrows
+/// the news to a region (tap the chosen region again for all of Briefing). The chosen one is an
 /// ink outline (selection never reads as the black primary action); the rest are quiet pills.
 struct FilterBar: View {
   @Binding var selection: FeedFilter
   let topics: [String]
 
   var body: some View {
-    ScrollView(.horizontal) {
-      HStack(spacing: 6) {
-        ForEach(Region.allCases) { region in pill(.region(region)) }
-        if !topics.isEmpty {
-          // A short rule between the regions and your topics.
-          Capsule().fill(Swiss.ink.opacity(0.15)).frame(width: 1.5, height: 22).padding(.horizontal, 4)
-          ForEach(topics, id: \.self) { topic in pill(.topic(topic)) }
+    VStack(alignment: .leading, spacing: 8) {
+      ScrollView(.horizontal) {
+        HStack(spacing: 6) {
+          pill(.all)
+          ForEach(Pillar.allCases) { pillar in pill(.pillar(pillar)) }
+          if !topics.isEmpty {
+            // A short rule between the pillars and your topics.
+            Capsule().fill(Swiss.ink.opacity(0.15)).frame(width: 1.5, height: 22).padding(.horizontal, 4)
+            ForEach(topics, id: \.self) { topic in pill(.topic(topic)) }
+          }
         }
+      }
+      if selection.isNews {
+        ScrollView(.horizontal) {
+          HStack(spacing: 6) {
+            ForEach(Region.allCases.filter { $0 != .world }) { region in
+              pill(.region(region), small: true, otherwise: .pillar(.briefing))
+            }
+          }
+        }
+        .transition(.opacity.combined(with: .move(edge: .top)))
       }
     }
     .scrollIndicators(.hidden)
     .scrollClipDisabled()
   }
 
-  func pill(_ filter: FeedFilter) -> some View {
+  /// `otherwise`: what tapping the chosen pill goes back to (regions back to Briefing).
+  func pill(_ filter: FeedFilter, small: Bool = false, otherwise: FeedFilter? = nil) -> some View {
     let isOn = filter == selection
     return Button {
-      withAnimation(.snappy(duration: 0.2)) { selection = filter }
+      withAnimation(.snappy(duration: 0.2)) { selection = isOn ? otherwise ?? filter : filter }
     } label: {
       Text(filter.title)
-        .font(.callout.weight(.medium))
+        .font(small ? .subheadline.weight(.medium) : .callout.weight(.medium))
         .lineLimit(1)
         .frame(maxWidth: 200)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.horizontal, small ? 12 : 14)
+        .padding(.vertical, small ? 6 : 8)
         .foregroundStyle(Swiss.ink)
         .background(isOn ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
         .overlay { if isOn { Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5) } }

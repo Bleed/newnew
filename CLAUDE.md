@@ -93,11 +93,28 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   scored −0.1 to 0.4, an unrelated Jordan story 0.37. A story matches when ≥ ⅓ of its
   articles do; muting wins over following. Tested with a temporary launch-argument probe on
   the live feed (Apple news, Space, electric cars, Ukraine).
+- **Pillars** (`Pillar`, from the feed's category): Briefing (World, Business, Science,
+  Politics, US, Local, Sport, Data, news podcasts) 25 %, Tech & Gear 20 %, Fashion & Style,
+  Entertainment and Gaming 15 % each, Lifestyle & Food 10 %. A story's pillar is its articles'
+  majority. On All, top stories are the pillars interleaved by share (smooth weighted
+  round-robin, `FeedSections.balanced`), most important first within each; breaking news
+  (`Alerts.isBreaking`) leads regardless. News reaches the top only with several outlets; a
+  lighter pillar's single-outlet piece counts. Asked for "balanced by importance" over a strict
+  round-robin (2026-10-25), since the user earlier wanted importance order. Fashion pictures
+  are 4:5, cropped from the top; an item with `galleryURLs` swipes as a gallery. The story
+  page's Apple Intelligence read follows `Pillar.briefMode`: perspective (news, needs several
+  outlets), verdict (tech, entertainment, gaming: praised / criticised) or trend (fashion,
+  lifestyle: the shift, names, why it matters, takeaways); the last two also run on one
+  outlet, where "why it matters" can be the model's guess. The scraper caps the lighter
+  pillars (8 per feed; 15 per category, outlets taking turns; Technology uncapped by category)
+  and leaves news whole, because the clusterer needs every outlet. The brief's suggested
+  0.72 cosine clustering threshold was not adopted: the tuned 0.12 linkage above is stricter.
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
   (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The
-  feed's filter switch is World, the regions, then the topics you follow (`FeedFilter`); a
-  topic filter shows the stories that topic raised. There is no Local region (removed on
-  request); local-news outlets still carry `country` from the scraper.
+  filter bar is All, the pillars, then the topics you follow (`FeedFilter`, pinned while
+  scrolling); choosing Briefing shows a row of regions, which narrow the news. A topic filter
+  shows the stories that topic raised. There is no Local region (removed on request);
+  local-news outlets still carry `country` from the scraper.
 - **"Already read"** comes from cluster membership (`readAt`, `newSinceRead`), not a 0.80 cutoff.
 - In the Simulator `NLContextualEmbedding` fails to compile its model (sandbox), so the engine
   falls back to `NLEmbedding.sentenceEmbedding`. Real devices use the contextual model.

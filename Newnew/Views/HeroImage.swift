@@ -16,6 +16,9 @@ struct HeroImage: View {
   var fits = false
   /// A video thumbnail: a play glyph on top.
   var isVideo = false
+  /// Crop from the top, not the middle: portrait fashion photos keep heads (and, at 4:5,
+  /// usually shoes).
+  var topAligned = false
   var radius: CGFloat = 14
   @Environment(\.displayScale) var displayScale
   @State private var image: CGImage?
@@ -23,8 +26,10 @@ struct HeroImage: View {
 
   init(
     remote: String?, article: String, height: CGFloat? = nil, width: CGFloat? = nil, radius: CGFloat = 14,
-    fits: Bool = false, isVideo: Bool = false
+    aspect: CGFloat = 5 / 4, fits: Bool = false, isVideo: Bool = false, topAligned: Bool = false
   ) {
+    self.aspect = aspect
+    self.topAligned = topAligned
     self.fits = fits
     self.isVideo = isVideo
     self.remote = remote.flatMap(URL.init(string:))
@@ -44,7 +49,7 @@ struct HeroImage: View {
           Image(decorative: image, scale: displayScale)
             .resizable()
             .aspectRatio(contentMode: fits ? .fit : .fill)
-            .frame(width: proxy.size.width, height: proxy.size.height)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: topAligned ? .top : .center)
             .clipped()
             .transition(.opacity)
           if isVideo {
@@ -67,8 +72,9 @@ struct HeroImage: View {
     guard width > 0, image == nil else { return }
     let frameHeight = height ?? width / aspect
     // Filling the frame with a 16:9 photo needs its width to cover the frame's height too; a
-    // chart shown whole may be tall, so its longest side covers the frame's.
-    let longest = fits ? max(width, frameHeight) * 1.6 : max(width, frameHeight * 16 / 9)
+    // chart shown whole may be tall, so its longest side covers the frame's. A portrait frame
+    // (fashion) gets a portrait photo: its height is the longest side.
+    let longest = fits ? max(width, frameHeight) * 1.6 : max(width, frameHeight * 16 / 9, topAligned ? frameHeight * 1.5 : 0)
     let maxPixel = Int((longest * displayScale).rounded(.up))
     if let hit = ImagePipeline.shared.cached(ImagePipeline.key(remote: remote, article: article, maxPixel: maxPixel)) {
       image = hit
@@ -79,6 +85,28 @@ struct HeroImage: View {
       image = loaded
       failed = loaded == nil
     }
+  }
+}
+
+/// Several pictures from one piece (a lookbook, a house, a recipe), swiped through in place.
+struct GalleryImage: View {
+  let urls: [String]
+  let article: String
+  var aspect: CGFloat
+  var topAligned: Bool
+
+  var body: some View {
+    TabView {
+      ForEach(urls, id: \.self) { url in
+        HeroImage(remote: url, article: article, radius: 0, aspect: aspect, topAligned: topAligned)
+      }
+    }
+    .tabViewStyle(.page(indexDisplayMode: .always))
+    .frame(maxWidth: .infinity)
+    .aspectRatio(aspect, contentMode: .fit)
+    .background(Swiss.tileQuiet)
+    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    .accessibilityLabel("\(urls.count) pictures")
   }
 }
 
