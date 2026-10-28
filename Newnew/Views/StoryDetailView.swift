@@ -485,6 +485,14 @@ struct CoverageSpectrumCard: View {
   private var spectrum: CoverageSpectrum {
     CoverageSpectrum(cluster: cluster)
   }
+  /// The entrance: the bar's segments grow left to right, then each lens label and the
+  /// insight line come in. Plays once the card is on screen (after a pushed page has landed).
+  @State private var shown = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  private func reveal(_ index: Int) -> Animation {
+    .spring(response: 0.5, dampingFraction: 0.9).delay(0.08 + Double(index) * 0.12)
+  }
 
   var body: some View {
     if spectrum.totalOutlets > 1 {
@@ -529,13 +537,16 @@ struct CoverageSpectrumCard: View {
       spectrumStrip(height: 12)
 
       HStack(spacing: 12) {
-        ForEach(spectrum.segments) { seg in
+        ForEach(Array(spectrum.segments.enumerated()), id: \.element.id) { index, seg in
           HStack(spacing: 5) {
             lensSwatch(seg.lens, size: 9)
             Text("\(seg.lens.shortLabel) · \(seg.outlets.count)")
               .font(.caption2.monospaced())
               .foregroundStyle(Swiss.ink)
           }
+          .opacity(shown ? 1 : 0)
+          .offset(y: shown ? 0 : 4)
+          .animation(reveal(index + 1), value: shown)
         }
         Spacer(minLength: 0)
       }
@@ -545,11 +556,21 @@ struct CoverageSpectrumCard: View {
           .font(.footnote)
           .foregroundStyle(Swiss.muted)
           .fixedSize(horizontal: false, vertical: true)
+          .opacity(shown ? 1 : 0)
+          .animation(reveal(spectrum.segments.count + 1), value: shown)
       }
     }
     .padding(18)
     .frame(maxWidth: .infinity, alignment: .leading)
     .tile(.plain)
+    .onGeometryChange(for: Bool.self) { [screen = DotText.screenSize] proxy in
+      let frame = proxy.frame(in: .global)
+      return frame.minX >= -1 && frame.maxX <= screen.width + 1 && frame.maxY > 0 && frame.minY < screen.height
+    } action: { inView in
+      if inView && !shown {
+        if reduceMotion { shown = true } else { withAnimation { shown = true } }
+      }
+    }
   }
 
   private func spectrumStrip(height: CGFloat) -> some View {
@@ -559,10 +580,16 @@ struct CoverageSpectrumCard: View {
       let usableWidth = max(geo.size.width - totalGaps, 0)
 
       HStack(spacing: spacing) {
-        ForEach(spectrum.segments) { seg in
+        ForEach(Array(spectrum.segments.enumerated()), id: \.element.id) { index, seg in
+          let full = max(usableWidth * seg.share, 14)
+          // Each segment grows from its left end, one after the other.
           SwissPatternSegment(lens: seg.lens)
-            .frame(width: max(usableWidth * seg.share, 14), height: height)
+            .frame(width: full, height: height)
             .clipShape(Capsule())
+            .mask(alignment: .leading) {
+              Capsule().frame(width: shown || compact ? full : 0)
+                .animation(reveal(index), value: shown)
+            }
         }
       }
     }

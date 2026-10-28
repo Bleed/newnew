@@ -175,9 +175,12 @@ struct DotText: View {
       guard motion != .none, !reduceMotion else { return }
       begin(from: DotFont.normalized(old))
     }
-    .onGeometryChange(for: Bool.self) { [screenHeight = Self.screenHeight] proxy in
+    .onGeometryChange(for: Bool.self) { [screen = Self.screenSize] proxy in
+      // Wholly across, not just scrolled into view: a pushed page slides in from the right,
+      // and the entrance should play once it has landed.
       let frame = proxy.frame(in: .global)
-      return frame.height > 0 && frame.maxY > 0 && frame.minY < screenHeight
+      return frame.height > 0 && frame.maxY > 0 && frame.minY < screen.height
+        && frame.minX >= -1 && frame.maxX <= screen.width + 1
     } action: { visible in
       onScreen = visible
       startPixels()
@@ -203,10 +206,10 @@ struct DotText: View {
     .accessibilityLabel(text)
   }
 
-  /// The longest side of the screen, for telling whether the text has scrolled into view.
-  static let screenHeight: CGFloat = {
+  /// The screen's size, for telling whether the text is in view.
+  static let screenSize: CGSize = {
     let bounds = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen.bounds }.first
-    return bounds.map { max($0.width, $0.height) } ?? 1000
+    return bounds?.size ?? CGSize(width: 400, height: 1000)
   }()
 
   func startPixels() {
