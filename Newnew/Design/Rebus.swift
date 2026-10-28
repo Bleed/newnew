@@ -155,6 +155,10 @@ struct OneSentenceTop: View {
   @ScaledMetric var size: CGFloat
   @ScaledMetric var figureSize: CGFloat
   @State private var messageIndex = 0
+  /// When the last line last moved on. The list of messages changes often (a sync brings a new
+  /// top story, reading changes the read count); counting from here keeps each one at 7 seconds
+  /// instead of starting the wait over with every change.
+  @State private var lastSwitch = Date.now
   @State private var figureShown = false
   /// Locks the header height to the tallest layout seen so far so the feed below never jumps up and down.
   @State private var maxTopHeight: CGFloat = 0
@@ -229,13 +233,21 @@ struct OneSentenceTop: View {
     .frame(minHeight: maxTopHeight, alignment: .topLeading)
     .clipped()
     .animation(.easeInOut(duration: 0.35), value: messageIndex)
-    // Several messages take turns in the last line.
+    // Several messages take turns in the last line, 7 seconds each.
     .task(id: messages.map(\.id)) {
       guard messages.count > 1 else { return }
       while !Task.isCancelled {
-        try? await Task.sleep(for: .seconds(7))
+        let wait = max(0.5, 7 - Date.now.timeIntervalSince(lastSwitch))
+        try? await Task.sleep(for: .seconds(wait))
+        guard !Task.isCancelled else { return }
         messageIndex += 1
+        lastSwitch = .now
       }
+    }
+    // When a message comes or goes, keep showing the one on screen.
+    .onChange(of: messages.map(\.id)) { old, new in
+      guard !old.isEmpty, let index = new.firstIndex(of: old[messageIndex % old.count]) else { return }
+      messageIndex = index
     }
   }
 
