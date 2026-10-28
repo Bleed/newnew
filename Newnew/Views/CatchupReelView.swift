@@ -200,10 +200,10 @@ struct CatchupReelView: View {
         // Nothing-style Monospace + Counter pill
         HStack(spacing: 8) {
           Text("DAILY CATCHUP")
-            .font(.system(size: 12, weight: .regular, design: .monospaced))
+            .font(.caption.monospaced())
             .foregroundStyle(.white)
           Text("\(min(currentIndex + 1, max(stories.count, 1)))/\(stories.count)")
-            .font(.system(size: 12, weight: .regular, design: .monospaced))
+            .font(.caption.monospaced())
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background(.white, in: Capsule())
@@ -215,16 +215,8 @@ struct CatchupReelView: View {
 
         Spacer()
 
-        Button {
-          dismiss()
-        } label: {
-          Image(systemName: "xmark")
-            .font(.system(size: 15, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 36, height: 36)
-            .background(.ultraThinMaterial, in: Circle())
-        }
-        .buttonStyle(.plain)
+        Button("Close", systemImage: "xmark") { dismiss() }
+          .buttonStyle(RoundIconButtonStyle(foreground: .white, background: AnyShapeStyle(.ultraThinMaterial)))
       }
     }
     .padding(.horizontal, 16)
@@ -311,22 +303,22 @@ private struct CatchupCardPage: View {
           // Pillar + Freshness + Source Count
           HStack(spacing: 8) {
             Text(cluster.pillar.title.uppercased())
-              .font(.system(size: 12, weight: .regular, design: .monospaced))
+              .font(.caption.monospaced())
               .padding(.horizontal, 10)
-              .padding(.vertical, 5)
+              .pillHeight()
               .background(.white.opacity(0.18), in: Capsule())
               .foregroundStyle(.white)
 
             Text(NewsTop.age(cluster.updatedAt))
-              .font(.system(size: 12, weight: .regular, design: .monospaced))
+              .font(.caption.monospaced())
               .foregroundStyle(.white.opacity(0.75))
 
             Spacer()
 
             Text("\(outlets.count) \(outlets.count == 1 ? "SOURCE" : "SOURCES")")
-              .font(.system(size: 11, weight: .regular, design: .monospaced))
+              .font(.caption.monospaced())
               .padding(.horizontal, 10)
-              .padding(.vertical, 5)
+              .pillHeight()
               .background(.white, in: Capsule())
               .foregroundStyle(.black)
           }
@@ -335,7 +327,7 @@ private struct CatchupCardPage: View {
           // Big Editorial Headline
           if let lead {
             Text(lead.title)
-              .font(Swiss.headline(30, relativeTo: .title))
+              .font(Swiss.headline(34, relativeTo: .title))
               .foregroundStyle(.white)
               .lineLimit(4)
               .fixedSize(horizontal: false, vertical: true)
@@ -353,12 +345,11 @@ private struct CatchupCardPage: View {
                 } label: {
                   HStack(spacing: 4) {
                     Text(article.outlet)
-                      .font(.caption.weight(.medium))
-                    Image(systemName: "arrow.up.right")
-                      .font(.system(size: 9, weight: .bold))
+                    Image(systemName: "arrow.up.right").imageScale(.small)
                   }
-                  .padding(.horizontal, 11)
-                  .padding(.vertical, 6)
+                  .font(.caption.weight(.medium))
+                  .padding(.horizontal, 10)
+                  .pillHeight()
                   .background(.white.opacity(0.14), in: Capsule())
                   .foregroundStyle(.white)
                 }
@@ -369,21 +360,15 @@ private struct CatchupCardPage: View {
 
           // Bottom Action Row: Dive into full coverage
           HStack(spacing: 12) {
+            // The app's primary pill; the reel is dark, so it shows white with black text.
             Button(action: onOpenFullStory) {
               HStack(spacing: 8) {
                 Image(systemName: "sparkles")
-                  .font(.system(size: 13, weight: .semibold))
                 Text("Full coverage & brief")
-                  .font(.callout.weight(.semibold))
                 Image(systemName: "arrow.right")
-                  .font(.system(size: 12, weight: .bold))
               }
-              .foregroundStyle(.black)
-              .padding(.horizontal, 18)
-              .padding(.vertical, 12)
-              .background(.white, in: Capsule())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.swissPrimary)
 
             Spacer()
           }

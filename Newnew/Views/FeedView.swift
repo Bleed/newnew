@@ -537,7 +537,7 @@ struct EditionCompleteReceipt: View {
 
         VStack(alignment: .leading, spacing: 3) {
           Text("All caught up on \(filterTitle).")
-            .font(Swiss.headline(22, relativeTo: .title3))
+            .font(Swiss.headline(24, relativeTo: .title3))
             .foregroundStyle(Swiss.ink)
           Text("Every unread story in this edition has been read.")
             .font(.footnote)
@@ -563,17 +563,10 @@ struct EditionCompleteReceipt: View {
       Button(action: onReviewRead) {
         HStack(spacing: 6) {
           Text("Review \(storiesRead) read \(storiesRead == 1 ? "story" : "stories")")
-            .font(.footnote.weight(.semibold))
           Image(systemName: "arrow.right")
-            .font(.system(size: 11, weight: .bold))
         }
-        .foregroundStyle(Swiss.ink)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .overlay(Capsule().strokeBorder(Swiss.ink, lineWidth: 1.4))
-        .contentShape(Capsule())
       }
-      .buttonStyle(.plain)
+      .buttonStyle(.swissSecondary)
     }
     .padding(18)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1071,42 +1064,19 @@ struct FilterBar: View {
   private var readTogglePill: some View {
     let showingRead = !hideRead
     let label = readCount > 0 ? "Read · \(readCount)" : "Read"
-    return Button {
+    return Button(label) {
       withAnimation(.snappy(duration: 0.2)) { hideRead.toggle() }
-    } label: {
-      Text(label)
-        .font(.callout.weight(.medium))
-        .lineLimit(1)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .foregroundStyle(showingRead ? Swiss.ink : Swiss.muted)
-        .background(showingRead ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
-        .overlay { if showingRead { Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5) } }
-        .contentShape(Capsule())
     }
-    .buttonStyle(.plain)
+    .buttonStyle(SelectablePillStyle(isOn: showingRead))
     .accessibilityLabel(showingRead ? "Showing read stories" : "Hiding \(readCount) read stories")
-    .accessibilityAddTraits(showingRead ? .isSelected : [])
   }
 
   /// `otherwise`: what tapping the chosen pill goes back to (regions back to Briefing).
   func pill(_ filter: FeedFilter, small: Bool = false, otherwise: FeedFilter? = nil) -> some View {
     let isOn = filter == selection
-    return Button {
+    return Button(filter.title) {
       withAnimation(.snappy(duration: 0.2)) { selection = isOn ? otherwise ?? filter : filter }
-    } label: {
-      Text(filter.title)
-        .font(small ? .subheadline.weight(.medium) : .callout.weight(.medium))
-        .lineLimit(1)
-        .frame(maxWidth: 200)
-        .padding(.horizontal, small ? 12 : 14)
-        .padding(.vertical, small ? 6 : 8)
-        .foregroundStyle(Swiss.ink)
-        .background(isOn ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
-        .overlay { if isOn { Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5) } }
-        .contentShape(Capsule())
     }
-    .buttonStyle(.plain)
-    .accessibilityAddTraits(isOn ? .isSelected : [])
+    .buttonStyle(SelectablePillStyle(isOn: isOn, small: small))
   }
 }

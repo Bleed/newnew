@@ -217,3 +217,12 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - The 5×7 dot face only inside pills, chips and panels, never loose and never for warnings.
 - Signals: mint pill = attention ("Developing", "2 new"), red dot and words = act now. Rare.
 - Quiet 7 % grey pills for outlets; one black pill per screen for the main action.
+- Type scale (design pass 2026-10-28): headlines 34 (story page, reel), 24 (cards, receipt),
+  20 (brief and coverage rows). Text weights regular, medium for emphasis; no semibold or bold.
+  Every size is a text style (scales with the text-size setting), mono at `.caption` or
+  `.caption2` at the smallest, never a fixed point size.
+- Controls: `.swissPrimary` / `.swissSecondary` for actions (the reel is dark, so its primary
+  shows white). `SelectablePillStyle` for choices: an ink outline means "selected", never an
+  action. `.roundIcon` for close and remove (32 pt circle, 44 pt touch area). Small pills use
+  `pillHeight()`. Tile padding 14 for list tiles, 18 for content panels (AI read, receipt,
+  coverage spectrum). List bullets are `BulletDot`, centred on the first line's x-height.

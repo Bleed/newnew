@@ -102,10 +102,7 @@ struct StoryDetailView: View {
                     openArticleURL(item.url)
                   } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
-                      Circle()
-                        .fill(Swiss.mint)
-                        .frame(width: 7, height: 7)
-                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                      BulletDot(color: Swiss.mint)
                       Text("\(Text("\(item.outlet): ").fontWeight(.medium))\(item.title)")
                         .font(.subheadline)
                         .foregroundStyle(Swiss.ink)
@@ -165,7 +162,7 @@ struct StoryDetailView: View {
           VStack(spacing: 0) {
             HStack(spacing: 10) {
               Text(active.url.host()?.replacingOccurrences(of: "www.", with: "") ?? "Article")
-                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .font(.caption.monospaced())
                 .foregroundStyle(Swiss.ink)
                 .lineLimit(1)
               Spacer()
@@ -178,19 +175,10 @@ struct StoryDetailView: View {
               }
               .buttonStyle(.plain)
 
-              Button {
-                withAnimation(.snappy(duration: 0.22)) {
-                  activeWebURL = nil
-                }
-              } label: {
-                Image(systemName: "xmark")
-                  .font(.footnote.weight(.bold))
-                  .foregroundStyle(Swiss.ink)
-                  .frame(width: 28, height: 28)
-                  .background(Swiss.ink.opacity(0.08), in: Circle())
+              Button("Close article pane", systemImage: "xmark") {
+                withAnimation(.snappy(duration: 0.22)) { activeWebURL = nil }
               }
-              .buttonStyle(.plain)
-              .accessibilityLabel("Close article pane")
+              .buttonStyle(.roundIcon)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -290,9 +278,16 @@ struct StoryDetailView: View {
 
   @ViewBuilder var perspective: some View {
     if let brief = cluster.brief, !briefDismissed {
-      BriefPanel(brief: brief, newSources: max(cluster.articles.count - brief.sourceCount, 0)) {
-        Task { await write() }
-      }
+      BriefPanel(
+        brief: brief, newSources: max(cluster.articles.count - brief.sourceCount, 0),
+        refresh: { Task { await write() } },
+        outletArticle: { outlet in
+          // The model writes the names; match the story's outlets ignoring case. Its newest
+          // written article, else anything it has.
+          let articles = cluster.sortedArticles.filter { $0.outlet.caseInsensitiveCompare(outlet) == .orderedSame }
+          return articles.first(where: { !$0.isMedia }) ?? articles.first
+        },
+        open: { openArticleURL($0) })
       .opacity(isWriting ? 0.5 : 1)
     } else {
       VStack(alignment: .leading, spacing: 10) {
@@ -509,14 +504,14 @@ struct CoverageSpectrumCard: View {
           HStack(spacing: 4) {
             lensSwatch(seg.lens, size: 7)
             Text("\(seg.lens.shortLabel) \(seg.outlets.count)")
-              .font(.system(size: 10, weight: .regular, design: .monospaced))
+              .font(.caption2.monospaced())
               .foregroundStyle(Swiss.muted)
           }
         }
         Spacer(minLength: 4)
         if let badge = spectrum.blindspotBadge {
           Text(badge)
-            .font(.system(size: 10, weight: .regular, design: .monospaced))
+            .font(.caption2.monospaced())
             .foregroundStyle(Swiss.ink)
         }
       }
@@ -540,7 +535,7 @@ struct CoverageSpectrumCard: View {
           HStack(spacing: 5) {
             lensSwatch(seg.lens, size: 9)
             Text("\(seg.lens.shortLabel) · \(seg.outlets.count)")
-              .font(.system(size: 11, weight: .regular, design: .monospaced))
+              .font(.caption2.monospaced())
               .foregroundStyle(Swiss.ink)
           }
         }
@@ -554,9 +549,9 @@ struct CoverageSpectrumCard: View {
           .fixedSize(horizontal: false, vertical: true)
       }
     }
-    .padding(16)
+    .padding(18)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .tile(.plain, radius: 16)
+    .tile(.plain)
   }
 
   private func spectrumStrip(height: CGFloat) -> some View {
@@ -660,6 +655,9 @@ struct BriefPanel: View {
   let brief: ClusterPerspectiveBrief
   var newSources: Int
   var refresh: () -> Void
+  /// The article an outlet's angle links to: its newest in the story, if the name matches one.
+  var outletArticle: (String) -> ArticleItem? = { _ in nil }
+  var open: (String) -> Void = { _ in }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
@@ -687,10 +685,28 @@ struct BriefPanel: View {
         VStack(alignment: .leading, spacing: 10) {
           Eyebrow(brief.angles.count == 1 ? "The outlet's angle" : "Each outlet's angle")
           ForEach(brief.angles, id: \.self) { angle in
-            VStack(alignment: .leading, spacing: 2) {
-              Text(angle.outlet).font(.footnote.weight(.medium)).tileSecondary()
-              Text(angle.focus).font(.subheadline).fixedSize(horizontal: false, vertical: true)
+            // Each one opens that outlet's article, like the coverage rows below.
+            let article = outletArticle(angle.outlet)
+            Button { if let article { open(article.url) } } label: {
+              HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(angle.outlet).font(.footnote.weight(.medium)).tileSecondary()
+                  Text(angle.focus).font(.subheadline).foregroundStyle(Swiss.ink)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 6)
+                if let article {
+                  // As on the coverage rows: where it opens.
+                  Image(systemName: article.videoID != nil ? "play.rectangle" : article.audioURL != nil ? "headphones" : "arrow.up.right")
+                    .font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted)
+                }
+              }
+              .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(article == nil)
+            .accessibilityHint("Opens \(angle.outlet)'s article")
           }
         }
       }
@@ -723,7 +739,7 @@ struct BriefPanel: View {
       Eyebrow(title)
       ForEach(lines, id: \.self) { line in
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-          Circle().fill(mark).frame(width: 7, height: 7).alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+          BulletDot(color: mark)
           Text(line).font(.subheadline).fixedSize(horizontal: false, vertical: true)
         }
       }

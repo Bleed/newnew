@@ -30,7 +30,7 @@ struct TopicsSheet: View {
         VStack(alignment: .leading, spacing: 14) {
           // One line, one colour: what this sheet is for.
           Text("Follow and mute topics")
-            .font(.system(size: 30, weight: .regular))
+            .font(.largeTitle.weight(.regular))
             .tracking(-0.6)
             .foregroundStyle(Swiss.ink)
             .accessibilityAddTraits(.isHeader)
@@ -169,11 +169,7 @@ struct TopicRow: View {
       }
       Spacer(minLength: 0)
       Button("Remove \(topic.phrase)", systemImage: "xmark", action: remove)
-        .labelStyle(.iconOnly)
-        .font(.footnote.weight(.semibold))
-        .frame(width: 30, height: 30)
-        .background(Swiss.ink.opacity(0.07), in: Circle())
-        .buttonStyle(.plain)
+        .buttonStyle(.roundIcon)
     }
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -202,25 +198,10 @@ struct ReadStoriesSettings: View {
         HStack(spacing: 8) {
           ForEach(ReadStories.allCases) { option in
             let isSelected = readStoriesRaw == option.rawValue
-            Button {
+            Button(option.label) {
               withAnimation(.snappy(duration: 0.2)) { readStoriesRaw = option.rawValue }
-            } label: {
-              Text(option.label)
-                .font(.callout.weight(.medium))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .foregroundStyle(Swiss.ink)
-                .background(isSelected ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
-                .overlay {
-                  if isSelected {
-                    Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5)
-                  }
-                }
-                .contentShape(Capsule())
             }
-            .buttonStyle(.plain)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
+            .buttonStyle(SelectablePillStyle(isOn: isSelected, fillsWidth: true))
           }
         }
       }
@@ -249,27 +230,11 @@ struct FeedWindowSettings: View {
         HStack(spacing: 8) {
           ForEach(NewsWindow.allCases) { option in
             let isSelected = newsWindowHours == option.rawValue
-            Button {
-              withAnimation(.snappy(duration: 0.2)) {
-                newsWindowHours = option.rawValue
-              }
-            } label: {
-              Text(option.shortLabel)
-                .font(.callout.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .foregroundStyle(Swiss.ink)
-                .background(isSelected ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
-                .overlay {
-                  if isSelected {
-                    Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5)
-                  }
-                }
-                .contentShape(Capsule())
+            Button(option.shortLabel) {
+              withAnimation(.snappy(duration: 0.2)) { newsWindowHours = option.rawValue }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(SelectablePillStyle(isOn: isSelected, fillsWidth: true))
             .accessibilityLabel(option.menuLabel)
-            .accessibilityAddTraits(isSelected ? .isSelected : [])
           }
         }
       }

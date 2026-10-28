@@ -190,43 +190,22 @@ struct TileSecondary: ViewModifier {
 
 // MARK: - Type
 
-/// Two-line Swiss heading: an ink line over a grey line, both regular weight.
-struct SwissHeader<Trailing: View>: View {
-  let title: String
-  var subtitle: String?
-  @ViewBuilder var trailing: Trailing
-  @ScaledMetric(relativeTo: .largeTitle) var size: CGFloat = 40
-
-  init(_ title: String, subtitle: String? = nil, @ViewBuilder trailing: () -> Trailing = { EmptyView() }) {
-    self.title = title
-    self.subtitle = subtitle
-    self.trailing = trailing()
-  }
+/// A coloured list bullet, centred on the first line's lowercase letters (its x-height), so it
+/// sits level with the words at any text size. Use in an `HStack(alignment: .firstTextBaseline)`.
+struct BulletDot: View {
+  let color: Color
+  var textStyle: UIFont.TextStyle = .subheadline
+  var size: CGFloat = 7
+  /// Re-measures the font when the text size changes.
+  @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
   var body: some View {
-    ViewThatFits(in: .horizontal) {
-      HStack(alignment: .lastTextBaseline) {
-        heading.fixedSize()
-        Spacer(minLength: 16)
-        trailing.fixedSize()
-      }
-      VStack(alignment: .leading, spacing: 14) {
-        heading
-        trailing
-      }
-    }
-  }
-
-  var heading: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      Text(title).foregroundStyle(Swiss.ink)
-      if let subtitle { Text(subtitle).foregroundStyle(Swiss.muted) }
-    }
-    .font(.system(size: size, weight: .regular))
-    .tracking(-size * 0.02)
-    .lineSpacing(-size * 0.06)
-    .accessibilityElement(children: .combine)
-    .accessibilityAddTraits(.isHeader)
+    let xHeight = UIFont.preferredFont(forTextStyle: textStyle).xHeight
+    Circle()
+      .fill(color)
+      .frame(width: size, height: size)
+      // The text's baseline lies half an x-height below the dot's centre.
+      .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + xHeight / 2 }
   }
 }
 
@@ -260,7 +239,7 @@ struct QuietPill: View {
       .font(.caption.weight(.medium))
       .lineLimit(1)
       .padding(.horizontal, 9)
-      .padding(.vertical, 5)
+      .pillHeight()
       .background(Swiss.ink.opacity(0.07), in: Capsule())
       .fixedSize()
   }
@@ -288,6 +267,55 @@ struct SwissButtonStyle: ButtonStyle {
 extension ButtonStyle where Self == SwissButtonStyle {
   static var swissPrimary: SwissButtonStyle { SwissButtonStyle(prominent: true) }
   static var swissSecondary: SwissButtonStyle { SwissButtonStyle(prominent: false) }
+}
+
+/// A choice among pills (filters, settings): the chosen one is an ink outline, the rest quiet
+/// 7 % pills. An outline always means "selected", never an action. Small pills (the region row)
+/// have smaller text but the same height, so the rows line up.
+struct SelectablePillStyle: ButtonStyle {
+  var isOn: Bool
+  var small = false
+  /// Settings rows: the pills share the width.
+  var fillsWidth = false
+  @ScaledMetric(relativeTo: .callout) private var height: CGFloat = 36
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(small ? .subheadline.weight(.medium) : .callout.weight(.medium))
+      .lineLimit(1)
+      .frame(maxWidth: fillsWidth ? .infinity : 200)
+      .padding(.horizontal, small ? 12 : 14)
+      .frame(minHeight: height)
+      .foregroundStyle(Swiss.ink)
+      .background(isOn ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
+      .overlay { if isOn { Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5) } }
+      .opacity(configuration.isPressed ? 0.7 : 1)
+      .contentShape(Capsule())
+      .accessibilityAddTraits(isOn ? .isSelected : [])
+  }
+}
+
+/// A round icon button (close, remove): a 32 pt circle, the icon at medium weight, and a 44 pt
+/// touch area around it.
+struct RoundIconButtonStyle: ButtonStyle {
+  var foreground: Color = Swiss.ink
+  var background: AnyShapeStyle = AnyShapeStyle(Swiss.ink.opacity(0.07))
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .labelStyle(.iconOnly)
+      .font(.footnote.weight(.medium))
+      .foregroundStyle(foreground)
+      .frame(width: 32, height: 32)
+      .background(background, in: Circle())
+      .frame(width: 44, height: 44)
+      .contentShape(Rectangle())
+      .opacity(configuration.isPressed ? 0.6 : 1)
+  }
+}
+
+extension ButtonStyle where Self == RoundIconButtonStyle {
+  static var roundIcon: RoundIconButtonStyle { RoundIconButtonStyle() }
 }
 
 /// Switches in ink, reversed in dark mode like the ink pills: on is an ink track with a knob
