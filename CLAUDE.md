@@ -175,6 +175,13 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   ~/.newnew-cloudkit/eckey.pem, never committed), via GitHub variables `CLOUDKIT_CONTAINER`,
   `CLOUDKIT_ENVIRONMENT=production` and secrets `CLOUDKIT_KEY_ID`, `CLOUDKIT_PRIVATE_KEY`.
   Server keys belong to one environment: a Development test needs its own key.
+- Breaking push first worked on 2026-10-28 (build 30). CloudKit refused every Production
+  subscription with CKError 12 "attempting to create a subscription in a production container"
+  until the subscription had been created once in **Development** (a Debug build run on a
+  device from Xcode) and the schema was deployed again, even with "0 changes"; see Apple's
+  CKSubscription docs. A Queryable index on `Breaking.recordName` was added on the way (harmless).
+  Any new subscription type needs the same Development-first step. The app shows CloudKit's
+  reason under the Breaking switch if a subscription fails (`Alerts.pushStatusKey`).
 - SwiftData stays local (`ModelConfiguration(cloudKitDatabase: .none)`): with the iCloud
   entitlement it would otherwise try to sync and crash on launch (unique attributes).
 - Feed performance: `FeedSections` works the sections out once per render. Computed
