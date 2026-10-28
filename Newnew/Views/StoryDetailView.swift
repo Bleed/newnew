@@ -520,9 +520,7 @@ struct CoverageSpectrumCard: View {
 
   private var fullCard: some View {
     VStack(alignment: .leading, spacing: 12) {
-      HStack(alignment: .firstTextBaseline) {
-        Eyebrow("Coverage spectrum")
-        Spacer()
+      EyebrowRow("Coverage spectrum") {
         if let badge = spectrum.blindspotBadge {
           DotChip(badge)
         }
@@ -661,9 +659,7 @@ struct BriefPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
-      HStack {
-        Eyebrow(brief.isGenerated ? titles.heading : "Preview")
-        Spacer()
+      EyebrowRow(brief.isGenerated ? titles.heading : "Preview") {
         if newSources > 0 {
           Button(action: refresh) { SignalBadge(.attention, "\(newSources) new · Update") }
             .buttonStyle(.plain)

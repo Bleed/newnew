@@ -219,6 +219,33 @@ struct Eyebrow: View {
   }
 }
 
+/// A section heading with something on its right (a badge, an update pill). Side by side when
+/// both fit; otherwise the badge goes under the heading, so a wide badge never squeezes the
+/// heading into a hyphenated column ("Cover- age spec- trum").
+struct EyebrowRow<Trailing: View>: View {
+  let title: String
+  @ViewBuilder var trailing: Trailing
+
+  init(_ title: String, @ViewBuilder trailing: () -> Trailing) {
+    self.title = title
+    self.trailing = trailing()
+  }
+
+  var body: some View {
+    ViewThatFits(in: .horizontal) {
+      HStack(alignment: .center, spacing: 12) {
+        Eyebrow(title).fixedSize()
+        Spacer(minLength: 0)
+        trailing.fixedSize()
+      }
+      VStack(alignment: .leading, spacing: 8) {
+        Eyebrow(title)
+        trailing
+      }
+    }
+  }
+}
+
 /// One height for the small pills that sit side by side on a card (signal, sources, listen),
 /// following the text size.
 private struct PillHeight: ViewModifier {
