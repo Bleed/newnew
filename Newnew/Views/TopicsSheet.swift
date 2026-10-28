@@ -233,12 +233,21 @@ struct FeedWindowSettings: View {
 struct AlertSettings: View {
   @AppStorage(Alerts.breakingKey) var breaking = false
   @AppStorage(Alerts.followingKey) var following = false
+  @AppStorage(Alerts.pushStatusKey) var pushStatus: String?
   @State private var denied = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Eyebrow("Alerts")
       row("Breaking news", detail: "A story five or more outlets are covering within the hour. A few a day at most.", isOn: $breaking)
+      if breaking, let pushStatus, !pushStatus.hasPrefix("on:") {
+        // Why push isn't working, in CloudKit's words; selectable so it can be copied.
+        Text(pushStatus)
+          .font(.footnote)
+          .foregroundStyle(Swiss.alert)
+          .textSelection(.enabled)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       row("Topics you follow", detail: "A new story on something you follow. Decided on this iPhone; your topics never leave it.", isOn: $following)
       if denied {
         Text("Notifications are off for newnew. Turn them on in Settings › Notifications.")

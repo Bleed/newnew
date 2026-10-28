@@ -91,30 +91,76 @@ import UserNotifications
     }
   }
 
+  /// What the last subscription attempt came to, shown under the Breaking switch: "on", or
+  /// why not, in CloudKit's own words. Saved, so a failure can be read off the phone.
+  static let pushStatusKey = "alerts.pushStatus"
+
   /// Keeps the CloudKit subscription in step with the Breaking setting.
+  ///
+  /// CloudKit refused build 29's subscription with BAD_REQUEST and the error was thrown away,
+  /// so nothing showed. Now each attempt is reported, and if the full alert (headline, outlet
+  /// count as subtitle, background wake) is refused, simpler ones are tried in turn.
   static func updateSubscriptions() async {
-    guard let cloudKitContainer, isCloudKitAvailable else { return }
-    let database = CKContainer(identifier: cloudKitContainer).publicCloudDatabase
-    if breakingOn {
-      UIApplication.shared.registerForRemoteNotifications()
+    let defaults = UserDefaults.standard
+    guard let cloudKitContainer, isCloudKitAvailable else {
+      defaults.set(nil, forKey: pushStatusKey)
+      return
+    }
+    let container = CKContainer(identifier: cloudKitContainer)
+    let database = container.publicCloudDatabase
+    guard breakingOn else {
+      _ = try? await database.deleteSubscription(withID: breakingSubscriptionID)
+      defaults.set(nil, forKey: pushStatusKey)
+      return
+    }
+    if let status = try? await container.accountStatus(), status != .available {
+      defaults.set("Sign in to iCloud on this iPhone to get breaking alerts.", forKey: pushStatusKey)
+      return
+    }
+    UIApplication.shared.registerForRemoteNotifications()
+    var failures: [String] = []
+    for (name, info) in notificationVariants() {
       let subscription = CKQuerySubscription(
         recordType: "Breaking", predicate: NSPredicate(value: true), subscriptionID: breakingSubscriptionID,
         options: [.firesOnRecordCreation])
-      let info = CKSubscription.NotificationInfo()
+      subscription.notificationInfo = info
+      do {
+        _ = try await database.save(subscription)
+        defaults.set("on:\(name)", forKey: pushStatusKey)
+        return
+      } catch {
+        failures.append("\(name): \(describe(error))")
+      }
+    }
+    defaults.set("Breaking alerts couldn't be set up. " + failures.joined(separator: " · "), forKey: pushStatusKey)
+  }
+
+  /// The alert, richest first.
+  static func notificationVariants() -> [(String, CKSubscription.NotificationInfo)] {
+    func headline(_ info: CKSubscription.NotificationInfo) {
       info.title = "Breaking"
       info.alertLocalizationKey = "%1$@"
       info.alertLocalizationArgs = ["headline"]
-      info.subtitleLocalizationKey = "%1$@ outlets"
-      info.subtitleLocalizationArgs = ["outlets"]
       info.soundName = "default"
-      info.desiredKeys = ["headline", "url", "outlets"]
-      // Wakes the app too, so the story is already grouped when the alert is opened.
-      info.shouldSendContentAvailable = true
-      subscription.notificationInfo = info
-      _ = try? await database.save(subscription)
-    } else {
-      _ = try? await database.deleteSubscription(withID: breakingSubscriptionID)
     }
+    let full = CKSubscription.NotificationInfo()
+    headline(full)
+    full.desiredKeys = ["headline", "url", "outlets"]
+    // Wakes the app too, so the story is already grouped when the alert is opened.
+    full.shouldSendContentAvailable = true
+    let plainHeadline = CKSubscription.NotificationInfo()
+    headline(plainHeadline)
+    let fixed = CKSubscription.NotificationInfo()
+    fixed.alertBody = "Breaking news on newnew"
+    fixed.soundName = "default"
+    return [("full", full), ("headline", plainHeadline), ("plain", fixed)]
+  }
+
+  /// CloudKit's own reason, which `localizedDescription` alone often leaves out.
+  static func describe(_ error: Error) -> String {
+    guard let error = error as? CKError else { return error.localizedDescription }
+    let server = (error.errorUserInfo["ServerErrorDescription"] as? String) ?? ""
+    return "CKError \(error.code.rawValue) \(error.localizedDescription) \(server)".trimmingCharacters(in: .whitespaces)
   }
 
   // MARK: Background refresh
