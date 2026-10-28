@@ -1,62 +1,231 @@
+import SafariServices
+import SwiftData
 import SwiftUI
 
+extension ArticleItem {
+  /// EU Article 15 safe-harbor extract: caps snippets at ~150 characters on a word boundary
+  /// and suppresses snippets that merely duplicate the headline.
+  var shortSnippet: String {
+    let clean = snippet.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !clean.isEmpty else { return "" }
+    if clean.caseInsensitiveCompare(title.trimmingCharacters(in: .whitespacesAndNewlines)) == .orderedSame {
+      return ""
+    }
+    let maxChars = 150
+    guard clean.count > maxChars else { return clean }
+    let prefix = clean.prefix(maxChars)
+    if let lastSpace = prefix.lastIndex(of: " ") {
+      return String(prefix[..<lastSpace]).trimmingCharacters(in: .punctuationCharacters) + "…"
+    }
+    return String(prefix) + "…"
+  }
+}
+
+/// Wrapper so a `URL` can drive a sheet or split pane.
+private struct ActiveWebURL: Identifiable, Equatable {
+  let url: URL
+  var id: String { url.absoluteString }
+}
+
+/// Embeds Safari directly inside the right 50% of the unfolded inside screen (or a sheet on compact screens).
+private struct InAppSafariView: UIViewControllerRepresentable {
+  let url: URL
+
+  func makeUIViewController(context: Context) -> SFSafariViewController {
+    let config = SFSafariViewController.Configuration()
+    config.entersReaderIfAvailable = false
+    config.barCollapsingEnabled = true
+    let safari = SFSafariViewController(url: url, configuration: config)
+    safari.dismissButtonStyle = .close
+    return safari
+  }
+
+  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
 /// One story: its coverage compared (on a tap, by Apple Intelligence), then every outlet's
-/// headline linking out to the publisher.
+/// headline linking out to the publisher. On a wide/unfolded screen, links open in a 50%
+/// side-by-side split pane.
 struct StoryDetailView: View {
   let cluster: StoryCluster
   @Environment(FeedSyncPipeline.self) var pipeline
   @Environment(\.openURL) var openURL
   @State private var isWriting = false
   @State private var failure: String?
+  /// Snapshots any newly-arrived update articles on entry before `markRead` clears them.
+  @State private var updatesSinceLastRead: [ArticleItem] = []
+  /// Currently opened article URL for the 50% split pane (wide screen) or sheet (compact screen).
+  @State private var activeWebURL: ActiveWebURL?
+  /// Allows the user to hide/report an inaccurate AI summary in the current session.
+  @State private var briefDismissed = false
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 14) {
-        if let lead = cluster.lead {
-          if lead.galleryURLs.count > 1 {
-            GalleryImage(
-              urls: lead.galleryURLs, article: lead.url, aspect: cluster.pillar.isPortrait ? 4 / 5 : 5 / 4,
-              topAligned: cluster.pillar.isPortrait)
-          } else {
-            HeroImage(
-              remote: lead.imageURL, article: lead.url, radius: 20, aspect: cluster.pillar.isPortrait ? 4 / 5 : 5 / 4,
-              fits: lead.isChart, isVideo: lead.videoID != nil, topAligned: cluster.pillar.isPortrait)
+    GeometryReader { geo in
+      let isWideScreen = geo.size.width >= 600
+
+      HStack(spacing: 0) {
+        // Left 50% (or 100% when no link is open): Story detail & coverage list
+        ScrollView {
+          VStack(alignment: .leading, spacing: 14) {
+            if let lead = cluster.lead {
+              // Single social-preview HeroImage only (no multi-photo gallery scraping)
+              HeroImage(
+                remote: lead.imageURL,
+                article: lead.url,
+                radius: 20,
+                aspect: cluster.pillar.isPortrait ? 4 / 5 : 5 / 4,
+                fits: lead.isChart,
+                isVideo: lead.videoID != nil,
+                topAligned: cluster.pillar.isPortrait
+              )
+
+              // Single unified Text expression on the left so baselines never break or stack in columns
+              HStack(alignment: .center, spacing: 8) {
+                metaLine(lead)
+                Spacer(minLength: 6)
+                DotChip("\(cluster.outlets.count) \(cluster.outlets.count == 1 ? "SOURCE" : "SOURCES")")
+              }
+              .foregroundStyle(Swiss.muted)
+
+              Text(lead.title)
+                .font(Swiss.headline(34, relativeTo: .title))
+                .foregroundStyle(Swiss.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            }
+
+            if !updatesSinceLastRead.isEmpty {
+              VStack(alignment: .leading, spacing: 8) {
+                Eyebrow("New since you read")
+                ForEach(updatesSinceLastRead.prefix(3)) { item in
+                  Button {
+                    openArticleURL(item.url)
+                  } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                      Circle()
+                        .fill(Swiss.mint)
+                        .frame(width: 7, height: 7)
+                        .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                      Text("\(Text("\(item.outlet): ").fontWeight(.medium))\(item.title)")
+                        .font(.subheadline)
+                        .foregroundStyle(Swiss.ink)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                  }
+                  .buttonStyle(.plain)
+                }
+              }
+              .padding(.top, 4)
+            }
+
+            // Videos and podcast episodes, folded into one row under the headline; opened, each links
+            // out to where it plays.
+            let media = cluster.sortedArticles.filter(\.isMedia)
+            if !media.isEmpty {
+              MediaFold(media: media) { chosenURL in
+                openResolvedURL(chosenURL)
+              }
+              .padding(.top, 6)
+            }
+
+            if cluster.outlets.count > 1 {
+              CoverageSpectrumCard(cluster: cluster)
+                .padding(.top, 6)
+            }
+
+            if cluster.outlets.count > 1 || cluster.briefMode != .perspective {
+              perspective.padding(.top, 6)
+            }
+
+            Eyebrow("Coverage").padding(.top, 14)
+            ForEach(cluster.sortedArticles.filter { !$0.isMedia }) { article in
+              ArticleRow(
+                article: article,
+                isSelected: activeWebURL?.url.absoluteString == article.url
+              ) {
+                openArticleURL(article.url)
+              }
+            }
+            Text("Headlines and short extracts from each outlet's RSS feed. Tap any outlet to read the full article on the publisher's site.")
+              .font(.footnote)
+              .foregroundStyle(Swiss.muted)
+              .padding(.top, 4)
           }
-          HStack(spacing: 8) {
-            if let category = lead.category { Text(category).font(.footnote.weight(.medium)) }
-            Text("Updated \(Text(cluster.updatedAt.shortAgo).font(Swiss.smallFigure)) ago").font(.footnote)
-            Spacer(minLength: 6)
-            DotChip("\(cluster.outlets.count) \(cluster.outlets.count == 1 ? "SOURCE" : "SOURCES")")
-          }
-          .foregroundStyle(Swiss.muted)
-          Text(lead.title)
-            .font(Swiss.headline(34, relativeTo: .title))
-            .foregroundStyle(Swiss.ink)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
+          .padding(.horizontal, Swiss.pageInset)
+          .padding(.bottom, 32)
         }
+        .frame(width: isWideScreen && activeWebURL != nil ? geo.size.width * 0.5 : geo.size.width)
 
-        // Videos and podcast episodes, folded into one row under the headline; opened, each links
-        // out to where it plays.
-        let media = cluster.sortedArticles.filter(\.isMedia)
-        if !media.isEmpty { MediaFold(media: media).padding(.top, 6) }
+        // Right 50%: In-app publisher split pane on wide/unfolded inside screens
+        if isWideScreen, let active = activeWebURL {
+          Divider()
+            .overlay(Swiss.ink.opacity(0.15))
 
-        // News needs several outlets to compare; a review or a style piece can be read from one.
-        if cluster.outlets.count > 1 || cluster.pillar.briefMode != .perspective { perspective.padding(.top, 6) }
+          VStack(spacing: 0) {
+            HStack(spacing: 10) {
+              Text(active.url.host()?.replacingOccurrences(of: "www.", with: "") ?? "Article")
+                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                .foregroundStyle(Swiss.ink)
+                .lineLimit(1)
+              Spacer()
+              Button {
+                openURL(active.url)
+              } label: {
+                Label("Safari", systemImage: "safari")
+                  .font(.footnote.weight(.medium))
+                  .foregroundStyle(Swiss.muted)
+              }
+              .buttonStyle(.plain)
 
-        Eyebrow("Coverage").padding(.top, 14)
-        ForEach(cluster.sortedArticles.filter { !$0.isMedia }) { article in
-          ArticleRow(article: article) {
-            if let url = URL(string: article.url) { openURL(url) }
+              Button {
+                withAnimation(.snappy(duration: 0.22)) {
+                  activeWebURL = nil
+                }
+              } label: {
+                Image(systemName: "xmark")
+                  .font(.footnote.weight(.bold))
+                  .foregroundStyle(Swiss.ink)
+                  .frame(width: 28, height: 28)
+                  .background(Swiss.ink.opacity(0.08), in: Circle())
+              }
+              .buttonStyle(.plain)
+              .accessibilityLabel("Close article pane")
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Swiss.canvas)
+
+            Divider()
+              .overlay(Swiss.ink.opacity(0.1))
+
+            InAppSafariView(url: active.url)
+              .id(active.id)
+              .ignoresSafeArea(edges: .bottom)
           }
+          .frame(width: geo.size.width * 0.5)
+          .transition(.move(edge: .trailing).combined(with: .opacity))
         }
-        Text("Headlines and snippets from each outlet. Tap one to read it in full on their site.")
-          .font(.footnote)
-          .foregroundStyle(Swiss.muted)
-          .padding(.top, 4)
       }
-      .padding(.horizontal, Swiss.pageInset)
-      .padding(.bottom, 32)
+      .animation(.snappy(duration: 0.24), value: activeWebURL)
+      .environment(\.openURL, OpenURLAction { url in
+        if isWideScreen, url.scheme == "http" || url.scheme == "https" {
+          withAnimation(.snappy(duration: 0.24)) {
+            activeWebURL = ActiveWebURL(url: url)
+          }
+          return .handled
+        }
+        return .systemAction
+      })
+      .sheet(
+        item: Binding(
+          get: { isWideScreen ? nil : activeWebURL },
+          set: { activeWebURL = $0 }
+        )
+      ) { active in
+        InAppSafariView(url: active.url)
+          .ignoresSafeArea()
+      }
     }
     .swissCanvas()
     .navigationBarTitleDisplayMode(.inline)
@@ -69,16 +238,58 @@ struct StoryDetailView: View {
           Button("Mute stories like this", systemImage: "speaker.slash") {
             Task { await pipeline.addTopic(like: cluster, kind: .mute) }
           }
+          if cluster.brief != nil && !briefDismissed {
+            Divider()
+            Button("Hide AI summary", systemImage: "eye.slash") {
+              withAnimation(.snappy) {
+                briefDismissed = true
+              }
+            }
+          }
         }
       }
     }
-    .onAppear { pipeline.markRead(cluster) }
+    .onAppear {
+      if updatesSinceLastRead.isEmpty {
+        updatesSinceLastRead = ReadLedger.unseenArticles(in: cluster)
+      }
+      pipeline.markRead(cluster)
+      ReadLedger.record(cluster)
+    }
+  }
+
+  /// Concatenates category and update time into one single Text block so it stays on one line
+  /// (or wraps cleanly as a single sentence under large Dynamic Type without breaking baselines).
+  @ViewBuilder
+  private func metaLine(_ lead: ArticleItem) -> some View {
+    let timeText = Text("Updated \(Text(cluster.updatedAt.shortAgo).font(Swiss.smallFigure)) ago")
+    if let category = lead.category, !category.isEmpty {
+      Text("\(Text(category).fontWeight(.medium))  \(timeText)")
+        .font(.footnote)
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+    } else {
+      timeText
+        .font(.footnote)
+        .lineLimit(1)
+    }
+  }
+
+  private func openArticleURL(_ raw: String) {
+    guard let url = URL(string: raw) else { return }
+    openResolvedURL(url)
+  }
+
+  private func openResolvedURL(_ url: URL) {
+    withAnimation(.snappy(duration: 0.24)) {
+      activeWebURL = ActiveWebURL(url: url)
+    }
   }
 
   // MARK: Perspective
 
   @ViewBuilder var perspective: some View {
-    if let brief = cluster.brief {
+    if let brief = cluster.brief, !briefDismissed {
       BriefPanel(brief: brief, newSources: max(cluster.articles.count - brief.sourceCount, 0)) {
         Task { await write() }
       }
@@ -90,6 +301,7 @@ struct StoryDetailView: View {
           .foregroundStyle(Swiss.muted)
         HStack(spacing: 10) {
           Button {
+            briefDismissed = false
             Task { await write() }
           } label: {
             switch mode {
@@ -102,6 +314,7 @@ struct StoryDetailView: View {
           .disabled(isWriting)
           if isWriting { WritingChip() }
         }
+        .fixedSize(horizontal: false, vertical: true)
         if let failure {
           Text(failure).font(.footnote).foregroundStyle(Swiss.alert)
         }
@@ -112,7 +325,7 @@ struct StoryDetailView: View {
     }
   }
 
-  var mode: BriefMode { cluster.pillar.briefMode }
+  var mode: BriefMode { cluster.briefMode }
 
   var invitation: String {
     let count = cluster.outlets.count
@@ -134,7 +347,7 @@ struct StoryDetailView: View {
     failure = nil
     defer { isWriting = false }
     let sources = cluster.sortedArticles.map {
-      IntelligenceService.Source(outlet: $0.outlet, title: $0.title, snippet: $0.snippet)
+      IntelligenceService.Source(outlet: $0.outlet, title: $0.title, snippet: $0.shortSnippet)
     }
     do {
       let brief = try await IntelligenceService.brief(for: sources, mode: mode)
@@ -145,12 +358,297 @@ struct StoryDetailView: View {
   }
 }
 
+// MARK: - Coverage Spectrum Bar (Visualizing Outlet Blindspots)
+
+enum EditorialLens: String, CaseIterable, Identifiable {
+  case wire = "WIRE & GLOBAL"
+  case markets = "MARKETS"
+  case tech = "TECH & SCIENCE"
+  case culture = "CULTURE & STYLE"
+
+  var id: String { rawValue }
+
+  var shortLabel: String {
+    switch self {
+    case .wire: "WIRE"
+    case .markets: "MARKETS"
+    case .tech: "TECH"
+    case .culture: "CULTURE"
+    }
+  }
+
+  static func classify(outlet: String, pillar: Pillar) -> EditorialLens {
+    let lower = outlet.lowercased()
+
+    let marketKeywords = [
+      "financial", "bloomberg", "economist", "wall street", "wsj", "cnbc",
+      "forbes", "fortune", "business", "market", "nikkei", "reuters business", "ft"
+    ]
+    if marketKeywords.contains(where: { lower.contains($0) }) {
+      return .markets
+    }
+
+    let techKeywords = [
+      "verge", "wired", "ars technica", "techcrunch", "engadget", "9to5", "macrumors",
+      "register", "hacker", "mit", "nature", "science", "new scientist", "eurogamer",
+      "polygon", "ign", "kotaku", "pc gamer", "digital foundry", "anandtech", "tom's"
+    ]
+    if techKeywords.contains(where: { lower.contains($0) }) {
+      return .tech
+    }
+
+    let cultureKeywords = [
+      "hypebeast", "highsnobiety", "gq", "vogue", "wwd", "dazed", "i-d", "pitchfork",
+      "rolling stone", "variety", "hollywood", "deadline", "indiewire", "empire",
+      "eater", "bon appétit", "monocle", "wallpaper", "dezeen", "architectural", "nme"
+    ]
+    if cultureKeywords.contains(where: { lower.contains($0) }) {
+      return .culture
+    }
+
+    let wireKeywords = [
+      "reuters", "associated press", "ap", "bbc", "guardian", "times", "post",
+      "dw", "france 24", "al jazeera", "nrk", "politico", "axios", "npr", "cnn", "sky"
+    ]
+    if wireKeywords.contains(where: { lower.contains($0) }) {
+      return .wire
+    }
+
+    switch pillar {
+    case .briefing: return .wire
+    case .tech: return .tech
+    default: return .culture
+    }
+  }
+}
+
+struct CoverageSpectrum {
+  struct Segment: Identifiable {
+    let lens: EditorialLens
+    let outlets: [String]
+    let share: Double
+    var id: String { lens.id }
+  }
+
+  let segments: [Segment]
+  let totalOutlets: Int
+  let blindspotBadge: String?
+  let insightLine: String
+
+  init(cluster: StoryCluster) {
+    var seen = Set<String>()
+    var grouped: [EditorialLens: [String]] = [:]
+
+    for article in cluster.sortedArticles {
+      guard seen.insert(article.outlet).inserted else { continue }
+      let lens = EditorialLens.classify(outlet: article.outlet, pillar: cluster.pillar)
+      grouped[lens, default: []].append(article.outlet)
+    }
+
+    let total = max(seen.count, 1)
+    self.totalOutlets = seen.count
+    self.segments = EditorialLens.allCases.compactMap { lens in
+      guard let list = grouped[lens], !list.isEmpty else { return nil }
+      return Segment(lens: lens, outlets: list, share: Double(list.count) / Double(total))
+    }
+    .sorted { $0.outlets.count > $1.outlets.count }
+
+    let hasWire = !(grouped[.wire] ?? []).isEmpty
+    let hasMarkets = !(grouped[.markets] ?? []).isEmpty
+    let hasTech = !(grouped[.tech] ?? []).isEmpty
+    let hasCulture = !(grouped[.culture] ?? []).isEmpty
+
+    if seen.count >= 3 && !hasWire {
+      self.blindspotBadge = "BLINDSPOT · GENERAL NEWS"
+      if hasTech && hasMarkets {
+        self.insightLine = "Covered across tech and financial desks, but not picked up by general news wires yet."
+      } else if hasTech {
+        self.insightLine = "Specialist tech coverage only—mainstream news outlets haven't reported on this."
+      } else {
+        self.insightLine = "Driving specialist coverage, with zero mainstream wire or public broadcaster reports so far."
+      }
+    } else if seen.count >= 3 && hasWire && !hasMarkets && !hasTech && !hasCulture {
+      self.blindspotBadge = "WIRE CONSENSUS"
+      self.insightLine = "Reported strictly by general news wires and broadsheets (\(seen.count) outlets)."
+    } else if segments.count >= 3 {
+      self.blindspotBadge = "BROAD SPECTRUM"
+      self.insightLine = "Cross-desk story spanning \(segments.map { $0.lens.shortLabel.lowercased() }.joined(separator: ", ")) outlets."
+    } else if let dominant = segments.first {
+      self.blindspotBadge = nil
+      self.insightLine = "Primarily covered by \(dominant.lens.shortLabel.lowercased()) outlets (\(dominant.outlets.prefix(2).joined(separator: ", ")))."
+    } else {
+      self.blindspotBadge = nil
+      self.insightLine = ""
+    }
+  }
+}
+
+struct CoverageSpectrumCard: View {
+  let cluster: StoryCluster
+  var compact: Bool = false
+
+  private var spectrum: CoverageSpectrum {
+    CoverageSpectrum(cluster: cluster)
+  }
+
+  var body: some View {
+    if spectrum.totalOutlets > 1 {
+      if compact {
+        compactBar
+      } else {
+        fullCard
+      }
+    }
+  }
+
+  private var compactBar: some View {
+    VStack(alignment: .leading, spacing: 5) {
+      spectrumStrip(height: 6)
+      HStack(spacing: 8) {
+        ForEach(spectrum.segments) { seg in
+          HStack(spacing: 4) {
+            lensSwatch(seg.lens, size: 7)
+            Text("\(seg.lens.shortLabel) \(seg.outlets.count)")
+              .font(.system(size: 10, weight: .regular, design: .monospaced))
+              .foregroundStyle(Swiss.muted)
+          }
+        }
+        Spacer(minLength: 4)
+        if let badge = spectrum.blindspotBadge {
+          Text(badge)
+            .font(.system(size: 10, weight: .regular, design: .monospaced))
+            .foregroundStyle(Swiss.ink)
+        }
+      }
+    }
+  }
+
+  private var fullCard: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      HStack(alignment: .firstTextBaseline) {
+        Eyebrow("Coverage spectrum")
+        Spacer()
+        if let badge = spectrum.blindspotBadge {
+          DotChip(badge)
+        }
+      }
+
+      spectrumStrip(height: 12)
+
+      HStack(spacing: 12) {
+        ForEach(spectrum.segments) { seg in
+          HStack(spacing: 5) {
+            lensSwatch(seg.lens, size: 9)
+            Text("\(seg.lens.shortLabel) · \(seg.outlets.count)")
+              .font(.system(size: 11, weight: .regular, design: .monospaced))
+              .foregroundStyle(Swiss.ink)
+          }
+        }
+        Spacer(minLength: 0)
+      }
+
+      if !spectrum.insightLine.isEmpty {
+        Text(spectrum.insightLine)
+          .font(.footnote)
+          .foregroundStyle(Swiss.muted)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .padding(16)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .tile(.plain, radius: 16)
+  }
+
+  private func spectrumStrip(height: CGFloat) -> some View {
+    GeometryReader { geo in
+      let spacing: CGFloat = 3
+      let totalGaps = CGFloat(max(spectrum.segments.count - 1, 0)) * spacing
+      let usableWidth = max(geo.size.width - totalGaps, 0)
+
+      HStack(spacing: spacing) {
+        ForEach(spectrum.segments) { seg in
+          SwissPatternSegment(lens: seg.lens)
+            .frame(width: max(usableWidth * seg.share, 14), height: height)
+            .clipShape(Capsule())
+        }
+      }
+    }
+    .frame(height: height)
+  }
+
+  private func lensSwatch(_ lens: EditorialLens, size: CGFloat) -> some View {
+    SwissPatternSegment(lens: lens)
+      .frame(width: size, height: size)
+      .clipShape(RoundedRectangle(cornerRadius: 2.5, style: .continuous))
+  }
+}
+
+private struct SwissPatternSegment: View {
+  let lens: EditorialLens
+
+  var body: some View {
+    Canvas { context, size in
+      let rect = CGRect(origin: .zero, size: size)
+      switch lens {
+      case .wire:
+        context.fill(Path(rect), with: .color(Swiss.ink))
+
+      case .markets:
+        context.fill(Path(rect), with: .color(Swiss.ink.opacity(0.10)))
+        var hatch = Path()
+        let step: CGFloat = 4.5
+        var x: CGFloat = -size.height
+        while x < size.width + size.height {
+          hatch.move(to: CGPoint(x: x, y: size.height))
+          hatch.addLine(to: CGPoint(x: x + size.height, y: 0))
+          x += step
+        }
+        context.stroke(hatch, with: .color(Swiss.ink), lineWidth: 1.4)
+
+      case .tech:
+        context.fill(Path(rect), with: .color(Swiss.ink.opacity(0.08)))
+        let pitch: CGFloat = 3.5
+        let dotRadius: CGFloat = 1.0
+        var y: CGFloat = pitch / 2
+        var row = 0
+        while y < size.height {
+          var x: CGFloat = (row.isMultiple(of: 2) ? pitch / 2 : pitch)
+          while x < size.width {
+            let dotRect = CGRect(x: x - dotRadius, y: y - dotRadius, width: dotRadius * 2, height: dotRadius * 2)
+            context.fill(Path(ellipseIn: dotRect), with: .color(Swiss.ink))
+            x += pitch
+          }
+          y += pitch
+          row += 1
+        }
+
+      case .culture:
+        context.fill(Path(rect), with: .color(Swiss.ink.opacity(0.24)))
+        let inset = rect.insetBy(dx: 0.75, dy: 0.75)
+        context.stroke(
+          Path(roundedRect: inset, cornerRadius: size.height / 2),
+          with: .color(Swiss.ink),
+          lineWidth: 1.3
+        )
+      }
+    }
+  }
+}
+
+// MARK: - Existing Detail Subviews
+
 /// "READING" in the dot face while the model writes, the dots after it counting up.
 struct WritingChip: View {
   var body: some View {
     TimelineView(.periodic(from: .now, by: 0.4)) { context in
       let step = Int(context.date.timeIntervalSinceReferenceDate / 0.4) % 4
-      DotChip("READING" + String(repeating: ".", count: step) + String(repeating: " ", count: 3 - step), label: "Reading the coverage")
+      let text = "READING" + String(repeating: ".", count: step) + String(repeating: " ", count: 3 - step)
+      DotText(text, pitch: 1.5, motion: .none)
+        .foregroundStyle(Swiss.ink)
+        .padding(.horizontal, 14)
+        .frame(maxHeight: .infinity)
+        .background(Swiss.ink.opacity(0.08), in: Capsule())
+        .accessibilityLabel("Reading the coverage")
     }
   }
 }
@@ -216,7 +714,7 @@ struct BriefPanel: View {
 
   var footnote: String {
     brief.isGenerated
-      ? "Written on this iPhone by Apple Intelligence from \(brief.sourceCount) headlines and snippets. It can be wrong; the full stories are at each outlet."
+      ? "Written on this iPhone by Apple Intelligence from \(brief.sourceCount) headlines and short extracts. Automated summaries can be wrong; always verify at each publisher."
       : brief.note ?? "\(IntelligenceService.unavailableReason), so this preview just lists each outlet's headline."
   }
 
@@ -236,15 +734,17 @@ struct BriefPanel: View {
 /// One outlet's take: its name and time, headline and snippet, and a way out to read it.
 struct ArticleRow: View {
   let article: ArticleItem
+  var isSelected: Bool = false
   var open: () -> Void
 
   /// Where tapping the row goes: the video on YouTube, else the article (or episode page).
   var destination: String {
     article.videoID != nil ? "Opens the video on YouTube"
-      : article.audioURL != nil ? "Opens the episode on \(article.outlet)'s site" : "Opens \(article.outlet) in Safari"
+      : article.audioURL != nil ? "Opens the episode on \(article.outlet)'s site" : "Opens \(article.outlet)"
   }
 
   var body: some View {
+    let extract = article.shortSnippet
     VStack(alignment: .leading, spacing: 6) {
       HStack(spacing: 6) {
         Text(article.outlet).font(.footnote.weight(.medium)).foregroundStyle(Swiss.ink)
@@ -258,15 +758,23 @@ struct ArticleRow: View {
         .foregroundStyle(Swiss.ink)
         .multilineTextAlignment(.leading)
         .fixedSize(horizontal: false, vertical: true)
-      Text(article.snippet)
-        .font(.footnote)
-        .foregroundStyle(Swiss.muted)
-        .multilineTextAlignment(.leading)
-        .lineLimit(3)
+      if !extract.isEmpty {
+        Text(extract)
+          .font(.footnote)
+          .foregroundStyle(Swiss.muted)
+          .multilineTextAlignment(.leading)
+          .lineLimit(2)
+      }
     }
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
     .tile(.plain, radius: 16)
+    .overlay {
+      if isSelected {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+          .strokeBorder(Swiss.ink, lineWidth: 1.5)
+      }
+    }
     .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     .onTapGesture(perform: open)
     .accessibilityElement(children: .contain)
@@ -280,8 +788,8 @@ struct ArticleRow: View {
 /// episode · On YouTube and the podcasts' own sites · Show". Opened, each row links out.
 struct MediaFold: View {
   let media: [ArticleItem]
+  var openURL: (URL) -> Void
   @State private var isOpen = false
-  @Environment(\.openURL) var openURL
 
   /// "2 videos, 1 podcast episode".
   var title: String {

@@ -17,6 +17,7 @@ import SwiftData
   private var corpusMean: [Float]?
   private var dimension = 0
   private var kind: OnDeviceVectorEngine.Kind = .none
+  private var didSanitizeOnLaunch = false
 
   /// Articles older than this are let go.
   static let retention: TimeInterval = 72 * 3600
@@ -50,7 +51,18 @@ import SwiftData
   }
 
   func syncIfNeeded() async {
-    if let lastSync, Date.now.timeIntervalSince(lastSync) < Self.refreshInterval { return }
+    if let lastSync, Date.now.timeIntervalSince(lastSync) < Self.refreshInterval {
+      // No sync due: regroup the stored stories once per launch, so a new grouping rule reaches
+      // them. A sync regroups anyway, so launches that sync skip this extra pass.
+      if !didSanitizeOnLaunch {
+        didSanitizeOnLaunch = true
+        await recluster()
+        applyTopics()
+        try? context.save()
+      }
+      return
+    }
+    didSanitizeOnLaunch = true
     await sync()
   }
 
@@ -149,7 +161,6 @@ import SwiftData
     return feed.articles
   }
 
-
   /// Inserts the articles not stored yet and returns them; updates the ones that changed (a
   /// picture found later, a corrected headline), and reads changed text again.
   @discardableResult
@@ -169,8 +180,6 @@ import SwiftData
     return added
   }
 
-
-
   /// Tags the new articles' regions (a word list). Only new ones: tagging all of them each sync
   /// held the main actor up for too long. A word-list fix applies as articles come in.
   func tagRegions(_ articles: [ArticleItem]) {
@@ -179,7 +188,6 @@ import SwiftData
         .map(\.rawValue).sorted().joined(separator: ",")
     }
   }
-
 
   func prune() {
     let cutoff = Date.now.addingTimeInterval(-Self.retention)
@@ -229,13 +237,31 @@ import SwiftData
   // MARK: Stories
 
   /// Regroups every article and keeps each story's identity (and its cached brief) where most
-  /// of its articles stay together.
+  /// of its articles stay together. Also runs `StoryClusterSanitizer` so articles that only share
+  /// a country/demonym (e.g. "Japan" / "Japanese") are never merged into the same story.
   func recluster() async {
     let articles = (try? context.fetch(FetchDescriptor<ArticleItem>(sortBy: [SortDescriptor(\.publishedAt)]))) ?? []
+    guard !articles.isEmpty else { return }
+
+    if corpusMean == nil {
+      let rawVectors = articles.compactMap { Vec.vector($0.embedding) }
+      if let firstLen = rawVectors.first?.count, firstLen > 0 {
+        dimension = firstLen
+        corpusMean = Vec.mean(rawVectors.filter { $0.count == firstLen })
+      }
+    }
+
     let inputs = articles.map {
       StoryClusterer.Input(text: $0.text, outlet: $0.outlet, publishedAt: $0.publishedAt, vector: centredVector($0.embedding))
     }
-    let groups = await Task.detached(priority: .userInitiated) { StoryClusterer.groups(inputs) }.value
+    let meta = articles.map {
+      StoryClusterSanitizer.ItemMeta(title: $0.title, snippet: $0.snippet, outlet: $0.outlet)
+    }
+
+    let groups = await Task.detached(priority: .userInitiated) {
+      let rawGroups = StoryClusterer.groups(inputs)
+      return StoryClusterSanitizer.sanitize(groups: rawGroups, meta: meta)
+    }.value
 
     var kept = Set<UUID>()
     for group in groups.sorted(by: { $0.count > $1.count }) {
@@ -419,7 +445,154 @@ import SwiftData
       || ((typedAnywhere || nameAnywhere) && score > meaningWithWordThreshold)
       || meaningAloneThreshold.map { score > $0 } == true
   }
+}
 
+/// Validates every multi-article cluster returned by `StoryClusterer` and splits apart articles
+/// that were only grouped because they share a country/demonym (e.g. "Japan" / "Japanese") or
+/// transitive single-linkage chaining.
+enum StoryClusterSanitizer {
+  struct ItemMeta: Sendable {
+    let title: String
+    let snippet: String
+    let outlet: String
+  }
+
+  /// Broad countries, regions, cities, nationalities, and demonyms that must NEVER count as the
+  /// shared event anchor between two news stories.
+  nonisolated private static let geoAndDemonyms: Set<String> = [
+    "japan", "japanese", "tokyo", "china", "chinese", "beijing", "shanghai", "hong", "kong",
+    "taiwan", "taiwanese", "korea", "korean", "seoul", "india", "indian", "delhi", "mumbai",
+    "asia", "asian", "uk", "britain", "british", "england", "english", "scotland", "scottish",
+    "london", "us", "usa", "america", "american", "americans", "washington", "york", "california",
+    "russia", "russian", "russians", "moscow", "ukraine", "ukrainian", "kyiv", "eu", "europe",
+    "european", "germany", "german", "berlin", "france", "french", "paris", "italy", "italian",
+    "spain", "spanish", "norway", "norwegian", "oslo", "sweden", "swedish", "denmark", "danish",
+    "nordic", "israel", "israeli", "gaza", "palestinian", "iran", "iranian", "tehran", "middle",
+    "east", "australia", "australian", "sydney", "canada", "canadian", "brazil", "brazilian",
+    "mexico", "mexican", "africa", "african", "world", "global", "international", "country", "countries"
+  ]
+
+  /// Common news stopwords and generic verbs/adjectives that don't identify a specific news event.
+  nonisolated private static let stopwords: Set<String> = [
+    "the", "and", "for", "that", "this", "with", "from", "your", "have", "more", "what",
+    "when", "where", "why", "how", "who", "will", "would", "could", "should", "into", "over",
+    "after", "before", "about", "amid", "says", "said", "new", "latest", "report", "reports",
+    "news", "story", "stories", "year", "years", "time", "life", "work", "working", "people",
+    "young", "first", "look", "gets", "make", "made", "take", "takes", "back", "down", "just",
+    "like", "still", "even", "most", "some", "many", "much", "very", "real", "good", "best",
+    "review", "guide", "week", "today", "month", "days", "daily", "here", "there", "their",
+    "they", "them", "were", "been", "being", "also", "only", "other", "others", "between",
+    "under", "while", "through", "against", "during", "without", "within", "along", "following",
+    "across", "behind", "beyond", "plus", "except", "but", "not", "really", "seem", "seems",
+    "show", "shows", "sign", "signs", "line", "test", "tested", "recently", "create", "creates"
+  ]
+
+  nonisolated static func sanitize(groups: [[Int]], meta: [ItemMeta]) -> [[Int]] {
+    let features = meta.map { item -> (headline: Set<String>, all: Set<String>) in
+      let h = specificTokens(from: item.title)
+      let s = specificTokens(from: item.snippet)
+      return (h, h.union(s))
+    }
+
+    var cleanGroups: [[Int]] = []
+
+    for group in groups {
+      guard group.count > 1 else {
+        cleanGroups.append(group)
+        continue
+      }
+
+      // Break transitive chains by partitioning `group` into sub-clusters where every member
+      // genuinely shares specific non-geographic event tokens with the sub-cluster's seed article.
+      var remaining = group
+      while !remaining.isEmpty {
+        let seed = remaining.removeFirst()
+        var subcluster = [seed]
+        var nextRemaining: [Int] = []
+
+        let seedHeadline = features[seed].headline
+        let seedAll = features[seed].all
+
+        for candidate in remaining {
+          let candHeadline = features[candidate].headline
+          let candAll = features[candidate].all
+
+          if isSameEvent(
+            seedHeadline: seedHeadline,
+            seedAll: seedAll,
+            candHeadline: candHeadline,
+            candAll: candAll
+          ) {
+            subcluster.append(candidate)
+          } else {
+            nextRemaining.append(candidate)
+          }
+        }
+
+        cleanGroups.append(subcluster)
+        remaining = nextRemaining
+      }
+    }
+
+    return cleanGroups
+  }
+
+  /// Two articles already passed `StoryClusterer`'s vector threshold; this gate verifies they
+  /// actually share the same specific subject/event (excluding countries/demonyms).
+  nonisolated private static func isSameEvent(
+    seedHeadline: Set<String>,
+    seedAll: Set<String>,
+    candHeadline: Set<String>,
+    candAll: Set<String>
+  ) -> Bool {
+    let sharedHeadline = seedHeadline.intersection(candHeadline)
+    let sharedAll = seedAll.intersection(candAll)
+
+    // Rule 1: At least 2 specific (non-geo, non-stopword) words shared directly in the headlines
+    if sharedHeadline.count >= 2 {
+      return true
+    }
+
+    // Rule 2: 1 specific word shared in the headlines PLUS at least 2 more specific words shared
+    // across the headline + snippet (total >= 3 specific non-geo tokens in common).
+    if sharedHeadline.count == 1 && sharedAll.count >= 3 {
+      return true
+    }
+
+    // Rule 3: Even if headlines are worded differently, if the title+snippet share at least 4
+    // distinct, specific non-geographic words, allow it.
+    if sharedAll.count >= 4 {
+      return true
+    }
+
+    return false
+  }
+
+  nonisolated private static func specificTokens(from text: String) -> Set<String> {
+    let raw = text.lowercased()
+      .components(separatedBy: CharacterSet.alphanumerics.inverted)
+      .filter { $0.count >= 3 }
+
+    var tokens = Set<String>()
+    for word in raw {
+      // Allow 3-letter acronyms/numbers (like "nhk", "gdp", "ps5", "gta"), otherwise require >= 4 chars
+      let hasDigit = word.contains(where: \.isNumber)
+      if word.count < 4 && !hasDigit { continue }
+      guard !stopwords.contains(word),
+            !geoAndDemonyms.contains(word) else { continue }
+      tokens.insert(stem(word))
+    }
+    return tokens
+  }
+
+  nonisolated private static func stem(_ word: String) -> String {
+    if word.hasSuffix("ies") && word.count > 5 { return String(word.dropLast(3)) + "y" }
+    if word.hasSuffix("ing") && word.count > 6 { return String(word.dropLast(3)) }
+    if word.hasSuffix("ed") && word.count > 5 { return String(word.dropLast(2)) }
+    if word.hasSuffix("es") && word.count > 5 { return String(word.dropLast(2)) }
+    if word.hasSuffix("s") && !word.hasSuffix("ss") && word.count > 4 { return String(word.dropLast(1)) }
+    return word
+  }
 }
 
 /// The steps of a sync, as the loading board shows them.

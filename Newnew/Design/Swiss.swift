@@ -14,22 +14,22 @@ import UIKit
 // - Every size is a text style or @ScaledMetric, so it follows the system text size.
 
 enum Swiss {
-  static let canvas = Color.adaptive(light: 0xFAFAFA, dark: 0x000000)
-  static let tile = Color.adaptive(light: 0xF1F1F1, dark: 0x1A1A1A)
-  static let tileQuiet = Color.adaptive(light: 0xE8E8E8, dark: 0x2A2A2A)
-  static let card = Color.adaptive(light: 0xFFFFFF, dark: 0x161616)
-  static let ink = Color.adaptive(light: 0x000000, dark: 0xF5F5F5)
+  nonisolated static let canvas = Color.adaptive(light: 0xFAFAFA, dark: 0x000000)
+  nonisolated static let tile = Color.adaptive(light: 0xF1F1F1, dark: 0x1A1A1A)
+  nonisolated static let tileQuiet = Color.adaptive(light: 0xE8E8E8, dark: 0x2A2A2A)
+  nonisolated static let card = Color.adaptive(light: 0xFFFFFF, dark: 0x161616)
+  nonisolated static let ink = Color.adaptive(light: 0x000000, dark: 0xF5F5F5)
   /// Text on an ink tile.
-  static let onInk = Color.adaptive(light: 0xFFFFFF, dark: 0x000000)
-  static let muted = Color.adaptive(light: 0x828282, dark: 0x8E8E8E)
+  nonisolated static let onInk = Color.adaptive(light: 0xFFFFFF, dark: 0x000000)
+  nonisolated static let muted = Color.adaptive(light: 0x828282, dark: 0x8E8E8E)
 
   /// Attention: developing stories, new sources since you read one. Black text.
-  static let signal = Color(rgb: 0xBAECB7)
+  nonisolated static let signal = Color(rgb: 0xBAECB7)
   /// Act now: breaking.
-  static let alert = Color(rgb: 0xFF4D3A)
+  nonisolated static let alert = Color(rgb: 0xFF4D3A)
   /// Small marks, as Atelier's stage dots.
-  static let mint = Color(rgb: 0x7FD6B0)
-  static let orange = Color(rgb: 0xF4A86B)
+  nonisolated static let mint = Color(rgb: 0x7FD6B0)
+  nonisolated static let orange = Color(rgb: 0xF4A86B)
 
   /// Figures: SF Mono at regular weight. `size` is already scaled for Dynamic Type.
   static func figure(_ size: CGFloat) -> Font { .system(size: size.rounded(), weight: .regular, design: .monospaced) }
@@ -49,19 +49,26 @@ enum Swiss {
 }
 
 extension Color {
-  init(rgb: UInt32) {
+  nonisolated init(rgb: UInt32) {
     self.init(
       .sRGB, red: Double((rgb >> 16) & 0xFF) / 255, green: Double((rgb >> 8) & 0xFF) / 255,
       blue: Double(rgb & 0xFF) / 255)
   }
 
-  static func adaptive(light: UInt32, dark: UInt32) -> Color {
-    Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(rgb: dark) : UIColor(rgb: light) })
+  /// Marked `nonisolated` so SwiftUI's off-main `com.apple.SwiftUI.AsyncRenderer` thread can
+  /// resolve light/dark dynamic colors during animations without triggering a Swift 6
+  /// `_dispatch_assert_queue_fail` main-actor trap.
+  nonisolated static func adaptive(light: UInt32, dark: UInt32) -> Color {
+    let lightColor = UIColor(rgb: light)
+    let darkColor = UIColor(rgb: dark)
+    return Color(uiColor: UIColor { traits in
+      traits.userInterfaceStyle == .dark ? darkColor : lightColor
+    })
   }
 }
 
 extension UIColor {
-  convenience init(rgb: UInt32) {
+  nonisolated convenience init(rgb: UInt32) {
     self.init(
       red: CGFloat((rgb >> 16) & 0xFF) / 255, green: CGFloat((rgb >> 8) & 0xFF) / 255,
       blue: CGFloat(rgb & 0xFF) / 255, alpha: 1)
@@ -286,7 +293,7 @@ extension ButtonStyle where Self == SwissButtonStyle {
 /// Switches in ink, reversed in dark mode like the ink pills: on is an ink track with a knob
 /// in the page colour, so the knob never melts into a white track. Off is a quiet grey track.
 struct SwissToggleStyle: ToggleStyle {
-  static let offKnob = Color.adaptive(light: 0xFFFFFF, dark: 0x8E8E8E)
+  nonisolated static let offKnob = Color.adaptive(light: 0xFFFFFF, dark: 0x8E8E8E)
 
   func makeBody(configuration: Configuration) -> some View {
     Button { configuration.isOn.toggle() } label: {
@@ -351,7 +358,8 @@ struct FlowLayout: Layout {
     var rows: [Row] = [Row()]
     for (index, subview) in subviews.enumerated() {
       let size = subview.sizeThatFits(.unspecified)
-      if rows[rows.count - 1].width + size.width > maxWidth, !rows[rows.count - 1].indices.isEmpty {
+      // The gap before it counts too, or the last item on a full line sticks out by one gap.
+      if rows[rows.count - 1].width + spacing + size.width > maxWidth, !rows[rows.count - 1].indices.isEmpty {
         rows.append(Row())
       }
       let gap = rows[rows.count - 1].indices.isEmpty ? 0 : spacing

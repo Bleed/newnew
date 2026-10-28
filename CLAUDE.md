@@ -34,7 +34,10 @@ Scripts/release.sh --upload   # the same, then upload to App Store Connect › T
 
 Signs with the Apple Account in Xcode (team W533Y4V578, Mutiny AS). App Store Connect app:
 "newnew: News, Grouped" (the name "newnew" was taken; the home-screen name is still newnew),
-bundle ID com.svein.newnew, SKU newnew-ios. Build numbers are set at export. Internal TestFlight
+bundle ID com.svein.newnew, SKU newnew-ios. The build number lives in `project.yml`
+(`CURRENT_PROJECT_VERSION`); `Newnew.xcodeproj` is generated and git-ignored, so a build number
+or setting changed in Xcode is lost at the next `xcodegen generate` (which `release.sh` runs).
+Builds 27 and 28 were archived from Xcode on 2026-10-25; bump past 28. Internal TestFlight
 group "Team" gets every upload automatically. The icon must stay opaque (no alpha channel).
 
 ## Layout

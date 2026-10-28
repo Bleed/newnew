@@ -37,16 +37,63 @@ import UserNotifications
   static let cloudKitContainer: String? = (Bundle.main.object(forInfoDictionaryKey: "NewnewCloudKitContainer") as? String)
     .flatMap { $0.isEmpty ? nil : $0 }
 
+  /// Whether `CKContainer(identifier:)` is safe to touch: it throws an uncaught Objective-C
+  /// exception (`SIGABRT`) in a binary signed without the iCloud entitlement. Never in the
+  /// Simulator. On a device, a development or ad hoc build carries its provisioning profile, so
+  /// that is checked for the container; TestFlight and App Store installs have the profile
+  /// stripped and are always signed with the entitlement, so a missing profile means yes.
+  /// (Not `ubiquityIdentityToken`: that needs iCloud Drive, which public-database pushes don't.)
+  private static let isCloudKitAvailable: Bool = {
+    guard let container = cloudKitContainer else { return false }
+    #if targetEnvironment(simulator)
+      return false
+    #else
+      guard let profileURL = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") else {
+        return true
+      }
+      guard let data = try? Data(contentsOf: profileURL), let content = String(data: data, encoding: .isoLatin1) else {
+        return false
+      }
+      return content.contains("com.apple.developer.icloud-container-identifiers") && content.contains(container)
+    #endif
+  }()
+
   // MARK: Permission and settings
 
   /// Asks for permission the first time an alert is switched on.
+  /// Runs the callback off `@MainActor` so `UNUserNotificationCenter`'s background XPC queue
+  /// never triggers a Swift 6 `_dispatch_assert_queue_fail` crash.
   static func requestPermission() async -> Bool {
-    (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+    await requestNotificationPermissionOffMainActor()
+  }
+
+  nonisolated private static func requestNotificationPermissionOffMainActor() async -> Bool {
+    await withCheckedContinuation { continuation in
+      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+        continuation.resume(returning: granted)
+      }
+    }
+  }
+
+  nonisolated private static func isAuthorizedOffMainActor() async -> Bool {
+    await withCheckedContinuation { continuation in
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
+        continuation.resume(returning: settings.authorizationStatus == .authorized)
+      }
+    }
+  }
+
+  nonisolated private static func addNotificationOffMainActor(_ request: UNNotificationRequest) async {
+    await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+      UNUserNotificationCenter.current().add(request) { _ in
+        continuation.resume()
+      }
+    }
   }
 
   /// Keeps the CloudKit subscription in step with the Breaking setting.
   static func updateSubscriptions() async {
-    guard let cloudKitContainer else { return }
+    guard let cloudKitContainer, isCloudKitAvailable else { return }
     let database = CKContainer(identifier: cloudKitContainer).publicCloudDatabase
     if breakingOn {
       UIApplication.shared.registerForRemoteNotifications()
@@ -73,7 +120,10 @@ import UserNotifications
   // MARK: Background refresh
 
   static func scheduleRefresh() {
-    guard breakingOn || followingOn else { return }
+    guard breakingOn || followingOn else {
+      BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: refreshTaskID)
+      return
+    }
     let request = BGAppRefreshTaskRequest(identifier: refreshTaskID)
     request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
     try? BGTaskScheduler.shared.submit(request)
@@ -102,7 +152,7 @@ import UserNotifications
 
     var candidates: [(cluster: StoryCluster, title: String)] = []
     // Breaking from the device itself only while push isn't set up.
-    if breakingOn, cloudKitContainer == nil {
+    if breakingOn, !isCloudKitAvailable {
       for cluster in clusters where isBreaking(cluster) { candidates.append((cluster, "Breaking")) }
     }
     if followingOn {
@@ -111,7 +161,7 @@ import UserNotifications
       }
     }
 
-    let authorized = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus == .authorized
+    let authorized = await isAuthorizedOffMainActor()
     var posted = 0
     for (cluster, title) in candidates.sorted(by: { $0.cluster.outlets.count > $1.cluster.outlets.count }) {
       let key = cluster.id.uuidString
@@ -125,7 +175,8 @@ import UserNotifications
       content.sound = .default
       content.threadIdentifier = title == "Breaking" ? "breaking" : "following"
       content.userInfo = ["story": key]
-      try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: key, content: content, trigger: nil))
+      let req = UNNotificationRequest(identifier: key, content: content, trigger: nil)
+      await addNotificationOffMainActor(req)
       posted += 1
       sent.append(Date.now.timeIntervalSince1970)
     }

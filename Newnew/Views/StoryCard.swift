@@ -7,6 +7,7 @@ struct StoryCard: View {
 
   var body: some View {
     if let lead = cluster.lead {
+      let extract = lead.shortSnippet
       VStack(alignment: .leading, spacing: 12) {
         picture(lead)
         HStack(alignment: .center, spacing: 8) {
@@ -20,10 +21,12 @@ struct StoryCard: View {
           .foregroundStyle(isSettled ? Swiss.muted : Swiss.ink)
           .multilineTextAlignment(.leading)
           .fixedSize(horizontal: false, vertical: true)
-        Text(lead.snippet)
-          .font(.subheadline)
-          .foregroundStyle(Swiss.muted)
-          .lineLimit(2)
+        if !extract.isEmpty {
+          Text(extract)
+            .font(.subheadline)
+            .foregroundStyle(Swiss.muted)
+            .lineLimit(2)
+        }
         OutletPills(outlets: cluster.outlets)
         MediaPills(episode: cluster.episode, video: cluster.video)
       }
@@ -37,18 +40,18 @@ struct StoryCard: View {
     }
   }
 
-  /// Fashion is shot upright: 4:5, cropped from the top. A piece with several pictures is a
-  /// gallery to swipe through.
+  /// Single social-preview image (`og:image` / RSS enclosure) linking to the lead article.
   @ViewBuilder func picture(_ lead: ArticleItem) -> some View {
     let portrait = cluster.pillar.isPortrait
     let aspect: CGFloat = portrait ? 4 / 5 : 5 / 4
-    if lead.galleryURLs.count > 1 {
-      GalleryImage(urls: lead.galleryURLs, article: lead.url, aspect: aspect, topAligned: portrait)
-    } else {
-      HeroImage(
-        remote: lead.imageURL, article: lead.url, aspect: aspect, fits: lead.isChart, isVideo: lead.videoID != nil,
-        topAligned: portrait)
-    }
+    HeroImage(
+      remote: lead.imageURL,
+      article: lead.url,
+      aspect: aspect,
+      fits: lead.isChart,
+      isVideo: lead.videoID != nil,
+      topAligned: portrait
+    )
   }
 
   /// Two or more outlets in the last half hour. Kept rare, so it means something.
@@ -57,7 +60,10 @@ struct StoryCard: View {
   }
 
   /// Read, and nothing new since.
-  var isSettled: Bool { cluster.readAt != nil && cluster.newSinceRead == 0 }
+  var isSettled: Bool {
+    if case .settledRead = ReadLedger.status(for: cluster) { return true }
+    return false
+  }
 
   func meta(_ lead: ArticleItem) -> some View {
     HStack(spacing: 6) {
@@ -74,9 +80,11 @@ struct StoryCard: View {
   }
 
   @ViewBuilder var signal: some View {
-    if cluster.newSinceRead > 0 {
+    if case .updated(let count, _) = ReadLedger.status(for: cluster) {
+      SignalBadge(.attention, "\(count) new")
+    } else if cluster.newSinceRead > 0 {
       SignalBadge(.attention, "\(cluster.newSinceRead) new")
-    } else if cluster.readAt == nil, isDeveloping {
+    } else if case .unread = ReadLedger.status(for: cluster), isDeveloping {
       SignalBadge(.attention, "Developing")
     }
   }
@@ -100,6 +108,11 @@ struct OutletPills: View {
 struct BriefRow: View {
   let cluster: StoryCluster
 
+  private var isSettled: Bool {
+    if case .settledRead = ReadLedger.status(for: cluster) { return true }
+    return false
+  }
+
   var body: some View {
     if let lead = cluster.lead {
       HStack(alignment: .top, spacing: 12) {
@@ -112,7 +125,7 @@ struct BriefRow: View {
           .lineLimit(1)
           Text(lead.title)
             .font(Swiss.headline(20, relativeTo: .body))
-            .foregroundStyle(cluster.readAt == nil ? Swiss.ink : Swiss.muted)
+            .foregroundStyle(isSettled ? Swiss.muted : Swiss.ink)
             .multilineTextAlignment(.leading)
             .fixedSize(horizontal: false, vertical: true)
           MediaPills(episode: cluster.episode, video: nil)

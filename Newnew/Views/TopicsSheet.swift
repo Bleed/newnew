@@ -1,8 +1,8 @@
 import SwiftData
 import SwiftUI
 
-/// Topics you follow (raised to the top of the feed) and topics you mute (hidden). Each is
-/// matched by idea, not just by its words.
+/// Topics you follow (raised to the top of the feed) and topics you mute (hidden), plus
+/// feed time-window, alert settings, and publisher/privacy disclosures.
 struct TopicsSheet: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Environment(\.dismiss) var dismiss
@@ -69,6 +69,8 @@ struct TopicsSheet: View {
             }
           }
 
+          FeedWindowSettings().padding(.top, 10)
+
           AlertSettings().padding(.top, 10)
 
           Text(explanation)
@@ -76,6 +78,8 @@ struct TopicsSheet: View {
             .foregroundStyle(Swiss.muted)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, 8)
+
+          LegalFooterSection().padding(.top, 12)
         }
         .padding(.horizontal, Swiss.pageInset)
         .padding(.bottom, 32)
@@ -175,6 +179,55 @@ struct TopicRow: View {
   }
 }
 
+/// Edition window setting: how far back news is served in the feed (12h, 24h default, 48h, or 72h).
+struct FeedWindowSettings: View {
+  @AppStorage("newsWindowHours") private var newsWindowHours: Int = NewsWindow.h24.rawValue
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Eyebrow("Edition window")
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text("News time span").font(.body.weight(.medium))
+          Text("How far back stories are shown in Today. Weekly charts stay for two weeks.")
+            .font(.footnote)
+            .tileSecondary()
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        HStack(spacing: 8) {
+          ForEach(NewsWindow.allCases) { option in
+            let isSelected = newsWindowHours == option.rawValue
+            Button {
+              withAnimation(.snappy(duration: 0.2)) {
+                newsWindowHours = option.rawValue
+              }
+            } label: {
+              Text(option.shortLabel)
+                .font(.callout.weight(.medium))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .foregroundStyle(Swiss.ink)
+                .background(isSelected ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
+                .overlay {
+                  if isSelected {
+                    Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5)
+                  }
+                }
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(option.menuLabel)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+          }
+        }
+      }
+      .padding(14)
+      .tile(.plain, radius: 16)
+    }
+  }
+}
+
 /// Alerts: breaking news and new stories on followed topics. Both off until switched on; the
 /// first one switched on asks for permission.
 struct AlertSettings: View {
@@ -219,5 +272,45 @@ struct AlertSettings: View {
     denied = false
     Alerts.scheduleRefresh()
     await Alerts.updateSubscriptions()
+  }
+}
+
+/// Publisher attribution, on-device privacy disclosure, and RSS opt-out notice.
+struct LegalFooterSection: View {
+  @Environment(\.openURL) private var openURL
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Eyebrow("Publishers & privacy")
+      VStack(alignment: .leading, spacing: 8) {
+        Text("newnew indexes public RSS feeds, displays headlines and very short extracts (EU DSM Directive Art. 15), and links directly to each publisher's website. All headlines, preview images, and trademarks belong to their respective publishers.")
+          .font(.caption)
+          .tileSecondary()
+          .fixedSize(horizontal: false, vertical: true)
+
+        Text("Your followed topics, muted topics, reading history, and Apple Intelligence summaries are computed locally on this iPhone and never leave your device.")
+          .font(.caption)
+          .tileSecondary()
+          .fixedSize(horizontal: false, vertical: true)
+
+        Button {
+          if let url = URL(string: "mailto:publishers@newnew.news?subject=Publisher%20RSS%20Inquiry") {
+            openURL(url)
+          }
+        } label: {
+          HStack(spacing: 4) {
+            Text("Publisher inquiry or feed opt-out")
+            Image(systemName: "arrow.up.right")
+          }
+          .font(.caption.weight(.medium))
+          .foregroundStyle(Swiss.ink)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 2)
+      }
+      .padding(14)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .tile(.plain, radius: 16)
+    }
   }
 }

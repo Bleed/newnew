@@ -40,7 +40,7 @@ struct RebusLine: View {
           .animation(.spring(response: 0.38, dampingFraction: 0.78).delay((delay ?? 0) + Double(index) * 0.06), value: shown)
       }
     }
-    .afterLaunch { shown = true }
+    .onAppear { shown = true }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel(tokens.map(\.spoken).joined(separator: " "))
   }
@@ -156,6 +156,8 @@ struct OneSentenceTop: View {
   @ScaledMetric var figureSize: CGFloat
   @State private var messageIndex = 0
   @State private var figureShown = false
+  /// Locks the header height to the tallest layout seen so far so the feed below never jumps up and down.
+  @State private var maxTopHeight: CGFloat = 0
   @Environment(\.accessibilityReduceMotion) var reduceMotion
 
   init(
@@ -190,24 +192,41 @@ struct OneSentenceTop: View {
         .opacity(figureShown ? 1 : 0)
         .offset(y: figureShown || reduceMotion ? 0 : figureSize * 0.3)
         .animation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.5), value: figureShown)
-        .afterLaunch { figureShown = true }
+        .onAppear { figureShown = true }
       RebusLine(tokens: detail, size: size, delay: 0.9)
-      if let message = messages.isEmpty ? nil : messages[messageIndex % messages.count] {
-        Group {
-          // Only messages that open something are buttons; the rest are plain words.
-          if let action = message.action {
-            Button(action: action) { RebusLine(tokens: message.tokens, size: size, delay: 1.3) }
-              .buttonStyle(.plain)
-          } else {
-            RebusLine(tokens: message.tokens, size: size, delay: 1.3)
+      if !messages.isEmpty {
+        let message = messages[messageIndex % messages.count]
+        ZStack(alignment: .topLeading) {
+          // Invisible sizing struts for all messages so rotating between 1-line and 2-line messages never changes height.
+          ForEach(messages) { candidate in
+            RebusLine(tokens: candidate.tokens, size: size, delay: nil)
+              .hidden()
+              .accessibilityHidden(true)
           }
+
+          Group {
+            // Only messages that open something are buttons; the rest are plain words.
+            if let action = message.action {
+              Button(action: action) { RebusLine(tokens: message.tokens, size: size, delay: 1.3) }
+                .buttonStyle(.plain)
+            } else {
+              RebusLine(tokens: message.tokens, size: size, delay: 1.3)
+            }
+          }
+          .id(message.id)
+          .transition(
+            reduceMotion ? .opacity
+              : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .move(edge: .top).combined(with: .opacity)))
         }
-        .id(message.id)
-        .transition(
-          reduceMotion ? .opacity
-            : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .move(edge: .top).combined(with: .opacity)))
+        .clipped()
       }
     }
+    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { newHeight in
+      if newHeight > maxTopHeight {
+        maxTopHeight = newHeight
+      }
+    }
+    .frame(minHeight: maxTopHeight, alignment: .topLeading)
     .clipped()
     .animation(.easeInOut(duration: 0.35), value: messageIndex)
     // Several messages take turns in the last line.
@@ -271,7 +290,7 @@ private struct EntranceModifier: ViewModifier {
       .animation(
         (quick ? Animation.spring(response: 0.22, dampingFraction: 0.9) : .spring(response: 0.45, dampingFraction: 0.85))
           .delay(min(delay, 1.6)), value: shown)
-      .afterLaunch { shown = true }
+      .onAppear { shown = true }
   }
 }
 
@@ -304,8 +323,8 @@ struct BoardRollText: View {
     TimelineView(.animation(paused: start == nil)) { context in
       Text(shown(at: context.date))
     }
-    .afterLaunch {
-      guard !reduceMotion else { return }
+    .onAppear {
+      guard !reduceMotion, start == nil else { return }
       start = Date().addingTimeInterval(delay)
     }
     .task(id: start) {
@@ -350,7 +369,7 @@ struct OverlayEntrance: ViewModifier {
 }
 
 extension AnyTransition {
-  /// The deal sheet leaves with a quick slide and fade; it comes in with `overlayEntrance`.
+  /// The deal sheet leaves with a quick slide and fade; it comes in with `overlaySheet`.
   static var overlaySheet: AnyTransition {
     .asymmetric(insertion: .identity, removal: .offset(x: 24).combined(with: .opacity))
   }
