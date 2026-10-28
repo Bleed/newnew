@@ -1,6 +1,22 @@
 import SwiftData
 import SwiftUI
 
+/// What happens to a story once you've read it (settings pane): it leaves Today, or it stays in
+/// place, greyed out and sunk below what's new.
+enum ReadStories: String, CaseIterable, Identifiable {
+  case disappear, stay
+
+  static let key = "readStories"
+  var id: String { rawValue }
+
+  var label: String {
+    switch self {
+    case .disappear: "Disappear"
+    case .stay: "Stay, greyed out"
+    }
+  }
+}
+
 /// Selectable time window for how far back news is served in the feed.
 enum NewsWindow: Int, CaseIterable, Identifiable {
   case h12 = 12
@@ -159,9 +175,15 @@ struct FeedView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Query(sort: \StoryCluster.updatedAt, order: .reverse) var clusters: [StoryCluster]
   @AppStorage("lastLookedAt") var lastLookedAt: Double = 0
-  /// Always starts `true` so read stories disappear cleanly and trigger the Edition Complete card.
-  /// Temporarily flips to `false` only when you tap "Review read stories" or the "Read" pill.
+  /// Read stories disappear (the default) or stay greyed out; see `ReadStories`.
+  @AppStorage(ReadStories.key) var readStoriesRaw = ReadStories.disappear.rawValue
+  /// With read stories set to disappear: starts `true` so they leave cleanly and trigger the
+  /// Edition Complete card. Temporarily flips to `false` only when you tap "Review read stories"
+  /// or the "Read" pill. Ignored when they stay.
   @State private var hideRead = true
+  var readStoriesDisappear: Bool { ReadStories(rawValue: readStoriesRaw) != .stay }
+  /// Whether read stories are out of the feed right now.
+  var hidingRead: Bool { readStoriesDisappear && hideRead }
   /// How far back news is served (12, 24, 48, or 72 hours), configured in the settings pane. Defaults to 24 hours.
   @AppStorage("newsWindowHours") var newsWindowHours: Int = NewsWindow.h24.rawValue
   @Environment(\.scenePhase) var scenePhase
@@ -200,7 +222,7 @@ struct FeedView: View {
   private var sectionsCacheKey: Int {
     var hasher = Hasher()
     hasher.combine(filterRaw)
-    hasher.combine(hideRead)
+    hasher.combine(hidingRead)
     hasher.combine(newsWindowHours)
     hasher.combine(ReadLedger.shared.revision)
     hasher.combine(clusters.count)
@@ -292,7 +314,7 @@ struct FeedView: View {
                     .contextMenu { menu(cluster) }
                 }
               }
-              if !visible.isEmpty && (hiddenCount > 0 || readHiddenCount > 0 || !hideRead) {
+              if !visible.isEmpty && (hiddenCount > 0 || readHiddenCount > 0 || (readStoriesDisappear && !hideRead)) {
                 VStack(spacing: 8) {
                   if readHiddenCount > 0 {
                     Button("\(readHiddenCount) read \(readHiddenCount == 1 ? "story" : "stories") hidden · Show") {
@@ -300,7 +322,7 @@ struct FeedView: View {
                     }
                     .font(.footnote)
                     .foregroundStyle(Swiss.muted)
-                  } else if !hideRead && settledReadTotal > 0 {
+                  } else if readStoriesDisappear && !hideRead && settledReadTotal > 0 {
                     Button("Showing \(settledReadTotal) read \(settledReadTotal == 1 ? "story" : "stories") · Hide read") {
                       withAnimation(.snappy(duration: 0.2)) { hideRead = true }
                     }
@@ -326,7 +348,9 @@ struct FeedView: View {
                   filterRaw = $0.raw
                 }),
                 hideRead: $hideRead,
-                readCount: settledReadTotal,
+                // The Read pill shows or hides read stories; with them staying there is nothing to toggle.
+                readCount: readStoriesDisappear ? settledReadTotal : 0,
+                showsReadToggle: readStoriesDisappear,
                 topics: followedTopics
               )
               .padding(.vertical, 10)
@@ -400,6 +424,10 @@ struct FeedView: View {
       CatchupImagePreloader.shared.preload(clusters: Array(sections.wide.prefix(8)))
       openRoutedStory()
     }
+    .onChange(of: readStoriesRaw) {
+      hideRead = true
+      recomputeSections()
+    }
     .onChange(of: hideRead) {
       recomputeSections()
     }
@@ -432,7 +460,7 @@ struct FeedView: View {
 
   private func recomputeSections() {
     withAnimation(.snappy(duration: 0.22)) {
-      sections = FeedSections(clusters: clusters, filter: filter, hideRead: hideRead, window: newsWindow)
+      sections = FeedSections(clusters: clusters, filter: filter, hideRead: hidingRead, window: newsWindow)
     }
   }
 
@@ -999,6 +1027,7 @@ struct FilterBar: View {
   @Binding var selection: FeedFilter
   @Binding var hideRead: Bool
   var readCount: Int = 0
+  var showsReadToggle = true
   let topics: [String]
 
   var body: some View {
@@ -1011,7 +1040,7 @@ struct FilterBar: View {
             divider
             ForEach(topics, id: \.self) { topic in pill(.topic(topic)) }
           }
-          if readCount > 0 || !hideRead {
+          if showsReadToggle && (readCount > 0 || !hideRead) {
             divider
             readTogglePill
           }

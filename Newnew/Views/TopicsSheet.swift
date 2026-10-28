@@ -71,6 +71,8 @@ struct TopicsSheet: View {
 
           FeedWindowSettings().padding(.top, 10)
 
+          ReadStoriesSettings().padding(.top, 10)
+
           AlertSettings().padding(.top, 10)
 
           Text(explanation)
@@ -176,6 +178,55 @@ struct TopicRow: View {
     .padding(14)
     .frame(maxWidth: .infinity, alignment: .leading)
     .tile(.plain, radius: 16)
+  }
+}
+
+/// Read stories: they leave Today (default) or stay in place, greyed out.
+struct ReadStoriesSettings: View {
+  @AppStorage(ReadStories.key) private var readStoriesRaw = ReadStories.disappear.rawValue
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Eyebrow("Read stories")
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text("After you've read a story").font(.body.weight(.medium))
+          Text(readStoriesRaw == ReadStories.stay.rawValue
+            ? "It stays where it is, greyed out, and sinks below what's new. New coverage brings it back up."
+            : "It leaves Today until there's new coverage. The Read pill shows them again.")
+            .font(.footnote)
+            .tileSecondary()
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        HStack(spacing: 8) {
+          ForEach(ReadStories.allCases) { option in
+            let isSelected = readStoriesRaw == option.rawValue
+            Button {
+              withAnimation(.snappy(duration: 0.2)) { readStoriesRaw = option.rawValue }
+            } label: {
+              Text(option.label)
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+                .foregroundStyle(Swiss.ink)
+                .background(isSelected ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
+                .overlay {
+                  if isSelected {
+                    Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5)
+                  }
+                }
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(isSelected ? .isSelected : [])
+          }
+        }
+      }
+      .padding(14)
+      .tile(.plain, radius: 16)
+    }
   }
 }
 
