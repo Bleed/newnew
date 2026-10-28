@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Atelier's 5×7 dot-matrix face (from Atelier CRM) for live details: the clock, source counts
 // and the new-stories figure. It flips like an airport board when its value changes.
@@ -101,6 +102,21 @@ struct DotText: View {
   @Environment(\.accessibilityReduceMotion) var reduceMotion
   @State private var from: [Character] = []
   @State private var start: Date?
+  /// The pixel entrance: when it began, nil before and after.
+  @State private var pixelStart: Date?
+  @State private var pixelsDone = false
+  /// The pixel entrance waits for both: the launch board gone, and the text on screen. Lists
+  /// build their rows a little before they scroll in, and the entrance should be seen.
+  @State private var launchClear = false
+  @State private var onScreen = false
+
+  /// Seconds for every dot of a pixel entrance to come on.
+  static let pixelTime = 0.42
+
+  /// Dot-face text that doesn't roll in pixels in instead: its dots come on one by one in a
+  /// scattered order, so the dot face arrives differently from the rest of the page. Not on
+  /// the dot boards (a fixed grid, or a clock of their own).
+  var pixelsIn: Bool { !rollsIn && clock == nil && scales }
 
   init(
     _ text: String, pitch: CGFloat = 1.8, unlit: Double = 0, motion: Motion = .flip, rollsIn: Bool = false, scales: Bool = true,
@@ -130,6 +146,13 @@ struct DotText: View {
     Group {
       if let clock {
         Canvas { ctx, _ in draw(&ctx, glyphs: glyphs, at: clock.now, since: reduceMotion ? nil : clock.start) }
+      } else if let pixelStart {
+        TimelineView(.animation) { context in
+          Canvas { ctx, _ in draw(&ctx, glyphs: glyphs, at: .now, since: nil, pixels: context.date.timeIntervalSince(pixelStart)) }
+        }
+      } else if pixelsIn && !pixelsDone && !reduceMotion {
+        // Dark until the entrance starts (it waits for the launch board to go).
+        Color.clear
       } else if let start {
         // A running timeline only while rolling: un-pausing one in place didn't start it
         // ticking on the Mac.
@@ -145,9 +168,24 @@ struct DotText: View {
       guard motion != .none, !reduceMotion else { return }
       begin(from: DotFont.normalized(old))
     }
+    .onGeometryChange(for: Bool.self) { [screenHeight = Self.screenHeight] proxy in
+      let frame = proxy.frame(in: .global)
+      return frame.height > 0 && frame.maxY > 0 && frame.minY < screenHeight
+    } action: { visible in
+      onScreen = visible
+      startPixels()
+    }
     .afterLaunch {
+      launchClear = true
+      startPixels()
       guard rollsIn, clock == nil, !reduceMotion else { return }
       begin(from: Array(repeating: " ", count: target.count))
+    }
+    .task(id: pixelStart) {
+      guard pixelStart != nil else { return }
+      try? await Task.sleep(for: .seconds(Self.pixelTime + 0.05))
+      pixelsDone = true
+      pixelStart = nil
     }
     .task(id: start) {
       guard start != nil else { return }
@@ -156,6 +194,17 @@ struct DotText: View {
     }
     .accessibilityElement()
     .accessibilityLabel(text)
+  }
+
+  /// The longest side of the screen, for telling whether the text has scrolled into view.
+  static let screenHeight: CGFloat = {
+    let bounds = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen.bounds }.first
+    return bounds.map { max($0.width, $0.height) } ?? 1000
+  }()
+
+  func startPixels() {
+    guard pixelsIn, !pixelsDone, !reduceMotion, pixelStart == nil, launchClear, onScreen else { return }
+    pixelStart = .now
   }
 
   func begin(from old: [Character]) {
@@ -199,7 +248,18 @@ struct DotText: View {
     }
   }
 
-  func draw(_ ctx: inout GraphicsContext, glyphs: [Character], at date: Date, since start: Date?) {
+  /// When one dot of the pixel entrance comes on, 0…1 of `pixelTime`: scattered, stable per
+  /// dot, leaning left to right so the word still reads as it fills.
+  static func pixelDelay(index: Int, row: Int, column: Int, count: Int) -> Double {
+    let hash = (index &* 7919 &+ row &* 104_729 &+ column &* 1_299_709 &+ 17) % 9973
+    let scatter = Double(hash) / 9973
+    let across = count > 1 ? Double(index) / Double(count - 1) : 0
+    return 0.7 * scatter + 0.3 * across
+  }
+
+  func draw(
+    _ ctx: inout GraphicsContext, glyphs: [Character], at date: Date, since start: Date?, pixels: Double? = nil
+  ) {
     let size = dotSize
     let elapsed = start.map { date.timeIntervalSince($0) }
     for (index, character) in glyphs.enumerated() {
@@ -207,7 +267,10 @@ struct DotText: View {
       for row in 0..<7 {
         let shown = elapsed.map { glyph(index, row: row, elapsed: $0, to: character) } ?? character
         for column in 0..<5 {
-          let lit = DotFont.isLit(shown, row: row, column: column)
+          var lit = DotFont.isLit(shown, row: row, column: column)
+          if lit, let pixels {
+            lit = pixels >= Self.pixelDelay(index: index, row: row, column: column, count: glyphs.count) * Self.pixelTime
+          }
           guard lit || unlit > 0 else { continue }
           let rect = CGRect(x: x0 + CGFloat(column) * pitch, y: CGFloat(row) * pitch, width: size, height: size)
           var dot = ctx
