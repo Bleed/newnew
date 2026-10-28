@@ -219,9 +219,10 @@ struct Eyebrow: View {
   }
 }
 
-/// A section heading with something on its right (a badge, an update pill). Side by side when
-/// both fit; otherwise the badge goes under the heading, so a wide badge never squeezes the
-/// heading into a hyphenated column ("Cover- age spec- trum").
+/// A section heading with a pill in the top-right corner (a badge, an update pill). Side by side
+/// when both fit; otherwise the pill keeps the top-right corner on its own line and the heading
+/// goes under it, so a wide pill never squeezes the heading into a hyphenated column
+/// ("Cover- age spec- trum").
 struct EyebrowRow<Trailing: View>: View {
   let title: String
   @ViewBuilder var trailing: Trailing
@@ -239,8 +240,8 @@ struct EyebrowRow<Trailing: View>: View {
         trailing.fixedSize()
       }
       VStack(alignment: .leading, spacing: 8) {
+        trailing.frame(maxWidth: .infinity, alignment: .trailing)
         Eyebrow(title)
-        trailing
       }
     }
   }
