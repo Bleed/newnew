@@ -110,12 +110,19 @@ struct DotText: View {
   @State private var launchClear = false
   @State private var onScreen = false
 
-  /// Seconds for every dot of a pixel entrance to come on.
-  static let pixelTime = 0.42
+  /// The decode entrance: each cell turns on in turn, left to right, scrambles through
+  /// `decodeRounds` random glyphs and locks onto its own.
+  static let decodeStagger = 0.04
+  static let decodeRounds = 2
+  static let decodeRoundTime = 0.07
+  /// Seconds until the last cell has locked.
+  var pixelTime: Double {
+    Double(max(target.count - 1, 0)) * Self.decodeStagger + Double(Self.decodeRounds) * Self.decodeRoundTime
+  }
 
-  /// Dot-face text that doesn't roll in pixels in instead: its dots come on one by one in a
-  /// scattered order, so the dot face arrives differently from the rest of the page. Not on
-  /// the dot boards (a fixed grid, or a clock of their own).
+  /// Dot-face text that doesn't roll in decodes in instead (cells scramble twice and lock, left
+  /// to right), so the dot face arrives differently from the rest of the page. Not on the dot
+  /// boards (a fixed grid, or a clock of their own).
   var pixelsIn: Bool { !rollsIn && clock == nil && scales }
 
   init(
@@ -183,7 +190,7 @@ struct DotText: View {
     }
     .task(id: pixelStart) {
       guard pixelStart != nil else { return }
-      try? await Task.sleep(for: .seconds(Self.pixelTime + 0.05))
+      try? await Task.sleep(for: .seconds(pixelTime + 0.05))
       pixelsDone = true
       pixelStart = nil
     }
@@ -248,13 +255,19 @@ struct DotText: View {
     }
   }
 
-  /// When one dot of the pixel entrance comes on, 0…1 of `pixelTime`: scattered, stable per
-  /// dot, leaning left to right so the word still reads as it fills.
-  static func pixelDelay(index: Int, row: Int, column: Int, count: Int) -> Double {
-    let hash = (index &* 7919 &+ row &* 104_729 &+ column &* 1_299_709 &+ 17) % 9973
-    let scatter = Double(hash) / 9973
-    let across = count > 1 ? Double(index) / Double(count - 1) : 0
-    return 0.7 * scatter + 0.3 * across
+  /// What one cell shows `elapsed` seconds into the decode: nothing before its turn, then
+  /// random glyphs (each round a different one), then its own. Spaces stay blank.
+  func decodeGlyph(_ index: Int, elapsed: Double, to: Character) -> Character {
+    guard to != " " else { return to }
+    let t = elapsed - Double(index) * Self.decodeStagger
+    guard t >= 0 else { return " " }
+    let round = Int(t / Self.decodeRoundTime)
+    guard round < Self.decodeRounds else { return to }
+    let pool = to.isLowercase ? DotFont.xHeight : to.isNumber ? DotFont.digits : DotFont.letters
+    let hash = (index &* 7919 &+ round &* 104_729 &+ 31) % 9973
+    let pick = pool[hash % pool.count]
+    // Never land on the right glyph early.
+    return pick == to ? pool[(hash + 1) % pool.count] : pick
   }
 
   func draw(
@@ -265,12 +278,10 @@ struct DotText: View {
     for (index, character) in glyphs.enumerated() {
       let x0 = CGFloat(index) * pitch * 6
       for row in 0..<7 {
-        let shown = elapsed.map { glyph(index, row: row, elapsed: $0, to: character) } ?? character
+        let shown = pixels.map { decodeGlyph(index, elapsed: $0, to: character) }
+          ?? elapsed.map { glyph(index, row: row, elapsed: $0, to: character) } ?? character
         for column in 0..<5 {
-          var lit = DotFont.isLit(shown, row: row, column: column)
-          if lit, let pixels {
-            lit = pixels >= Self.pixelDelay(index: index, row: row, column: column, count: glyphs.count) * Self.pixelTime
-          }
+          let lit = DotFont.isLit(shown, row: row, column: column)
           guard lit || unlit > 0 else { continue }
           let rect = CGRect(x: x0 + CGFloat(column) * pitch, y: CGFloat(row) * pitch, width: size, height: size)
           var dot = ctx
