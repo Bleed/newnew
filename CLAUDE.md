@@ -220,10 +220,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   other text stays SF.
 - SF Mono for figures, only Light or Regular, never heavier.
 - The 5×7 dot face only inside pills, chips and panels, never loose and never for warnings.
-- Dot-face text that doesn't roll in decodes in (`DotText.pixelsIn`): cells turn on left to
-  right 0.04 s apart, each scrambles through two random glyphs (0.07 s each) and locks, once
-  it is on screen and the launch board has gone (≈0.5 s for "5 SOURCES"). Not on the dot
-  boards.
+- All dot-face text (chips, pills, figures) arrives as a departures board, from Figma
+  "Motion · Today board" (`DotText.pixelsIn`): unlit dots faintly visible (7 %), cells start
+  0.025 s apart left to right, each rolls through random glyphs every 0.06 s for
+  4 + 0.4 × index steps and settles, dot rows rippling 0.012 s apart; once on screen and after
+  the launch board. Later value changes still roll. Not on the loading boards.
 - Signals: mint pill = attention ("Developing", "2 new"), red dot and words = act now. Rare.
 - Quiet 7 % grey pills for outlets; one black pill per screen for the main action.
 - Type scale (design pass 2026-10-28): headlines 34 (story page, reel), 24 (cards, receipt),

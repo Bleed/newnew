@@ -110,20 +110,28 @@ struct DotText: View {
   @State private var launchClear = false
   @State private var onScreen = false
 
-  /// The decode entrance: each cell turns on in turn, left to right, scrambles through
-  /// `decodeRounds` random glyphs and locks onto its own.
-  static let decodeStagger = 0.04
-  static let decodeRounds = 2
-  static let decodeRoundTime = 0.07
-  /// Seconds until the last cell has locked.
+  /// The board entrance, as Figma's "Motion · Today board": a departures board. Cells start
+  /// 0.025 s apart, left to right, each rolls through random glyphs (a new one every 0.06 s)
+  /// and settles; cells further right roll longer, so the word settles left to right. Inside a
+  /// cell the dot rows ripple top to bottom, 0.012 s apart. Unlit dots stay faintly visible.
+  static let decodeStagger = 0.025
+  static let decodeStepTime = 0.06
+  static let decodeRowDelay = 0.012
+  /// Unlit dots on a board, faint (Figma: 7 %).
+  static let boardUnlit = 0.07
+  func decodeSteps(_ index: Int) -> Int { 4 + Int(Double(index) * 0.4) }
+  /// Seconds until the last cell has settled.
   var pixelTime: Double {
-    Double(max(target.count - 1, 0)) * Self.decodeStagger + Double(Self.decodeRounds) * Self.decodeRoundTime
+    let last = max(target.count - 1, 0)
+    return Double(last) * Self.decodeStagger + Double(decodeSteps(last)) * Self.decodeStepTime + 6 * Self.decodeRowDelay
   }
 
-  /// Dot-face text that doesn't roll in decodes in instead (cells scramble twice and lock, left
-  /// to right), so the dot face arrives differently from the rest of the page. Not on the dot
-  /// boards (a fixed grid, or a clock of their own).
-  var pixelsIn: Bool { !rollsIn && clock == nil && scales }
+  /// Dot-face text that doesn't roll in comes in as a departures board (see `decodeStagger`), so
+  /// the dot face arrives differently from the rest of the page. Not on the dot boards (a fixed
+  /// grid, or a clock of their own).
+  /// Everywhere the dot face arrives: chips, pills, figures (`rollsIn` too). Later value changes
+  /// still roll (`motion`).
+  var pixelsIn: Bool { clock == nil && scales }
 
   init(
     _ text: String, pitch: CGFloat = 1.8, unlit: Double = 0, motion: Motion = .flip, rollsIn: Bool = false, scales: Bool = true,
@@ -162,8 +170,8 @@ struct DotText: View {
           Canvas { ctx, _ in draw(&ctx, glyphs: glyphs, at: .now, since: nil, pixels: context.date.timeIntervalSince(pixelStart)) }
         }
       } else if pixelsIn && !pixelsDone && !reduceMotion {
-        // Dark until the entrance starts (it waits for the launch board to go).
-        Color.clear
+        // Only the faint board until the entrance starts (it waits to be on screen).
+        Canvas { ctx, _ in draw(&ctx, glyphs: glyphs, at: .now, since: nil, pixels: -1) }
       } else if let start {
         // A running timeline only while rolling: un-pausing one in place didn't start it
         // ticking on the Mac.
@@ -192,7 +200,7 @@ struct DotText: View {
     .afterLaunch {
       launchClear = true
       startPixels()
-      guard rollsIn, clock == nil, !reduceMotion else { return }
+      guard rollsIn, !pixelsIn, clock == nil, !reduceMotion else { return }
       begin(from: Array(repeating: " ", count: target.count))
     }
     .task(id: pixelStart) {
@@ -265,12 +273,12 @@ struct DotText: View {
 
   /// What one cell shows `elapsed` seconds into the decode: nothing before its turn, then
   /// random glyphs (each round a different one), then its own. Spaces stay blank.
-  func decodeGlyph(_ index: Int, elapsed: Double, to: Character) -> Character {
+  func decodeGlyph(_ index: Int, row: Int, elapsed: Double, to: Character) -> Character {
     guard to != " " else { return to }
-    let t = elapsed - Double(index) * Self.decodeStagger
+    let t = elapsed - Double(index) * Self.decodeStagger - Double(row) * Self.decodeRowDelay
     guard t >= 0 else { return " " }
-    let round = Int(t / Self.decodeRoundTime)
-    guard round < Self.decodeRounds else { return to }
+    let round = Int(t / Self.decodeStepTime)
+    guard round < decodeSteps(index) else { return to }
     let pool = to.isLowercase ? DotFont.xHeight : to.isNumber ? DotFont.digits : DotFont.letters
     let hash = (index &* 7919 &+ round &* 104_729 &+ 31) % 9973
     let pick = pool[hash % pool.count]
@@ -286,14 +294,15 @@ struct DotText: View {
     for (index, character) in glyphs.enumerated() {
       let x0 = CGFloat(index) * pitch * 6
       for row in 0..<7 {
-        let shown = pixels.map { decodeGlyph(index, elapsed: $0, to: character) }
+        let shown = pixels.map { decodeGlyph(index, row: row, elapsed: $0, to: character) }
           ?? elapsed.map { glyph(index, row: row, elapsed: $0, to: character) } ?? character
         for column in 0..<5 {
           let lit = DotFont.isLit(shown, row: row, column: column)
-          guard lit || unlit > 0 else { continue }
+          let faint = pixelsIn ? max(unlit, Self.boardUnlit) : unlit
+          guard lit || faint > 0 else { continue }
           let rect = CGRect(x: x0 + CGFloat(column) * pitch, y: CGFloat(row) * pitch, width: size, height: size)
           var dot = ctx
-          dot.opacity = lit ? 1 : unlit
+          dot.opacity = lit ? 1 : faint
           dot.fill(Path(ellipseIn: rect), with: .foreground)
         }
       }

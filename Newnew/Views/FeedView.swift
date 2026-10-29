@@ -643,12 +643,13 @@ private struct PerforatedRule: View {
 
 /// Interactive horizontal pager that moves the story page left and right with your finger,
 /// while completely ignoring vertical scroll gestures so `StoryDetailView` scrolls at 120Hz.
-/// The end of a run of stories swiped through, as an arcade high-score table in the dot face
-/// (Figma: Screens › "End of run · high score"). Everything counts this run only: the stories
-/// opened in this pager since it opened.
+/// The end of a run of stories swiped through: "END OF RUN" and a table of the run in the dot
+/// face (Figma: Screens › "End of run · high score", since simplified: no score panel, no
+/// ranks). Everything counts this run only: the stories opened in this pager since it opened.
 ///
-/// Entrance: every dot line decodes (two scramble rounds, left to right), then the table rows decode one after another (0.12 s apart) with their leader
-/// dots drawing in, and the footer fades in, its prompt blinking slowly.
+/// Entrance: every dot line comes in as a departures board (`DotText` board entrance), the
+/// table rows one after another (0.12 s apart) with their leader dots drawing in, then the
+/// footer fades in, its prompt blinking slowly.
 struct PagerEndPage: View {
   let viewed: [StoryCluster]
   let startedAt: Date
@@ -672,37 +673,21 @@ struct PagerEndPage: View {
     return word.isEmpty ? "-" : String(word.prefix(8))
   }
   var minutes: Int { max(1, Int(Date.now.timeIntervalSince(startedAt) / 60)) }
-  /// Six digits, like an arcade score.
-  var score: String { String(format: "%06d", min(articles.count, 999_999)) }
 
-  var rows: [(rank: String, name: String, value: String)] {
-    [("1ST", "ARTICLES", "\(articles.count)"), ("2ND", "STORIES", "\(viewed.count)"),
-     ("3RD", "OUTLETS", "\(outlets)"), ("4TH", "TOP SRC", topOutlet), ("5TH", "MINUTES", "\(minutes)")]
+  var rows: [(name: String, value: String)] {
+    [("ARTICLES", "\(articles.count)"), ("STORIES", "\(viewed.count)"), ("OUTLETS", "\(outlets)"),
+     ("TOP SRC", topOutlet), ("MINUTES", "\(minutes)")]
   }
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
-        VStack(alignment: .leading, spacing: 10) {
-          DotText("END OF RUN", pitch: 2.4).foregroundStyle(Swiss.muted)
-          DotText("HI-SCORE", pitch: 6).foregroundStyle(Swiss.ink)
-        }
-        .padding(.top, 28)
-        .padding(.bottom, 10)
-
-        VStack(alignment: .leading, spacing: 10) {
-          DotText("SCORE", pitch: 2).foregroundStyle(Swiss.onInk.opacity(0.6))
-          DotText(score, pitch: 7, unlit: 0.12).foregroundStyle(Swiss.onInk)
-        }
-        .padding(.horizontal, 18)
-        .padding(.top, 16)
-        .padding(.bottom, 18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Swiss.ink, in: RoundedRectangle(cornerRadius: Swiss.tileRadius, style: .continuous))
+        DotText("END OF RUN", pitch: 6).foregroundStyle(Swiss.ink)
+          .padding(.top, 28)
+          .padding(.bottom, 10)
 
         VStack(alignment: .leading, spacing: 14) {
           HStack(spacing: 0) {
-            DotText("RANK", pitch: 1.6).frame(width: 62, alignment: .leading)
             DotText("NAME", pitch: 1.6)
             Spacer(minLength: 8)
             DotText("SCORE", pitch: 1.6)
@@ -710,7 +695,7 @@ struct PagerEndPage: View {
           .foregroundStyle(Swiss.muted)
           ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
             // In place from the start (added later, rows skipped the decode); each waits its turn.
-            ScoreRow(rank: row.rank, name: row.name, value: row.value, delay: 0.5 + Double(index) * 0.12)
+            ScoreRow(name: row.name, value: row.value, delay: 0.3 + Double(index) * 0.12)
           }
         }
         .padding(18)
@@ -739,7 +724,7 @@ struct PagerEndPage: View {
         footerShown = true
         return
       }
-      try? await Task.sleep(for: .seconds(0.5 + Double(rows.count) * 0.12 + 0.4))
+      try? await Task.sleep(for: .seconds(0.3 + Double(rows.count) * 0.12 + 0.4))
       withAnimation(.easeOut(duration: 0.3)) { footerShown = true }
       withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true).delay(0.6)) { blink = true }
     }
@@ -747,9 +732,8 @@ struct PagerEndPage: View {
   }
 }
 
-/// One high-score row: rank, name, leader dots drawing in, the value on the right.
+/// One table row: name, leader dots drawing in, the value on the right.
 private struct ScoreRow: View {
-  let rank: String
   let name: String
   let value: String
   /// When this row's turn comes, after the page has landed.
@@ -758,8 +742,7 @@ private struct ScoreRow: View {
 
   var body: some View {
     HStack(alignment: .center, spacing: 0) {
-      DotText(rank, pitch: 3, decodeDelay: delay).frame(width: 62, alignment: .leading)
-      DotText(name, pitch: 3, decodeDelay: delay + 0.08).fixedSize()
+      DotText(name, pitch: 3, decodeDelay: delay).fixedSize()
       Canvas { context, size in
         var path = Path()
         path.move(to: CGPoint(x: 0, y: size.height / 2))
