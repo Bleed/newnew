@@ -79,6 +79,8 @@ struct TopicsSheet: View {
 
           ReadStoriesSettings().padding(.top, 10)
 
+          BackgroundRefreshSettings().padding(.top, 10)
+
           AlertSettings().padding(.top, 10)
 
           Text(explanation)
@@ -272,6 +274,38 @@ struct ReadStoriesSettings: View {
               withAnimation(.snappy(duration: 0.2)) { readStoriesRaw = option.rawValue }
             }
             .buttonStyle(SelectablePillStyle(isOn: isSelected, fillsWidth: true))
+          }
+        }
+      }
+      .padding(14)
+      .tile(.plain, radius: 16)
+    }
+  }
+}
+
+/// Reading the news while the app is closed: Wi-Fi only (the default), Wi-Fi and mobile, or off.
+struct BackgroundRefreshSettings: View {
+  @AppStorage(BackgroundRefresh.key) private var raw = BackgroundRefresh.wifi.rawValue
+  var setting: BackgroundRefresh { BackgroundRefresh(rawValue: raw) ?? .wifi }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Eyebrow("Background refresh")
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Read the news while closed").font(.body.weight(.medium))
+          Text(setting.detail)
+            .font(.footnote)
+            .tileSecondary()
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        HStack(spacing: 8) {
+          ForEach(BackgroundRefresh.allCases) { option in
+            Button(option.label) {
+              withAnimation(.snappy(duration: 0.2)) { raw = option.rawValue }
+              Alerts.scheduleRefresh()
+            }
+            .buttonStyle(SelectablePillStyle(isOn: setting == option, fillsWidth: true))
           }
         }
       }

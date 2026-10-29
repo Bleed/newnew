@@ -64,6 +64,11 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
   (each chosen on its own); without them a full refresh is a few MB.
 - `FeedParser` (in Outlets.swift) is shared with own feeds (`CustomFeedReader`).
 - `lastSyncAt` (UserDefaults) drives `hasALotToLoad` (nothing stored, or > 3 h since).
+- Background refresh (`BackgroundRefresh`, Settings › Background refresh): Wi-Fi (default),
+  Always, Off. The BGAppRefresh task (`Alerts.refreshTaskID`, every ≥ 30 min, iOS decides) and
+  the sync a breaking push triggers both check `BackgroundRefresh.allowedNow()`: not Off, a
+  network, not Low Data Mode, and not an expensive (mobile/hotspot) path unless Always.
+  Estimate: a few MB a refresh with podcasts off, ~10–40 MB a day on Always.
 
 ## Server job (github-scraper)
 

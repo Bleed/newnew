@@ -166,7 +166,7 @@ import UserNotifications
   // MARK: Background refresh
 
   static func scheduleRefresh() {
-    guard breakingOn || followingOn else {
+    guard BackgroundRefresh.current != .off || breakingOn || followingOn else {
       BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: refreshTaskID)
       return
     }
@@ -175,9 +175,11 @@ import UserNotifications
     try? BGTaskScheduler.shared.submit(request)
   }
 
-  /// iOS woke the app: sync, then alert about what's new.
+  /// iOS woke the app: sync when the setting and the network allow (`BackgroundRefresh`),
+  /// then alert about what's new.
   static func backgroundRefresh(_ pipeline: FeedSyncPipeline) async {
     scheduleRefresh()
+    guard await BackgroundRefresh.allowedNow() else { return }
     await pipeline.sync()
     await notifyNewStories(pipeline, posting: true)
   }
