@@ -154,16 +154,12 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   scrolling); choosing Briefing shows a row of regions, which narrow the news. A topic filter
   shows the stories that topic raised. There is no Local region (removed on request);
   local-news outlets still carry `country` from feeds.json.
-- **Filters on Today**: a sideways swipe moves the top and the stories with the finger and
-  slides to the next or previous filter (same thresholds, timing and spring as
-  `StoryPagerView`; resistance past the ends). The filter bar stays put (sticky) and its pills
-  glide toward the neighbouring pill in step (`FilterBar.progress`; pill centres are measured,
-  and stored only when they change, or the bar redraws itself endlessly). In the bar's order (All, the pillars, followed topics; a region counts as Briefing); swipes that
-  start on the bar scroll its pills. Cards ignore the release of a sideways swipe (`swiping`).
-  Changing filter while the bar is pinned scrolls to `topHeight + 12` a frame later, so the
-  filter starts at its first story (ScrollPosition offsets count from the page top; scrolling
-  to the pinned header itself is a no-op). The pill row is positioned with
-  `scrollPosition(id:)`, so its ForEach ids must be the filters' `raw` strings.
+- **Filters on Today**: changing filter while the bar is pinned scrolls to `topHeight + 12` a
+  frame later, so the filter starts at its first story (ScrollPosition offsets count from the
+  page top; scrolling to the pinned header itself is a no-op). The pill row keeps the chosen
+  pill centred with `scrollPosition(id:)`, so its ForEach ids must be the filters' `raw`
+  strings. A sideways swipe between filters was tried (2026-10-29) and removed: it didn't feel
+  like the story pager, and measuring pill positions for it made the bar redraw endlessly.
 - **Adding a topic** shows at once as a pending row ("Writing example headlines…", "Reading
   the examples…", "Matching today's stories…") while the field's dot chip rolls THINKING →
   LEARNING → MATCHING (`TopicStep`); matching holds the main actor, so the step is drawn first.
