@@ -2,7 +2,7 @@ import Foundation
 import NaturalLanguage
 import SwiftData
 
-/// Fetches the feed, stores new articles, embeds them, regroups the stories and applies the
+/// Reads the chosen outlets' feeds (`FeedFetcher`, on this iPhone), stores new articles, embeds them, regroups the stories and applies the
 /// mute topics. Model changes stay on the main actor; the heavy parts (embedding, clustering)
 /// run off it.
 @MainActor @Observable final class FeedSyncPipeline {
@@ -11,7 +11,11 @@ import SwiftData
   private(set) var isSyncing = false
   /// Where a sync is, for the loading board.
   private(set) var phase: SyncPhase = .idle
-  private(set) var lastSync: Date?
+  /// When the last sync finished; kept across launches, for `hasALotToLoad`.
+  private(set) var lastSync: Date? {
+    get { UserDefaults.standard.object(forKey: "lastSyncAt") as? Date }
+    set { UserDefaults.standard.set(newValue, forKey: "lastSyncAt") }
+  }
   private(set) var lastError: String?
   /// The mean article vector, taken away before comparing (see `Vec.centred`).
   private var corpusMean: [Float]?
@@ -25,9 +29,9 @@ import SwiftData
   static let chartRetention: TimeInterval = 14 * 24 * 3600
   static let refreshInterval: TimeInterval = 15 * 60
 
-  /// The published `latest_news.json` (`NEWNEW_FEED_URL` in project.yml); until it's set the
-  /// bundled sample is used. A `NEWNEW_FEED_URL` environment variable overrides it, for trying a
-  /// local run of the scraper in the Simulator.
+  /// Where newnew's own files are published (`NEWNEW_FEED_URL` in project.yml): its folder holds
+  /// outlets.json, the outlets and their feeds. Unset, the bundled sample news is used. A
+  /// `NEWNEW_FEED_URL` environment variable overrides it.
   static let feedURL: URL? = (ProcessInfo.processInfo.environment["NEWNEW_FEED_URL"]
     ?? Bundle.main.object(forInfoDictionaryKey: "NewnewFeedURL") as? String)
     .flatMap { $0.isEmpty ? nil : URL(string: $0) }
@@ -72,7 +76,9 @@ import SwiftData
     phase = .downloading
     defer { isSyncing = false }
     do {
-      let source = Self.feedURL?.absoluteString ?? "sample"
+      // "phone-1": read from the feeds on this iPhone (builds up to 32 downloaded a feed newnew
+      // published; those articles go once).
+      let source = Self.feedURL == nil ? "sample" : "phone-1"
       let articles = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
       // The sample's links all go to example.com; none of them belong next to real news.
       let hasSample = source != "sample" && articles.contains { $0.url.hasPrefix("https://example.com/") }
@@ -82,16 +88,12 @@ import SwiftData
         for article in articles { context.delete(article) }
         try context.save()
         storedSource = source
-        // Nothing stored: the next download is the whole snapshot.
-        lastChunkID = nil
       }
-      var feed = try await loadFeed()
-      // Only the outlets the reader chose, plus their own feeds (read from this iPhone).
-      let outlets = OutletStore.shared
-      feed.articles = feed.articles.filter { outlets.reads($0.outlet) }
-      for custom in outlets.customFeeds { feed.articles += await CustomFeedReader.articles(custom) }
-      phase = .reading(outlets: Set(feed.articles.map(\.outlet)).count)
-      let added = upsert(feed.articles)
+      var incoming = try await loadArticles()
+      // The reader's own feeds too.
+      for custom in OutletStore.shared.customFeeds { incoming += await CustomFeedReader.articles(custom) }
+      phase = .reading(outlets: Set(incoming.map(\.outlet)).count)
+      let added = upsert(incoming)
       prune()
       tagRegions(added)
       await embedMissing()
@@ -99,8 +101,6 @@ import SwiftData
       await recluster()
       applyTopics()
       try context.save()
-      // Only once everything is stored: a failed sync asks for the same pieces again.
-      if let newest = feed.newestChunk { lastChunkID = newest }
       lastSync = .now
       lastError = nil
       phase = .done(stories: storyCount)
@@ -110,70 +110,44 @@ import SwiftData
     }
   }
 
-  /// The newest feed piece this iPhone has (see github-scraper/scripts/poll_feeds.mjs).
-  var lastChunkID: String? {
-    get { UserDefaults.standard.string(forKey: "feedLastChunk") }
-    set { UserDefaults.standard.set(newValue, forKey: "feedLastChunk") }
-  }
-
-  /// Away longer than this, opening the app is a big catch-up (six or more scraper runs,
-  /// hundreds of articles to read on the device): the full-screen loader stays up with its
+  /// Away longer than this, opening the app is a big catch-up (hundreds of articles to read on
+  /// the device): the full-screen loader stays up with its
   /// progress bar until it's done, instead of the small pull-down band.
   static let bigCatchUp: TimeInterval = 3 * 3600
 
-  /// Whether the next sync has a lot to do: nothing stored yet, or the newest piece this iPhone
-  /// has is older than `bigCatchUp`. Piece IDs are their run's time, 2026-10-24T18-35-58Z.
   /// The loading board finishes on a done (or failed) phase; when it comes back for a catch-up
   /// the last sync's "done" must not end it before the new sync starts.
   func prepareForCatchUp() {
     if !isSyncing { phase = .downloading }
   }
 
+  /// Whether the next sync has a lot to do: nothing stored yet, or the last sync is older than
+  /// `bigCatchUp`.
   var hasALotToLoad: Bool {
-    guard storyCount > 0 else { return true }
-    guard let id = lastChunkID else { return true }
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.timeZone = TimeZone(identifier: "UTC")
-    formatter.dateFormat = "yyyy-MM-dd'T'HH-mm-ss'Z'"
-    guard let date = formatter.date(from: id) else { return false }
-    return Date.now.timeIntervalSince(date) > Self.bigCatchUp
+    guard storyCount > 0, let lastSync else { return true }
+    return Date.now.timeIntervalSince(lastSync) > Self.bigCatchUp
   }
 
-  /// What a sync brings in: articles to add or update, and the newest piece they came from.
-  struct Download {
-    var articles: [FeedArticleDTO]
-    var newestChunk: String?
-  }
-
-  /// With an `index.json` feed, only the pieces newer than the last one this iPhone has (a
-  /// typical refresh: ~2 KB of index and one or two pieces of ~10 KB); the whole snapshot on a
-  /// first launch or after more than two days away. A `latest_news.json` feed is fetched whole.
-  func loadFeed() async throws -> Download {
-    let decoder = JSONDecoder()
-    decoder.dateDecodingStrategy = .iso8601
-    guard let url = Self.feedURL else { return Download(articles: try sampleArticles(decoder), newestChunk: nil) }
-    guard url.lastPathComponent == "index.json" else {
-      let (data, _) = try await URLSession.shared.data(from: url)
-      return Download(articles: try decoder.decode(FeedDTO.self, from: data).articles, newestChunk: nil)
+  /// The chosen outlets' articles, read from their feeds; the bundled sample without a
+  /// `feedURL`.
+  func loadArticles() async throws -> [FeedArticleDTO] {
+    guard Self.feedURL != nil else {
+      let decoder = JSONDecoder()
+      decoder.dateDecodingStrategy = .iso8601
+      return try sampleArticles(decoder)
     }
-    // Asks the server whether the index changed rather than trusting a cached copy, so a pull
-    // right after a scraper run sees it.
-    let request = URLRequest(url: url, cachePolicy: .reloadRevalidatingCacheData)
-    let index = try decoder.decode(FeedIndex.self, from: try await URLSession.shared.data(for: request).0)
-    let newest = index.chunks.last?.id
-    // The pieces up to `last` only ever lose articles to newer pieces, so what's after it is
-    // everything new or changed. Older than the oldest piece: too long away, take it all.
-    if let last = lastChunkID, let oldest = index.chunks.first?.id, last >= oldest {
-      var articles: [FeedArticleDTO] = []
-      for chunk in index.chunks where chunk.id > last {
-        let (data, _) = try await URLSession.shared.data(from: url.deletingLastPathComponent().appending(path: chunk.file))
-        articles += try decoder.decode(FeedChunk.self, from: data).articles
-      }
-      return Download(articles: articles, newestChunk: newest)
+    let feeds = OutletStore.shared.chosenFeeds
+    guard !feeds.isEmpty else { return [] }
+    // HD video thumbnails already checked.
+    let stored = (try? context.fetch(FetchDescriptor<ArticleItem>(predicate: #Predicate { $0.videoID != nil }))) ?? []
+    let pictures = Dictionary(stored.compactMap { a in a.imageURL.map { (a.url, $0) } }, uniquingKeysWith: { a, _ in a })
+    phase = .fetching(done: 0, total: feeds.count)
+    let articles = await FeedFetcher.articles(feeds, pictures: pictures) { done, total in
+      await MainActor.run { self.phase = .fetching(done: done, total: total) }
     }
-    let (data, _) = try await URLSession.shared.data(from: url.deletingLastPathComponent().appending(path: index.snapshot))
-    return Download(articles: try decoder.decode(FeedDTO.self, from: data).articles, newestChunk: newest)
+    // Every feed silent: most likely offline.
+    if articles.isEmpty { throw URLError(.notConnectedToInternet) }
+    return articles
   }
 
   private func sampleArticles(_ decoder: JSONDecoder) throws -> [FeedArticleDTO] {
@@ -218,15 +192,13 @@ import SwiftData
   }
 
   /// After the reader changes their outlets: articles from outlets no longer read go now, and
-  /// if any outlet was added the next sync takes the whole snapshot, so its articles of the last
-  /// two days come in too.
+  /// if any outlet was added a sync reads its feeds.
   func applyOutletChoice(added: Bool) async {
     let outlets = OutletStore.shared
     for article in (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? [] where !outlets.reads(article.outlet) {
       context.delete(article)
     }
     try? context.save()
-    if added { lastChunkID = nil }
     await recluster()
     applyTopics()
     try? context.save()
@@ -236,9 +208,13 @@ import SwiftData
   func prune() {
     let cutoff = Date.now.addingTimeInterval(-Self.retention)
     let chartCutoff = Date.now.addingTimeInterval(-Self.chartRetention)
+    let episodeCutoff = Date.now.addingTimeInterval(-FeedFetcher.podcastMaxAge)
     try? context.delete(
       model: ArticleItem.self,
-      where: #Predicate { $0.publishedAt < chartCutoff || ($0.publishedAt < cutoff && !$0.isChart) })
+      where: #Predicate {
+        $0.publishedAt < chartCutoff || ($0.publishedAt < cutoff && !$0.isChart && $0.audioURL == nil)
+          || ($0.publishedAt < episodeCutoff && $0.audioURL != nil)
+      })
   }
 
   // MARK: Vectors
@@ -354,13 +330,19 @@ import SwiftData
   /// images" 0.36; the sentence model separates them less well (0.32 for the spill).
   var meaningWithWordThreshold: Float { kind == .contextual ? 0.38 : 0.40 }
 
-  func addTopic(_ phrase: String, kind topicKind: TopicKind) async {
+  /// `step` hears where it is, for the sheet to show.
+  func addTopic(_ phrase: String, kind topicKind: TopicKind, step: (TopicStep) -> Void = { _ in }) async {
     let phrase = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !phrase.isEmpty else { return }
+    step(.examples)
     let examples = await IntelligenceService.topicExamples(phrase)
     let topic = SemanticTopic(phrase: phrase, kind: topicKind, exampleHeadlines: examples.headlines, keywords: examples.keywords)
-    context.insert(topic)
+    step(.reading)
     await embedExamples(topic)
+    step(.matching)
+    // Matching holds the main actor for a moment: let the sheet show the step first.
+    try? await Task.sleep(for: .milliseconds(60))
+    context.insert(topic)
     applyTopics()
     try? context.save()
   }
@@ -639,10 +621,34 @@ enum StoryClusterSanitizer {
   }
 }
 
+/// The steps of adding a topic, as the topics sheet shows them.
+enum TopicStep {
+  case examples, reading, matching
+
+  /// The dot chip's word.
+  var chip: String {
+    switch self {
+    case .examples: "THINKING"
+    case .reading: "LEARNING"
+    case .matching: "MATCHING"
+    }
+  }
+
+  var detail: String {
+    switch self {
+    case .examples: IntelligenceService.isAvailable ? "Writing example headlines…" : "Picking telling words…"
+    case .reading: "Reading the examples…"
+    case .matching: "Matching today's stories…"
+    }
+  }
+}
+
 /// The steps of a sync, as the loading board shows them.
 enum SyncPhase: Equatable {
   case idle
   case downloading
+  /// Feeds answered of those asked.
+  case fetching(done: Int, total: Int)
   /// The feed is in: how many outlets it has.
   case reading(outlets: Int)
   /// Articles read into vectors on the device.
@@ -655,9 +661,10 @@ enum SyncPhase: Equatable {
   var progress: Double {
     switch self {
     case .idle, .failed: 0
-    case .downloading: 0.04
-    case .reading: 0.1
-    case .embedding(let done, let total): 0.1 + 0.8 * Double(done) / Double(max(total, 1))
+    case .downloading: 0.02
+    case .fetching(let done, let total): 0.02 + 0.28 * Double(done) / Double(max(total, 1))
+    case .reading: 0.3
+    case .embedding(let done, let total): 0.3 + 0.6 * Double(done) / Double(max(total, 1))
     case .grouping: 0.94
     case .done: 1
     }

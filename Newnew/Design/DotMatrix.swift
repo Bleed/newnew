@@ -448,10 +448,11 @@ struct LoadingBoard: View {
   static let pitch: CGFloat = 4
   static let ink = Color.adaptive(light: 0x1E1E1E, dark: 0xEDEDED)
 
-  /// The figure under the words: outlets, then articles read, then stories.
+  /// The figure under the words: feeds read, outlets, then articles read, then stories.
   var figure: String? {
     guard waitsForFeed else { return nil }
     switch pipeline.phase {
+    case .fetching(let done, _): return done > 0 ? "\(done)" : nil
     case .reading(let outlets): return "\(outlets)"
     case .embedding(let done, _): return "\(done)"
     case .grouping: return nil

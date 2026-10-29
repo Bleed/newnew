@@ -172,42 +172,57 @@ struct OutletPicker: View {
   }
 
   func section(_ item: OutletGroup) -> some View {
-    let outlets = store.outlets(in: item)
+    let all = store.outlets(in: item)
+    let outlets = all.filter { !$0.isPodcast }
+    let podcasts = all.filter(\.isPodcast)
     let names = Set(outlets.map(\.outlet))
     let allOn = names.isSubset(of: selection)
     return VStack(alignment: .leading, spacing: 8) {
       HStack {
         Eyebrow(item.title)
         Spacer()
-        Button(allOn ? "None" : "All \(outlets.count)") {
-          if allOn { selection.subtract(names) } else { selection.formUnion(names) }
-        }
-        .font(.subheadline.weight(.medium))
-        .foregroundStyle(Swiss.ink)
-        .buttonStyle(.plain)
-      }
-      VStack(spacing: 0) {
-        ForEach(Array(outlets.enumerated()), id: \.element.id) { index, outlet in
-          Button {
-            if selection.contains(outlet.outlet) { selection.remove(outlet.outlet) } else { selection.insert(outlet.outlet) }
-          } label: {
-            HStack {
-              Text(outlet.outlet).font(.body).foregroundStyle(Swiss.ink)
-              Spacer()
-              CheckMark(isOn: selection.contains(outlet.outlet))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .contentShape(Rectangle())
+        if !outlets.isEmpty {
+          Button(allOn ? "None" : "All \(outlets.count)") {
+            if allOn { selection.subtract(names) } else { selection.formUnion(names) }
           }
+          .font(.subheadline.weight(.medium))
+          .foregroundStyle(Swiss.ink)
           .buttonStyle(.plain)
-          .accessibilityAddTraits(selection.contains(outlet.outlet) ? .isSelected : [])
-          if index < outlets.count - 1 { Divider().overlay(Swiss.ink.opacity(0.06)).padding(.horizontal, 14) }
         }
       }
-      .tile(.plain, radius: 16)
+      if !outlets.isEmpty { rows(outlets) }
+      // Off until chosen, one by one: podcast feeds are large.
+      if !podcasts.isEmpty {
+        Text("Podcasts").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted).padding(.top, 4)
+        rows(podcasts, icon: "headphones")
+      }
       channels(item)
     }
+  }
+
+  func rows(_ outlets: [OutletInfo], icon: String? = nil) -> some View {
+    VStack(spacing: 0) {
+      ForEach(Array(outlets.enumerated()), id: \.element.id) { index, outlet in
+        Button {
+          if selection.contains(outlet.outlet) { selection.remove(outlet.outlet) } else { selection.insert(outlet.outlet) }
+        } label: {
+          HStack(spacing: 10) {
+            if let icon { Image(systemName: icon).font(.footnote).foregroundStyle(Swiss.muted) }
+            Text(outlet.outlet).font(.body).foregroundStyle(Swiss.ink)
+            Spacer()
+            CheckMark(isOn: selection.contains(outlet.outlet))
+          }
+          .padding(.horizontal, 14)
+          .padding(.vertical, 11)
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(icon == nil ? outlet.outlet : "\(outlet.outlet), podcast")
+        .accessibilityAddTraits(selection.contains(outlet.outlet) ? .isSelected : [])
+        if index < outlets.count - 1 { Divider().overlay(Swiss.ink.opacity(0.06)).padding(.horizontal, 14) }
+      }
+    }
+    .tile(.plain, radius: 16)
   }
 
   /// Suggested YouTube channels for the group: checking one follows it like an own feed.
@@ -344,7 +359,7 @@ struct AddFeedPanel: View {
           }
         }
       }
-      Text("Your own feeds are read on this iPhone only: newnew's server never sees them.")
+      Text("Every feed, yours too, is read by this iPhone directly from the publisher.")
         .font(.footnote)
         .foregroundStyle(Swiss.muted)
         .fixedSize(horizontal: false, vertical: true)

@@ -1,745 +1,1605 @@
 {
- "outlets": [
-  {
-   "outlet": "BBC News",
-   "categories": [
-    "World",
-    "Business",
-    "Technology",
-    "Science"
-   ],
-   "kinds": [
-    "article",
-    "video"
-   ]
-  },
-  {
-   "outlet": "BBC Sport",
-   "categories": [
-    "Sport"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Guardian",
-   "categories": [
-    "World",
-    "Business",
-    "Technology",
-    "Science",
-    "Sport",
-    "Entertainment"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "NPR",
-   "categories": [
-    "World",
-    "Business",
-    "Science",
-    "US"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Al Jazeera",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article",
-    "video"
-   ]
-  },
-  {
-   "outlet": "DW",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article",
-    "video"
-   ]
-  },
-  {
-   "outlet": "France 24",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article",
-    "video"
-   ]
-  },
-  {
-   "outlet": "Euronews",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Sky News",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article",
-    "video"
-   ]
-  },
-  {
-   "outlet": "The Independent",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The New York Times",
-   "categories": [
-    "World",
-    "Business",
-    "Technology",
-    "Science"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Washington Post",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "CBS News",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "ABC News",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Fox News",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Politico",
-   "categories": [
-    "Politics"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Hill",
-   "categories": [
-    "Politics"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "CBC News",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "ABC Australia",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Japan Times",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "South China Morning Post",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Times of India",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "CNBC",
-   "categories": [
-    "Business"
-   ],
-   "kinds": [
-    "article",
-    "video"
-   ]
-  },
-  {
-   "outlet": "MarketWatch",
-   "categories": [
-    "Business"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Verge",
-   "categories": [
-    "Technology"
-   ],
-   "kinds": [
-    "article",
-    "video"
-   ]
-  },
-  {
-   "outlet": "Ars Technica",
-   "categories": [
-    "Technology"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "TechCrunch",
-   "categories": [
-    "Technology"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Wired",
-   "categories": [
-    "Technology"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Engadget",
-   "categories": [
-    "Technology"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "New Scientist",
-   "categories": [
-    "Science"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "ScienceDaily",
-   "categories": [
-    "Science"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "NASA",
-   "categories": [
-    "Science"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "ESPN",
-   "categories": [
-    "Sport"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Variety",
-   "categories": [
-    "Entertainment"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Local Norway",
-   "categories": [
-    "Local"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "News in English",
-   "categories": [
-    "Local"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Local Sweden",
-   "categories": [
-    "Local"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Local Denmark",
-   "categories": [
-    "Local"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Local Germany",
-   "categories": [
-    "Local"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Local France",
-   "categories": [
-    "Local"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Politico Europe",
-   "categories": [
-    "Politics"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Straits Times",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Hindu",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Korea Herald",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "CNA",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "9to5Mac",
-   "categories": [
-    "Technology"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Vogue",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "GQ",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "WWD",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Harper's Bazaar",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Cut",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Highsnobiety",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Hypebeast",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Dazed",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "IndieWire",
-   "categories": [
-    "Entertainment"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "The Hollywood Reporter",
-   "categories": [
-    "Entertainment"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Pitchfork",
-   "categories": [
-    "Entertainment"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Polygon",
-   "categories": [
-    "Gaming"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Eurogamer",
-   "categories": [
-    "Gaming"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "PC Gamer",
-   "categories": [
-    "Gaming"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Dezeen",
-   "categories": [
-    "Lifestyle & Food"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Architectural Digest",
-   "categories": [
-    "Lifestyle & Food"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Bon Appétit",
-   "categories": [
-    "Lifestyle & Food"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Eater",
-   "categories": [
-    "Lifestyle & Food"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Condé Nast Traveler",
-   "categories": [
-    "Lifestyle & Food"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Inverse",
-   "categories": [
-    "Technology"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "i-D",
-   "categories": [
-    "Fashion & Style"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "It's Nice That",
-   "categories": [
-    "Lifestyle & Food"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Design Milk",
-   "categories": [
-    "Lifestyle & Food"
-   ],
-   "kinds": [
-    "article"
-   ]
-  },
-  {
-   "outlet": "Bloomberg",
-   "categories": [
-    "Business"
-   ],
-   "kinds": [
-    "video"
-   ]
-  },
-  {
-   "outlet": "PBS NewsHour",
-   "categories": [
-    "US"
-   ],
-   "kinds": [
-    "video"
-   ]
-  },
-  {
-   "outlet": "Reuters",
-   "categories": [
-    "World"
-   ],
-   "kinds": [
-    "video"
-   ]
-  },
-  {
-   "outlet": "NPR Up First",
-   "categories": [
-    "Podcast"
-   ],
-   "kinds": [
-    "podcast"
-   ]
-  },
-  {
-   "outlet": "The Daily",
-   "categories": [
-    "Podcast"
-   ],
-   "kinds": [
-    "podcast"
-   ]
-  },
-  {
-   "outlet": "BBC Global News Podcast",
-   "categories": [
-    "Podcast"
-   ],
-   "kinds": [
-    "podcast"
-   ]
-  },
-  {
-   "outlet": "Today in Focus",
-   "categories": [
-    "Podcast"
-   ],
-   "kinds": [
-    "podcast"
-   ]
-  },
-  {
-   "outlet": "The Journal",
-   "categories": [
-    "Podcast"
-   ],
-   "kinds": [
-    "podcast"
-   ]
-  },
-  {
-   "outlet": "Hard Fork",
-   "categories": [
-    "Podcast"
-   ],
-   "kinds": [
-    "podcast"
-   ]
-  },
-  {
-   "outlet": "Our World in Data",
-   "categories": [
-    "Data"
-   ],
-   "kinds": [
-    "chart"
-   ]
-  },
-  {
-   "outlet": "Visual Capitalist",
-   "categories": [
-    "Data"
-   ],
-   "kinds": [
-    "chart"
-   ]
-  }
- ]
+  "outlets": [
+    {
+      "outlet": "BBC News",
+      "categories": [
+        "World",
+        "Business",
+        "Technology",
+        "Science"
+      ],
+      "kinds": [
+        "article",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.bbci.co.uk/news/world/rss.xml",
+          "category": "World"
+        },
+        {
+          "url": "https://feeds.bbci.co.uk/news/business/rss.xml",
+          "category": "Business"
+        },
+        {
+          "url": "https://feeds.bbci.co.uk/news/technology/rss.xml",
+          "category": "Technology"
+        },
+        {
+          "url": "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+          "category": "Science"
+        },
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA",
+          "category": "World",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "BBC Sport",
+      "categories": [
+        "Sport"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.bbci.co.uk/sport/rss.xml",
+          "category": "Sport"
+        }
+      ]
+    },
+    {
+      "outlet": "The Guardian",
+      "categories": [
+        "World",
+        "Business",
+        "Technology",
+        "Science",
+        "Sport",
+        "Entertainment"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.theguardian.com/world/rss",
+          "category": "World"
+        },
+        {
+          "url": "https://www.theguardian.com/uk/business/rss",
+          "category": "Business"
+        },
+        {
+          "url": "https://www.theguardian.com/uk/technology/rss",
+          "category": "Technology"
+        },
+        {
+          "url": "https://www.theguardian.com/science/rss",
+          "category": "Science"
+        },
+        {
+          "url": "https://www.theguardian.com/uk/sport/rss",
+          "category": "Sport"
+        },
+        {
+          "url": "https://www.theguardian.com/uk/culture/rss",
+          "category": "Entertainment"
+        }
+      ]
+    },
+    {
+      "outlet": "NPR",
+      "categories": [
+        "World",
+        "Business",
+        "Science",
+        "US"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.npr.org/1004/rss.xml",
+          "category": "World"
+        },
+        {
+          "url": "https://feeds.npr.org/1006/rss.xml",
+          "category": "Business"
+        },
+        {
+          "url": "https://feeds.npr.org/1007/rss.xml",
+          "category": "Science"
+        },
+        {
+          "url": "https://feeds.npr.org/1003/rss.xml",
+          "category": "US"
+        }
+      ]
+    },
+    {
+      "outlet": "Al Jazeera",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.aljazeera.com/xml/rss/all.xml",
+          "category": "World"
+        },
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCNye-wNBqNL5ZzHSJj3l8Bg",
+          "category": "World",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "DW",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://rss.dw.com/rdf/rss-en-all",
+          "category": "World"
+        },
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCknLrEdhRCp1aegoMqRaCZg",
+          "category": "World",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "France 24",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.france24.com/en/rss",
+          "category": "World"
+        },
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCQfwfsi5VrQ8yKZ-UWmAEFg",
+          "category": "World",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "Euronews",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.euronews.com/rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "Sky News",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.skynews.com/feeds/rss/world.xml",
+          "category": "World"
+        },
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCoMdktPbSTixAyNGwb-UYkQ",
+          "category": "World",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "The Independent",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.independent.co.uk/news/world/rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "The New York Times",
+      "categories": [
+        "World",
+        "Business",
+        "Technology",
+        "Science"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+          "category": "World"
+        },
+        {
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+          "category": "Business"
+        },
+        {
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml",
+          "category": "Technology"
+        },
+        {
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "outlet": "The Washington Post",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.washingtonpost.com/rss/world",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "CBS News",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.cbsnews.com/latest/rss/world",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "ABC News",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://abcnews.go.com/abcnews/internationalheadlines",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "Fox News",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://moxie.foxnews.com/google-publisher/world.xml",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "Politico",
+      "categories": [
+        "Politics"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://rss.politico.com/politics-news.xml",
+          "category": "Politics"
+        }
+      ]
+    },
+    {
+      "outlet": "The Hill",
+      "categories": [
+        "Politics"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://thehill.com/feed/",
+          "category": "Politics"
+        }
+      ]
+    },
+    {
+      "outlet": "CBC News",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.cbc.ca/webfeed/rss/rss-world",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "ABC Australia",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.abc.net.au/news/feed/51120/rss.xml",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "The Japan Times",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.japantimes.co.jp/feed/",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "South China Morning Post",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.scmp.com/rss/91/feed",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "Times of India",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://timesofindia.indiatimes.com/rssfeedstopstories.cms",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "CNBC",
+      "categories": [
+        "Business"
+      ],
+      "kinds": [
+        "article",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+          "category": "Business"
+        },
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCvJJ_dzjViJCoLf5uKUTwoA",
+          "category": "Business",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "MarketWatch",
+      "categories": [
+        "Business"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.content.dowjones.io/public/rss/mw_topstories",
+          "category": "Business"
+        }
+      ]
+    },
+    {
+      "outlet": "The Verge",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "article",
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.theverge.com/rss/index.xml",
+          "category": "Technology"
+        },
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCddiUEpeqJcYeBxX1IVBKvQ",
+          "category": "Technology",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "Ars Technica",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.arstechnica.com/arstechnica/index",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "outlet": "TechCrunch",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://techcrunch.com/feed/",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "outlet": "Wired",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.wired.com/feed/rss",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "outlet": "Engadget",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.engadget.com/rss.xml",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "outlet": "New Scientist",
+      "categories": [
+        "Science"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.newscientist.com/feed/home/",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "outlet": "ScienceDaily",
+      "categories": [
+        "Science"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.sciencedaily.com/rss/top/science.xml",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "outlet": "NASA",
+      "categories": [
+        "Science"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.nasa.gov/news-release/feed/",
+          "category": "Science"
+        }
+      ]
+    },
+    {
+      "outlet": "ESPN",
+      "categories": [
+        "Sport"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.espn.com/espn/rss/news",
+          "category": "Sport"
+        }
+      ]
+    },
+    {
+      "outlet": "Variety",
+      "categories": [
+        "Entertainment"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://variety.com/feed/",
+          "category": "Entertainment"
+        }
+      ]
+    },
+    {
+      "outlet": "The Local Norway",
+      "categories": [
+        "Local"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.thelocal.no/feeds/rss.php",
+          "category": "Local",
+          "country": "NO"
+        }
+      ]
+    },
+    {
+      "outlet": "News in English",
+      "categories": [
+        "Local"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.newsinenglish.no/feed/",
+          "category": "Local",
+          "country": "NO"
+        }
+      ]
+    },
+    {
+      "outlet": "The Local Sweden",
+      "categories": [
+        "Local"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.thelocal.se/feeds/rss.php",
+          "category": "Local",
+          "country": "SE"
+        }
+      ]
+    },
+    {
+      "outlet": "The Local Denmark",
+      "categories": [
+        "Local"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.thelocal.dk/feeds/rss.php",
+          "category": "Local",
+          "country": "DK"
+        }
+      ]
+    },
+    {
+      "outlet": "The Local Germany",
+      "categories": [
+        "Local"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.thelocal.de/feeds/rss.php",
+          "category": "Local",
+          "country": "DE"
+        }
+      ]
+    },
+    {
+      "outlet": "The Local France",
+      "categories": [
+        "Local"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.thelocal.fr/feeds/rss.php",
+          "category": "Local",
+          "country": "FR"
+        }
+      ]
+    },
+    {
+      "outlet": "Politico Europe",
+      "categories": [
+        "Politics"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.politico.eu/feed/",
+          "category": "Politics"
+        }
+      ]
+    },
+    {
+      "outlet": "The Straits Times",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.straitstimes.com/news/asia/rss.xml",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "The Hindu",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.thehindu.com/news/international/feeder/default.rss",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "The Korea Herald",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.koreaherald.com/rss/newsAll",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "CNA",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.channelnewsasia.com/rssfeeds/8395986",
+          "category": "World"
+        }
+      ]
+    },
+    {
+      "outlet": "9to5Mac",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://9to5mac.com/feed/",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "outlet": "Vogue",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.vogue.com/feed/rss",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "GQ",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.gq.com/feed/rss",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "WWD",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://wwd.com/feed/",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "Harper's Bazaar",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.harpersbazaar.com/rss/all.xml/",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "The Cut",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.feedburner.com/nymag/fashion",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "Highsnobiety",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.highsnobiety.com/feed/",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "Hypebeast",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://hypebeast.com/feed",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "Dazed",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.dazeddigital.com/rss",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "IndieWire",
+      "categories": [
+        "Entertainment"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.indiewire.com/feed/",
+          "category": "Entertainment"
+        }
+      ]
+    },
+    {
+      "outlet": "The Hollywood Reporter",
+      "categories": [
+        "Entertainment"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.hollywoodreporter.com/feed/",
+          "category": "Entertainment"
+        }
+      ]
+    },
+    {
+      "outlet": "Pitchfork",
+      "categories": [
+        "Entertainment"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://pitchfork.com/rss/news/",
+          "category": "Entertainment"
+        }
+      ]
+    },
+    {
+      "outlet": "Polygon",
+      "categories": [
+        "Gaming"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.polygon.com/rss/index.xml",
+          "category": "Gaming"
+        }
+      ]
+    },
+    {
+      "outlet": "Eurogamer",
+      "categories": [
+        "Gaming"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.eurogamer.net/feed",
+          "category": "Gaming"
+        }
+      ]
+    },
+    {
+      "outlet": "PC Gamer",
+      "categories": [
+        "Gaming"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.pcgamer.com/rss/",
+          "category": "Gaming"
+        }
+      ]
+    },
+    {
+      "outlet": "Dezeen",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.dezeen.com/feed/",
+          "category": "Lifestyle & Food"
+        }
+      ]
+    },
+    {
+      "outlet": "Architectural Digest",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.architecturaldigest.com/feed/rss",
+          "category": "Lifestyle & Food"
+        }
+      ]
+    },
+    {
+      "outlet": "Bon Appétit",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.bonappetit.com/feed/rss",
+          "category": "Lifestyle & Food"
+        }
+      ]
+    },
+    {
+      "outlet": "Eater",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.eater.com/rss/index.xml",
+          "category": "Lifestyle & Food"
+        }
+      ]
+    },
+    {
+      "outlet": "Condé Nast Traveler",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.cntraveler.com/feed/rss",
+          "category": "Lifestyle & Food"
+        }
+      ]
+    },
+    {
+      "outlet": "Inverse",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.inverse.com/rss",
+          "category": "Technology"
+        }
+      ]
+    },
+    {
+      "outlet": "i-D",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://i-d.co/feed/",
+          "category": "Fashion & Style"
+        }
+      ]
+    },
+    {
+      "outlet": "It's Nice That",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "http://feeds2.feedburner.com/itsnicethat/SlXC",
+          "category": "Lifestyle & Food"
+        }
+      ]
+    },
+    {
+      "outlet": "Design Milk",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://design-milk.com/feed",
+          "category": "Lifestyle & Food"
+        }
+      ]
+    },
+    {
+      "outlet": "Bloomberg",
+      "categories": [
+        "Business"
+      ],
+      "kinds": [
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UCIALMKvObZNtJ6AmdCLP7Lg",
+          "category": "Business",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "PBS NewsHour",
+      "categories": [
+        "US"
+      ],
+      "kinds": [
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC6ZFN9Tx6xh-skXCuRHCDpQ",
+          "category": "US",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "Reuters",
+      "categories": [
+        "World"
+      ],
+      "kinds": [
+        "video"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UChqUTb7kYRX8-EiaN3XFrSQ",
+          "category": "World",
+          "kind": "video"
+        }
+      ]
+    },
+    {
+      "outlet": "NPR Up First",
+      "categories": [
+        "Podcast"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.npr.org/510318/podcast.xml",
+          "category": "Podcast",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Daily",
+      "categories": [
+        "Podcast"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.simplecast.com/54nAGcIl",
+          "category": "Podcast",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "BBC Global News Podcast",
+      "categories": [
+        "Podcast"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://podcasts.files.bbci.co.uk/p02nq0gn.rss",
+          "category": "Podcast",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Today in Focus",
+      "categories": [
+        "Podcast"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.theguardian.com/news/series/todayinfocus/podcast.xml",
+          "category": "Podcast",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Journal",
+      "categories": [
+        "Podcast"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://video-api.wsj.com/podcast/rss/wsj/the-journal",
+          "category": "Podcast",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Hard Fork",
+      "categories": [
+        "Podcast"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.simplecast.com/l2i9YnTd",
+          "category": "Podcast",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Rest Is Politics",
+      "categories": [
+        "Politics"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/GLT9190936013",
+          "category": "Politics",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Science Vs",
+      "categories": [
+        "Science"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/sciencevs",
+          "category": "Science",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Radiolab",
+      "categories": [
+        "Science"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.simplecast.com/EmVW7VGp",
+          "category": "Science",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Pod Save America",
+      "categories": [
+        "Politics"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://audioboom.com/channels/5166624.rss",
+          "category": "Politics",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Decoder with Nilay Patel",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/recodedecode",
+          "category": "Technology",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Vergecast",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/vergecast",
+          "category": "Technology",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Waveform: The MKBHD Podcast",
+      "categories": [
+        "Technology"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/STU4418364045",
+          "category": "Technology",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Big Picture",
+      "categories": [
+        "Entertainment"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/the-big-picture",
+          "category": "Entertainment",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Switched on Pop",
+      "categories": [
+        "Entertainment"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/switchedonpop",
+          "category": "Entertainment",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Rewatchables",
+      "categories": [
+        "Entertainment"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/the-rewatchables",
+          "category": "Entertainment",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Business of Fashion Podcast",
+      "categories": [
+        "Fashion & Style"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.acast.com/public/shows/6355d904dd5e0e0012da88d1",
+          "category": "Fashion & Style",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Triple Click",
+      "categories": [
+        "Gaming"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.simplecast.com/6WD3bDj7",
+          "category": "Gaming",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Besties",
+      "categories": [
+        "Gaming"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.simplecast.com/Urk3897_",
+          "category": "Gaming",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Giant Bombcast",
+      "categories": [
+        "Gaming"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.spreaker.com/show/5928697/episodes/feed",
+          "category": "Gaming",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "99% Invisible",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.simplecast.com/BqbsxVfO",
+          "category": "Lifestyle & Food",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Gastropod",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.megaphone.fm/VMP6255701211",
+          "category": "Lifestyle & Food",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "The Splendid Table",
+      "categories": [
+        "Lifestyle & Food"
+      ],
+      "kinds": [
+        "podcast"
+      ],
+      "feeds": [
+        {
+          "url": "https://feeds.publicradio.org/public_feeds/the-splendid-table",
+          "category": "Lifestyle & Food",
+          "kind": "podcast"
+        }
+      ]
+    },
+    {
+      "outlet": "Our World in Data",
+      "categories": [
+        "Data"
+      ],
+      "kinds": [
+        "chart"
+      ],
+      "feeds": [
+        {
+          "url": "https://ourworldindata.org/atom.xml",
+          "category": "Data",
+          "kind": "chart"
+        }
+      ]
+    },
+    {
+      "outlet": "Visual Capitalist",
+      "categories": [
+        "Data"
+      ],
+      "kinds": [
+        "chart"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.visualcapitalist.com/feed/",
+          "category": "Data",
+          "kind": "chart"
+        }
+      ]
+    }
+  ]
 }

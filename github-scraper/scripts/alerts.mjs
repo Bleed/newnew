@@ -93,7 +93,7 @@ export function selectNew(stories, previous, now = Date.now()) {
     if (sent.some(s => s.keywords.filter(w => story.keywords.includes(w)).length >= 2)) continue
     out.push(story)
   }
-  const state = { sent: [...sent, ...out.map(s => ({ keywords: s.keywords, headline: s.headline, at: new Date(now).toISOString() }))] }
+  const state = { sent: [...sent, ...out.map(s => ({ keywords: s.keywords, at: new Date(now).toISOString() }))] }
   return { send: out, state }
 }
 

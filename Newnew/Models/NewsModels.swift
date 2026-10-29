@@ -180,24 +180,9 @@ nonisolated enum TopicKind: String, Codable, CaseIterable {
 
 // MARK: - Transfer
 
-/// `latest_news.json`, as the scraper publishes it.
+/// The bundled sample news (sample_news.json).
 nonisolated struct FeedDTO: Decodable {
   var generatedAt: Date
-  var articles: [FeedArticleDTO]
-}
-
-/// `index.json`: the pieces of the feed, oldest first.
-nonisolated struct FeedIndex: Decodable {
-  struct Chunk: Decodable {
-    var id: String
-    var file: String
-  }
-  var snapshot: String
-  var chunks: [Chunk]
-}
-
-/// `chunks/<run>.json`: the articles new or changed in one scraper run.
-nonisolated struct FeedChunk: Decodable {
   var articles: [FeedArticleDTO]
 }
 

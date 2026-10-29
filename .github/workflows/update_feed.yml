@@ -1,12 +1,13 @@
-# Polls the RSS feeds every 30 minutes and publishes latest_news.json (and status.json) to
-# GitHub Pages: https://<owner>.github.io/<repo>/latest_news.json
+# Every 30 minutes: checks the RSS feeds, publishes outlets.json (the outlets and their feeds,
+# which each iPhone reads itself), status.json and privacy.html to GitHub Pages, and sends
+# breaking-news pushes. No news is published.
 #
 # One-time setup: Settings → Pages → Source: "GitHub Actions". Pages is free for public repos.
 # Breaking-news pushes (optional): repository variable CLOUDKIT_CONTAINER, secrets
 # CLOUDKIT_KEY_ID and CLOUDKIT_PRIVATE_KEY (a CloudKit server-to-server key). Without them the
 # run only logs which stories it would push.
 # GitHub pauses scheduled workflows in repos with no activity for 60 days; re-enable it under
-# Actions if the feed stops updating.
+# Actions if the outlet list or breaking pushes stop.
 name: Update feed
 
 on:
@@ -46,8 +47,8 @@ jobs:
 
       - name: Poll feeds
         env:
-          # Pictures found last run are reused, so only new articles are looked up.
-          PREVIOUS_FEED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/latest_news.json
+          # The stories already pushed, so none is pushed twice.
+          PREVIOUS_ALERTS_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/alerts.json
           CLOUDKIT_CONTAINER: ${{ vars.CLOUDKIT_CONTAINER }}
           CLOUDKIT_ENVIRONMENT: ${{ vars.CLOUDKIT_ENVIRONMENT }}
           CLOUDKIT_KEY_ID: ${{ secrets.CLOUDKIT_KEY_ID }}

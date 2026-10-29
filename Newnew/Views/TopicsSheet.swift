@@ -11,6 +11,9 @@ struct TopicsSheet: View {
   @State var kind: TopicKind
   @State private var phrase = ""
   @State private var isAdding = false
+  /// The topic being added and where it is.
+  @State private var pending: String?
+  @State private var step: TopicStep = .examples
   @FocusState private var fieldFocused: Bool
 
   init(kind: TopicKind = .follow) {
@@ -60,8 +63,9 @@ struct TopicsSheet: View {
             }
           }
 
-          if !shown.isEmpty {
+          if !shown.isEmpty || pending != nil {
             Eyebrow(kind == .follow ? "Following" : "Hidden now").padding(.top, 10)
+            if let pending { PendingTopicRow(phrase: pending, step: step) }
             ForEach(shown) { topic in
               TopicRow(topic: topic, matches: matchCount(topic)) {
                 withAnimation(.snappy) { pipeline.remove(topic) }
@@ -110,7 +114,7 @@ struct TopicsSheet: View {
         .padding(.vertical, 12)
         .background(Swiss.tile, in: Capsule())
       if isAdding {
-        DotChip("LEARNING", label: "Learning the topic")
+        DotChip(step.chip, label: step.detail)
       } else {
         Button(kind == .follow ? "Follow" : "Mute") { Task { await add(phrase) } }
           .buttonStyle(.swissPrimary)
@@ -132,12 +136,45 @@ struct TopicsSheet: View {
   }
 
   func add(_ text: String) async {
-    guard !isAdding else { return }
-    isAdding = true
-    await pipeline.addTopic(text, kind: kind)
-    isAdding = false
-    phrase = ""
+    let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !isAdding, !text.isEmpty else { return }
     fieldFocused = false
+    withAnimation(.snappy) {
+      isAdding = true
+      pending = text
+    }
+    await pipeline.addTopic(text, kind: kind) { step = $0 }
+    withAnimation(.snappy) {
+      isAdding = false
+      pending = nil
+    }
+    step = .examples
+    phrase = ""
+  }
+}
+
+/// A topic being added: shown at once, with what's happening, so the wait reads as work.
+struct PendingTopicRow: View {
+  let phrase: String
+  let step: TopicStep
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(phrase).font(.body.weight(.medium)).lineLimit(2)
+        Text(step.detail)
+          .font(.footnote)
+          .tileSecondary()
+          .contentTransition(.opacity)
+          .animation(.easeOut(duration: 0.2), value: step.detail)
+      }
+      Spacer(minLength: 0)
+      ProgressView().tint(Swiss.ink)
+    }
+    .padding(14)
+    .tile(.plain, radius: 16)
+    .transition(.opacity.combined(with: .move(edge: .top)))
+    .accessibilityElement(children: .combine)
   }
 }
 

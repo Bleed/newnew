@@ -12,18 +12,14 @@ open Newnew.xcodeproj
 ```
 
 iOS 26, Swift 6, default actor isolation `MainActor` (plain data types and pure math are marked
-`nonisolated`). The app reads the live feed at `NEWNEW_FEED_URL` in `project.yml`
-(https://bleed.github.io/newnew/latest_news.json, repo github.com/Bleed/newnew). Set it empty to
-use `Newnew/Resources/sample_news.json` instead (invented outlets; times moved up to "now").
-Switching source clears stored articles. Feed health: https://bleed.github.io/newnew/status.json
-
-To try real news in the Simulator without publishing anything:
-
-```bash
-cd github-scraper && npm install && node scripts/poll_feeds.mjs
-cd public && python3 -m http.server 8765 --bind 127.0.0.1
-SIMCTL_CHILD_NEWNEW_FEED_URL=http://127.0.0.1:8765/latest_news.json xcrun simctl launch --terminate-running-process booted com.svein.newnew
-```
+`nonisolated`). **Phone-first:** each iPhone fetches its chosen outlets' RSS feeds itself
+(`FeedFetcher`); no news passes through a newnew server. `NEWNEW_FEED_URL` in `project.yml`
+(https://bleed.github.io/newnew/index.json, repo github.com/Bleed/newnew) only names the folder
+that holds `outlets.json` (the outlets and their feed addresses). Set it empty to use
+`Newnew/Resources/sample_news.json` instead (invented outlets; times moved up to "now").
+Switching source clears stored articles (`storedSource` "phone-1" wiped what builds ≤ 32
+downloaded). Feed health: https://bleed.github.io/newnew/status.json. Builds ≤ 32 read
+index.json, which is no longer published: they show no new news.
 
 ## Release
 
@@ -48,27 +44,37 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
 | `Newnew/Models` | SwiftData `ArticleItem`, `StoryCluster`, `SemanticTopic` (followed or muted); feed DTOs; `ClusterPerspectiveBrief` |
 | `Newnew/Services` | `OnDeviceVectorEngine` (embeddings), `StoryClusterer`, `FeedSyncPipeline`, `IntelligenceService` (FoundationModels), `ImagePipeline` |
 | `Newnew/Views` | Feed, story card, story detail with the brief, mute sheet, hero image |
-| `github-scraper/` | Node RSS poller → `public/latest_news.json` + `status.json`; feeds in `feeds.json` |
-| `.github/workflows/update_feed.yml` | Runs the poller at :07 and :37 and deploys `public/` to GitHub Pages |
+| `github-scraper/` | Node job → `public/outlets.json`, `status.json`, `privacy.html`, breaking pushes; feeds in `feeds.json` |
+| `.github/workflows/update_feed.yml` | Runs the job at :07 and :37 and deploys `public/` to GitHub Pages |
 
-## Scraper
+## Reading feeds (on the iPhone)
 
-- Only headline, a ≤ 280-character snippet, outlet, link, picture, time and category leave the
-  scraper. Never article bodies.
-- Picture waterfall: 1) the feed's media/enclosure/img (largest; BBC thumbnails upgraded to 976
-  wide), 2) last run's picture for the same link (`PREVIOUS_FEED_URL`), 3) og:image from the
-  page's first 25 KB (Range request, reading stops at 25 KB even if Range is ignored), capped at
-  400 lookups a run, 4) nothing: the app's LinkPresentation fallback. A real run: 896 articles
-  from 46/48 feeds in ~20 s; 669 + 188 reused + 27 from pages, 12 left to the phone.
-- Last 48 h, 30 per feed, 1,200 total; deduped by link and by outlet + headline.
-- Refuses to publish if fewer than half the feeds answer.
-- Small downloads: every article carries `changedAt`, the run it was new or last changed in
-  (compared with the previous snapshot). Each run rebuilds `chunks/<run>.json` (articles by
-  `changedAt`) and `index.json` (the runs, oldest first) from the snapshot, since Pages replaces
-  the whole site. The app (`NEWNEW_FEED_URL` = …/index.json) fetches the index, then only chunks
-  newer than `feedLastChunk`; the snapshot on first launch or when its last chunk has aged out.
-  Changed articles are updated in place. Measured: index ~170 B, a run's chunk ~1 KB, against
-  ~226 KB for the whole feed. `latest_news.json` stays for builds 1–6.
+- `FeedFetcher` reads the chosen outlets' feeds (`OutletStore.chosenFeeds`), 12 at a time, each
+  up to 1.5 MB (podcast feeds run to 20 MB; the newest episodes come first) and at most 60
+  items, through a URLSession whose cache revalidates (ETag / Last-Modified). Same rules the
+  server had: last 48 h (charts 14 days), 30 per news feed, 8 per light-pillar feed, 15 per
+  light category with outlets taking turns (Technology uncapped), deduped by link and by outlet
+  + headline, snippets ≤ 150 characters at a word, tracking parameters stripped, BBC
+  thumbnails upgraded to 976 wide, galleries from light-pillar items, YouTube titles without
+  channel tags, HD thumbnail (`maxresdefault`, HEAD-checked once per video, else `hqdefault`),
+  podcasts with audio and length and no picture, for 7 days (most are weekly; the store keeps
+  episodes 7 days too). Megaphone episodes have no page: their audio URL is the link. Items with no picture get one from the page
+  later (LinkPresentation, as before).
+- Measured in the Simulator: 95+ default feeds answer in ~6 s. Podcasts are off by default
+  (each chosen on its own); without them a full refresh is a few MB.
+- `FeedParser` (in Outlets.swift) is shared with own feeds (`CustomFeedReader`).
+- `lastSyncAt` (UserDefaults) drives `hasALotToLoad` (nothing stored, or > 3 h since).
+
+## Server job (github-scraper)
+
+- Publishes only `outlets.json` (each outlet: categories, kinds, `feeds` [url, category, kind,
+  country]), `status.json` (each feed's health) and `privacy.html`. No news.
+- Breaking push: reads the news feeds' headlines in memory (not light pillars, videos or
+  podcasts), finds stories many outlets report (alerts.mjs) and sends them via CloudKit.
+  `alerts.json` keeps only the pushed stories' keywords and times (`PREVIOUS_ALERTS_URL`).
+- After changing `feeds.json`, copy `public/outlets.json` to `Newnew/Resources/outlets.json`
+  (pretty-printed) so a first launch offline has it. The app ignores a published list without
+  feed addresses.
 
 ## Matching: measured, not the brief's numbers
 
@@ -113,22 +119,21 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   page's Apple Intelligence read follows `Pillar.briefMode`: perspective (news, needs several
   outlets), verdict (tech, entertainment, gaming: praised / criticised) or trend (fashion,
   lifestyle: the shift, names, why it matters, takeaways); the last two also run on one
-  outlet, where "why it matters" can be the model's guess. The scraper caps the lighter
+  outlet, where "why it matters" can be the model's guess. `FeedFetcher` caps the lighter
   pillars (8 per feed; 15 per category, outlets taking turns; Technology uncapped by category)
   and leaves news whole, because the clusterer needs every outlet. The brief's suggested
   0.72 cosine clustering threshold was not adopted: the tuned 0.12 linkage above is stricter.
 - **Outlets** (legal basis: the reader picks the sources; newnew shows headlines and short
   extracts and links out). First launch shows onboarding (`OnboardingView`, Figma page
-  Onboarding): welcome, choose outlets (grouped by pillar, all checked to start, a group's
-  "All"/"None"), add your own feed, alerts. `OutletStore` keeps the choice (`outlets.chosen`,
-  nil = not chosen yet = read everything) and own feeds (`outlets.custom`) in UserDefaults.
-  The catalog is the scraper's `outlets.json` (each outlet's categories and kinds: article,
-  video, podcast, chart), with a bundled copy in Resources for an offline first launch;
-  regenerate that copy when `feeds.json` changes. Sync drops articles from outlets not
-  chosen; `applyOutletChoice` deletes them from the store and, when outlets were added,
-  forgets the last chunk so the next sync takes the whole snapshot. Own feeds are found and
+  Onboarding): welcome, choose outlets (grouped by pillar, all checked to start except
+  podcasts, a group's "All"/"None"; each pillar lists its podcasts under "Podcasts", chosen one
+  by one), add your own feed, alerts. `OutletStore` keeps the choice (`outlets.chosen`,
+  nil = not chosen yet = every outlet but the podcasts) and own feeds (`outlets.custom`) in UserDefaults.
+  The catalog is `outlets.json` (each outlet's categories, kinds and feeds), with a bundled
+  copy in Resources for an offline first launch. Only chosen outlets' feeds are fetched;
+  `applyOutletChoice` deletes articles of outlets dropped and syncs when outlets were added. Own feeds are found and
   read on the iPhone (`CustomFeedReader`: a site's `<link rel="alternate">` or the usual
-  paths; RSS and Atom), never by the scraper. Settings › Outlets has the same picker and the
+  paths; RSS and Atom), like every feed. Settings › Outlets has the same picker and the
   add-your-own panel. YouTube channels too: their feed's `yt:videoId` makes the items videos
   (Watch, play mark, `hqdefault` thumbnail), Shorts are skipped. In the EU YouTube puts a
   cookie-consent page before channel pages, so an @handle can't be looked up from the phone;
@@ -136,14 +141,17 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   `feeds/videos.xml?channel_id=` from that. Each group in the picker suggests a few YouTube
   channels (`YouTubeSuggestions`, IDs checked 2026-10-29); checking one adds it as an own feed.
   Links open the publisher's app first (`LinkOpener`: universal links only, so YouTube, NYT,
-  Guardian…), falling back to the in-app browser. Breaking push still covers all outlets (the scraper doesn't know a
-  reader's choice).
+  Guardian…), falling back to the in-app browser. Breaking push still covers all news outlets (the server job doesn't
+  know a reader's choice).
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
   (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The
   filter bar is All, the pillars, then the topics you follow (`FeedFilter`, pinned while
   scrolling); choosing Briefing shows a row of regions, which narrow the news. A topic filter
   shows the stories that topic raised. There is no Local region (removed on request);
-  local-news outlets still carry `country` from the scraper.
+  local-news outlets still carry `country` from feeds.json.
+- **Adding a topic** shows at once as a pending row ("Writing example headlines…", "Reading
+  the examples…", "Matching today's stories…") while the field's dot chip rolls THINKING →
+  LEARNING → MATCHING (`TopicStep`); matching holds the main actor, so the step is drawn first.
 - **"Already read"** comes from cluster membership (`readAt`, `newSinceRead`), not a 0.80 cutoff.
 - In the Simulator `NLContextualEmbedding` fails to compile its model (sandbox), so the engine
   falls back to `NLEmbedding.sentenceEmbedding`. Real devices use the contextual model.
@@ -231,15 +239,15 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 
 ## Legal care (review 2026-10-29; not legal advice)
 
-- The public feed carries very short extracts only: 150 characters (`SNIPPET_LENGTH`), the
-  same as the app shows. Pictures are links to the publisher's own files.
+- newnew publishes no news: each iPhone reads the publishers' public feeds itself, like any RSS
+  reader, and keeps extracts to 150 characters. Pictures are the publisher's own files.
 - Photos are never full screen: the Catchup reel shows the picture as a framed card.
 - The AI read is written on the reader's iPhone, never published by newnew; it is labelled as
   Apple Intelligence and can be hidden. A report option was tried and removed (2026-10-29).
 - Coverage-spectrum badges describe, not judge: SPECIALIST PRESS, GENERAL NEWS, MANY DESKS.
 - Privacy policy: lives at https://newnew.news/privacypolicy (the app links there, and so
   should App Store Connect). The text is github-scraper/site/privacy.html, also published with
-  the feed at https://bleed.github.io/newnew/privacy.html as a copy.
+  the outlet list at https://bleed.github.io/newnew/privacy.html as a copy.
 - Mailboxes the app names: feedback@newnew.news, publishers@newnew.news.
 
 ## Look (from Atelier CRM)

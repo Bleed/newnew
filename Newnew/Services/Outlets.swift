@@ -6,35 +6,48 @@ nonisolated struct OutletInfo: Codable, Hashable, Identifiable, Sendable {
   var outlet: String
   var categories: [String]
   var kinds: [String]
+  /// The outlet's feeds, which each iPhone reads itself (`FeedFetcher`).
+  var feeds: [FeedSource]?
   var id: String { outlet }
 
-  /// Where it's listed when choosing: its first category's pillar, or Video / Podcasts for
-  /// outlets that only have those.
+  /// A podcast and nothing else: listed under its category's podcasts, off until chosen
+  /// (podcast feeds are large).
+  var isPodcast: Bool { kinds == ["podcast"] }
+
+  /// Where it's listed when choosing: its first category's pillar (podcasts too, under the
+  /// pillar's podcasts), or Video for outlets that only have videos.
   var group: OutletGroup {
     let category = categories.first(where: { $0 != "Data" }) ?? categories.first
     // Listed with its news when it has any (BBC News has videos too).
-    if kinds.contains("article") || kinds.contains("chart") { return .pillar(Pillar(category: category)) }
-    if kinds.contains("podcast") { return .podcasts }
+    if kinds.contains("article") || kinds.contains("chart") || isPodcast { return .pillar(Pillar(category: category)) }
     if kinds.contains("video") { return .video }
     return .pillar(Pillar(category: category))
   }
 }
 
+/// One feed of an outlet: its address, its category and its kind (nil: articles; "video",
+/// "podcast", "chart").
+nonisolated struct FeedSource: Codable, Hashable, Sendable {
+  var url: String
+  var category: String?
+  var kind: String?
+  /// Local-news feeds: the outlet's country.
+  var country: String?
+}
+
 nonisolated enum OutletGroup: Hashable, Identifiable, Sendable {
   case pillar(Pillar)
   case video
-  case podcasts
 
   var id: String { title }
   var title: String {
     switch self {
     case .pillar(let pillar): pillar.title
     case .video: "Video"
-    case .podcasts: "Podcasts"
     }
   }
 
-  static let all: [OutletGroup] = Pillar.allCases.map { .pillar($0) } + [.video, .podcasts]
+  static let all: [OutletGroup] = Pillar.allCases.map { .pillar($0) } + [.video]
 }
 
 /// A feed the reader added: read on this iPhone only, never by the scraper.
@@ -114,7 +127,9 @@ nonisolated enum YouTubeSuggestions {
   func refreshCatalog() async {
     guard let base = FeedSyncPipeline.feedURL?.deletingLastPathComponent() else { return }
     guard let (data, _) = try? await URLSession.shared.data(from: base.appending(path: "outlets.json")),
-      let list = try? JSONDecoder().decode(Catalog.self, from: data), !list.outlets.isEmpty
+      let list = try? JSONDecoder().decode(Catalog.self, from: data), !list.outlets.isEmpty,
+      // A list from before the feeds were read on the iPhone has no addresses: the bundled one.
+      list.outlets.allSatisfy({ !($0.feeds ?? []).isEmpty })
     else { return }
     catalog = list.outlets
   }
@@ -124,11 +139,17 @@ nonisolated enum YouTubeSuggestions {
   /// Whether articles from this outlet are read. Own feeds always are.
   func reads(_ outlet: String) -> Bool {
     if customFeeds.contains(where: { $0.title == outlet }) { return true }
-    return chosen?.contains(outlet) ?? true
+    return selection.contains(outlet)
   }
 
-  /// The selection being edited: everything until the reader has chosen.
-  var selection: Set<String> { chosen ?? Set(catalog.map(\.outlet)) }
+  /// The selection being edited: until the reader has chosen, every outlet but the podcasts
+  /// (their feeds are large; each is chosen on its own).
+  var selection: Set<String> { chosen ?? Set(catalog.filter { !$0.isPodcast }.map(\.outlet)) }
+
+  /// The chosen outlets' feeds, for `FeedFetcher`.
+  var chosenFeeds: [(outlet: String, feed: FeedSource)] {
+    catalog.filter { selection.contains($0.outlet) }.flatMap { info in (info.feeds ?? []).map { (info.outlet, $0) } }
+  }
 
   func setChosen(_ outlets: Set<String>) {
     chosen = outlets
@@ -222,7 +243,9 @@ nonisolated enum CustomFeedReader {
     let parser = FeedParser()
     let xml = XMLParser(data: data)
     xml.delegate = parser
-    guard xml.parse(), parser.isFeed, !parser.items.isEmpty else { throw Failure.noFeed }
+    // Stopped at the parser's `limit` reads as a failed parse; the items are whole.
+    xml.parse()
+    guard parser.isFeed, !parser.items.isEmpty else { throw Failure.noFeed }
     let title = parser.title.isEmpty ? (url.host() ?? "My feed").replacingOccurrences(of: "www.", with: "") : parser.title
     let feedURL = (response.url ?? url).absoluteString
     let cutoff = Date.now.addingTimeInterval(-72 * 3600)  // FeedSyncPipeline.retention
@@ -233,9 +256,9 @@ nonisolated enum CustomFeedReader {
       let date = item.date ?? .now
       guard date > cutoff else { return nil }
       // A YouTube channel's videos are videos: Watch opens YouTube, the card shows a play mark.
-      let image = item.videoID.map { "https://i.ytimg.com/vi/\($0)/hqdefault.jpg" } ?? item.image
+      let image = item.videoID.map { "https://i.ytimg.com/vi/\($0)/hqdefault.jpg" } ?? item.image ?? item.inlineImage
       return FeedArticleDTO(
-        title: item.title, snippet: String(plain(item.summary).prefix(280)), outlet: title, url: item.link,
+        title: item.title, snippet: FeedFetcher.truncate(plain(item.summary), FeedFetcher.snippetLength), outlet: title, url: item.link,
         imageURL: image, publishedAt: min(date, .now), category: nil, country: nil, videoID: item.videoID,
         audioURL: nil, audioSeconds: nil, isChart: nil, galleryURLs: nil)
     }
@@ -262,13 +285,27 @@ nonisolated enum CustomFeedReader {
   }
 }
 
-/// RSS 2.0 and Atom, the parts newnew shows.
-private nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable {
+/// RSS 2.0 and Atom, the parts newnew shows. Items stop at `limit`; a feed cut off mid-way
+/// (`FeedFetcher` reads at most 1.5 MB) still gives the items before the cut.
+nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable {
   struct Item {
     var title = "", link = "", summary = "", image: String?, date: Date?
+    /// The widest picture offered so far (`media:content width`).
+    var imageWidth = 0
     /// YouTube's `<yt:videoId>`.
     var videoID: String?
+    /// A podcast episode's audio and its length.
+    var audio: String?
+    var seconds: Int?
+    /// The first picture in the item's HTML, if it offers no other.
+    var inlineImage: String?
+    /// Every picture it offers as media (for galleries) and its full HTML.
+    var pictures: [String] = []
+    var html = ""
+    var guid = ""
   }
+
+  var limit = 60
 
   var isFeed = false
   var title = ""
@@ -284,9 +321,23 @@ private nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchec
     case "link" where current != nil:
       // Atom: <link href="…" rel="alternate"/>.
       if let href = attributes["href"], (attributes["rel"] ?? "alternate") == "alternate" { current?.link = href }
-    case "media:content", "media:thumbnail", "enclosure":
-      if current?.image == nil, let url = attributes["url"], (attributes["type"] ?? "image").hasPrefix("image") || name != "enclosure" {
+    case "enclosure" where current != nil:
+      guard let url = attributes["url"] else { break }
+      let type = attributes["type"] ?? ""
+      if type.hasPrefix("audio") || url.hasSuffix(".mp3") || url.hasSuffix(".m4a") {
+        current?.audio = url
+      } else if current?.image == nil, type.isEmpty || type.hasPrefix("image") {
         current?.image = url
+      }
+    case "media:content", "media:thumbnail":
+      guard current != nil, let url = attributes["url"] else { break }
+      if let medium = attributes["medium"], medium != "image" { break }
+      if let type = attributes["type"], !type.hasPrefix("image") { break }
+      let width = Int(attributes["width"] ?? "") ?? 0
+      if name == "media:content" { current?.pictures.append(url) }
+      if current?.image == nil || width > current?.imageWidth ?? 0 {
+        current?.image = url
+        current?.imageWidth = width
       }
     default: break
     }
@@ -307,13 +358,33 @@ private nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchec
     switch name {
     case "title": current?.title = CustomFeedReader.plain(value)
     case "link": if current?.link.isEmpty == true { current?.link = value }
-    case "description", "summary", "content:encoded", "media:description":
-      if current?.summary.isEmpty == true { current?.summary = value }
+    case "description", "summary", "content:encoded", "media:description", "content":
+      if name == "content:encoded" || name == "content" { current?.html = value }
+      if current?.inlineImage == nil, let src = value.firstMatch(of: /<img[^>]+src=["']([^"']+)["']/)?.output.1 {
+        current?.inlineImage = String(src)
+      }
+      if current?.summary.isEmpty == true || (name == "description" && current?.summary.hasPrefix("<") == true) {
+        current?.summary = value
+      }
+    case "itunes:duration": current?.seconds = Self.seconds(value)
     case "yt:videoId": current?.videoID = value
     case "pubDate", "published", "updated", "dc:date": if current?.date == nil { current?.date = Self.date(value) }
-    case "item", "entry": if let current { items.append(current) }; current = nil
+    case "guid", "id": current?.guid = value
+    case "item", "entry":
+      // Some feeds give the link only as a permalink guid.
+      if let guid = current?.guid, guid.hasPrefix("http"), current?.link.isEmpty == true { current?.link = guid }
+      if let current { items.append(current) }
+      current = nil
+      if items.count >= limit { parser.abortParsing() }
     default: break
     }
+  }
+
+  /// "938", "15:38" or "1:02:03" → seconds.
+  static func seconds(_ text: String) -> Int? {
+    let parts = text.split(separator: ":").map { Int($0) }
+    guard !parts.isEmpty, !parts.contains(nil) else { return nil }
+    return parts.reduce(0) { $0 * 60 + $1! }
   }
 
   static func date(_ text: String) -> Date? {
