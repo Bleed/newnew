@@ -238,9 +238,6 @@ struct StoryDetailView: View {
           }
           if cluster.brief != nil && !briefDismissed {
             Divider()
-            Button("Report a mistake in the summary", systemImage: "exclamationmark.bubble") {
-              if let url = reportURL { UIApplication.shared.open(url) }
-            }
             Button("Hide AI summary", systemImage: "eye.slash") {
               withAnimation(.snappy) {
                 briefDismissed = true
@@ -274,28 +271,6 @@ struct StoryDetailView: View {
         .font(.footnote)
         .lineLimit(1)
     }
-  }
-
-  /// An email to newnew about a wrong AI summary: the story's headline, its outlets and the
-  /// summary as written, so the mistake can be checked.
-  var reportURL: URL? {
-    var parts = URLComponents()
-    parts.scheme = "mailto"
-    parts.path = "feedback@newnew.news"
-    let summary = cluster.brief?.summary ?? ""
-    parts.queryItems = [
-      URLQueryItem(name: "subject", value: "Mistake in an AI summary"),
-      URLQueryItem(name: "body", value: """
-        What's wrong:
-
-
-        ---
-        Story: \(cluster.lead?.title ?? "")
-        Outlets: \(cluster.outlets.joined(separator: ", "))
-        Summary: \(summary)
-        """),
-    ]
-    return parts.url
   }
 
   private func openArticleURL(_ raw: String) {

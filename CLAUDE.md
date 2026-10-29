@@ -234,8 +234,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - The public feed carries very short extracts only: 150 characters (`SNIPPET_LENGTH`), the
   same as the app shows. Pictures are links to the publisher's own files.
 - Photos are never full screen: the Catchup reel shows the picture as a framed card.
-- The AI read has "Report a mistake in the summary" (email to feedback@newnew.news with the
-  headline, outlets and summary) beside "Hide AI summary".
+- The AI read is written on the reader's iPhone, never published by newnew; it is labelled as
+  Apple Intelligence and can be hidden. A report option was tried and removed (2026-10-29).
 - Coverage-spectrum badges describe, not judge: SPECIALIST PRESS, GENERAL NEWS, MANY DESKS.
 - Privacy policy: lives at https://newnew.news/privacypolicy (the app links there, and so
   should App Store Connect). The text is github-scraper/site/privacy.html, also published with
