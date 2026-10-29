@@ -219,6 +219,11 @@ struct FeedView: View {
   @State private var barFrame: CGRect = .zero
   /// A sideways swipe is under way: the card under the finger mustn't open on release.
   @State private var swiping = false
+  /// The page follows the finger sideways, then slides out and the next filter slides in, as
+  /// between stories (`StoryPagerView`).
+  @GestureState private var liveDrag: CGFloat = 0
+  @State private var slide: CGFloat = 0
+  @State private var pageWidth: CGFloat = 400
   /// Where the bar pins, counted from the top of the page.
   var pinOffset: CGFloat { topHeight + 12 }
   @State private var boardShowing = false
@@ -341,7 +346,7 @@ struct FeedView: View {
                 topics: followedTopics
               )
               .padding(.vertical, 10)
-              .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.feedSpace)) } action: { barFrame = $0 }
+              .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { barFrame = $0 }
               .background(alignment: .bottom) {
                 if barPinned {
                   Swiss.canvas
@@ -363,22 +368,37 @@ struct FeedView: View {
         } action: { _, isPinned in
           barPinned = isPinned
         }
-        .coordinateSpace(.named(Self.feedSpace))
-        // Sideways: the next or previous filter, as in the bar.
         .scrollPosition($scrollPosition)
+        .offset(x: slide + liveDrag)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { pageWidth = $0 } }
+        // Sideways: the next or previous filter, as in the bar. Screen coordinates, since the
+        // page itself moves under the finger.
         .simultaneousGesture(
-          DragGesture(minimumDistance: 20, coordinateSpace: .named(Self.feedSpace))
+          DragGesture(minimumDistance: 20, coordinateSpace: .global)
+            .updating($liveDrag) { value, state, _ in
+              guard isPageSwipe(value) else { return }
+              let dx = value.translation.width
+              // Resistance past the first and last filter.
+              state = neighbour(dx < 0 ? 1 : -1) == nil ? dx * 0.25 : dx
+            }
             .onChanged { value in
-              if !swiping, !barFrame.contains(value.startLocation), abs(value.translation.width) > abs(value.translation.height) * 1.5 {
-                swiping = true
-              }
+              if !swiping, isPageSwipe(value) { swiping = true }
             }
             .onEnded { value in
-              let dx = value.translation.width, dy = value.translation.height
               // After the card's button has seen the release.
               Task { @MainActor in swiping = false }
-              guard !barFrame.contains(value.startLocation), abs(dx) > 70, abs(dx) > abs(dy) * 2.2 else { return }
-              step(dx < 0 ? 1 : -1)
+              guard isPageSwipe(value) else { return }
+              let dx = value.translation.width, predicted = value.predictedEndTranslation.width
+              let by = dx < -pageWidth * 0.22 || predicted < -pageWidth * 0.45 ? 1
+                : dx > pageWidth * 0.22 || predicted > pageWidth * 0.45 ? -1 : 0
+              guard by != 0, let next = neighbour(by) else { return }
+              slide = dx
+              withAnimation(.easeOut(duration: 0.14)) { slide = -CGFloat(by) * pageWidth }
+              DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
+                choose(next)
+                slide = CGFloat(by) * pageWidth
+                withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) { slide = 0 }
+              }
             }
         )
         .sensoryFeedback(.selection, trigger: filterRaw)
@@ -497,8 +517,6 @@ struct FeedView: View {
     }
   }
 
-  static let feedSpace = "feed"
-
   func open(_ cluster: StoryCluster) {
     guard !swiping else { return }
     path.append(cluster)
@@ -513,11 +531,16 @@ struct FeedView: View {
     filterRaw = next.raw
   }
 
-  /// One filter on (1) or back (-1); a region counts as Briefing.
-  func step(_ by: Int) {
+  /// The filter one on (1) or back (-1) from this one; a region counts as Briefing.
+  func neighbour(_ by: Int) -> FeedFilter? {
     let current: FeedFilter = if case .region = filter { .pillar(.briefing) } else { filter }
-    guard let index = swipeOrder.firstIndex(of: current), swipeOrder.indices.contains(index + by) else { return }
-    withAnimation(.snappy(duration: 0.2)) { choose(swipeOrder[index + by]) }
+    guard let index = swipeOrder.firstIndex(of: current), swipeOrder.indices.contains(index + by) else { return nil }
+    return swipeOrder[index + by]
+  }
+
+  /// Sideways enough to move the page, and not on the filter bar (that scrolls its pills).
+  func isPageSwipe(_ value: DragGesture.Value) -> Bool {
+    !barFrame.contains(value.startLocation) && abs(value.translation.width) > abs(value.translation.height) * 1.5
   }
 
   /// Everything here read: the same summary as at the end of a swipe run.
