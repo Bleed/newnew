@@ -117,6 +117,20 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   pillars (8 per feed; 15 per category, outlets taking turns; Technology uncapped by category)
   and leaves news whole, because the clusterer needs every outlet. The brief's suggested
   0.72 cosine clustering threshold was not adopted: the tuned 0.12 linkage above is stricter.
+- **Outlets** (legal basis: the reader picks the sources; newnew shows headlines and short
+  extracts and links out). First launch shows onboarding (`OnboardingView`, Figma page
+  Onboarding): welcome, choose outlets (grouped by pillar, all checked to start, a group's
+  "All"/"None"), add your own feed, alerts. `OutletStore` keeps the choice (`outlets.chosen`,
+  nil = not chosen yet = read everything) and own feeds (`outlets.custom`) in UserDefaults.
+  The catalog is the scraper's `outlets.json` (each outlet's categories and kinds: article,
+  video, podcast, chart), with a bundled copy in Resources for an offline first launch;
+  regenerate that copy when `feeds.json` changes. Sync drops articles from outlets not
+  chosen; `applyOutletChoice` deletes them from the store and, when outlets were added,
+  forgets the last chunk so the next sync takes the whole snapshot. Own feeds are found and
+  read on the iPhone (`CustomFeedReader`: a site's `<link rel="alternate">` or the usual
+  paths; RSS and Atom), never by the scraper. Settings › Outlets has the same picker and the
+  add-your-own panel. Breaking push still covers all outlets (the scraper doesn't know a
+  reader's choice).
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
   (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The
   filter bar is All, the pillars, then the topics you follow (`FeedFilter`, pinned while

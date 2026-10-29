@@ -85,7 +85,11 @@ import SwiftData
         // Nothing stored: the next download is the whole snapshot.
         lastChunkID = nil
       }
-      let feed = try await loadFeed()
+      var feed = try await loadFeed()
+      // Only the outlets the reader chose, plus their own feeds (read from this iPhone).
+      let outlets = OutletStore.shared
+      feed.articles = feed.articles.filter { outlets.reads($0.outlet) }
+      for custom in outlets.customFeeds { feed.articles += await CustomFeedReader.articles(custom) }
       phase = .reading(outlets: Set(feed.articles.map(\.outlet)).count)
       let added = upsert(feed.articles)
       prune()
@@ -211,6 +215,22 @@ import SwiftData
       article.regionsRaw = RegionTagger.regions(title: article.title, snippet: article.snippet)
         .map(\.rawValue).sorted().joined(separator: ",")
     }
+  }
+
+  /// After the reader changes their outlets: articles from outlets no longer read go now, and
+  /// if any outlet was added the next sync takes the whole snapshot, so its articles of the last
+  /// two days come in too.
+  func applyOutletChoice(added: Bool) async {
+    let outlets = OutletStore.shared
+    for article in (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? [] where !outlets.reads(article.outlet) {
+      context.delete(article)
+    }
+    try? context.save()
+    if added { lastChunkID = nil }
+    await recluster()
+    applyTopics()
+    try? context.save()
+    if added { await sync() }
   }
 
   func prune() {

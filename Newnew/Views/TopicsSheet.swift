@@ -69,6 +69,8 @@ struct TopicsSheet: View {
             }
           }
 
+          OutletSettings().padding(.top, 10)
+
           FeedWindowSettings().padding(.top, 10)
 
           ReadStoriesSettings().padding(.top, 10)
@@ -177,6 +179,37 @@ struct TopicRow: View {
   }
 }
 
+/// Outlets: how many are read, the full choice in a sheet, and your own feeds right here.
+struct OutletSettings: View {
+  @Environment(FeedSyncPipeline.self) var pipeline
+  @State private var choosing = false
+  var store = OutletStore.shared
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Eyebrow("Outlets")
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Reading \(store.selection.count) of \(store.catalog.count) outlets").font(.body.weight(.medium))
+          Text("Change which outlets newnew reads at any time. Removing one clears its articles from this iPhone.")
+            .font(.footnote)
+            .tileSecondary()
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        Button("Choose outlets") { choosing = true }.buttonStyle(.swissSecondary)
+      }
+      .padding(14)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .tile(.plain, radius: 16)
+      AddFeedPanel { added in
+        Task { await pipeline.applyOutletChoice(added: added) }
+      }
+      .padding(.top, 6)
+    }
+    .sheet(isPresented: $choosing) { OutletsSettingsView() }
+  }
+}
+
 /// Read stories: they leave Today (default) or stay in place, greyed out.
 struct ReadStoriesSettings: View {
   @AppStorage(ReadStories.key) private var readStoriesRaw = ReadStories.disappear.rawValue
@@ -247,6 +280,8 @@ struct FeedWindowSettings: View {
 /// Alerts: breaking news and new stories on followed topics. Both off until switched on; the
 /// first one switched on asks for permission.
 struct AlertSettings: View {
+  /// Off in onboarding, whose step has its own heading.
+  var showsHeading = true
   @AppStorage(Alerts.breakingKey) var breaking = false
   @AppStorage(Alerts.followingKey) var following = false
   @AppStorage(Alerts.pushStatusKey) var pushStatus: String?
@@ -254,7 +289,7 @@ struct AlertSettings: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Eyebrow("Alerts")
+      if showsHeading { Eyebrow("Alerts") }
       row("Breaking news", detail: "A story five or more outlets are covering within the hour. A few a day at most.", isOn: $breaking)
       if breaking, let pushStatus, !pushStatus.hasPrefix("on:") {
         // Why push isn't working, in CloudKit's words; selectable so it can be copied.

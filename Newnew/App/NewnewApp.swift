@@ -10,6 +10,7 @@ struct NewnewApp: App {
   let container: ModelContainer
   @State private var pipeline: FeedSyncPipeline
   @State private var showsLaunch = !LoadingBoard.hasPlayed
+  @State private var outlets = OutletStore.shared
   @Environment(\.scenePhase) var scenePhase
   /// Whether the loading board stays up, with its progress bar, until the sync is done: with
   /// nothing stored yet, or a big catch-up after hours away (`hasALotToLoad`). Otherwise it
@@ -46,6 +47,11 @@ struct NewnewApp: App {
     WindowGroup {
       ZStack {
         FeedView()
+        // First launch: choose outlets (and own feeds, alerts) before reading.
+        if !outlets.hasOnboarded {
+          OnboardingView { withAnimation(.easeOut(duration: 0.3)) {} }
+            .transition(.opacity)
+        }
         if showsLaunch { LoadingBoard(isShowing: $showsLaunch, waitsForFeed: boardWaitsForFeed) }
       }
       .environment(pipeline)
@@ -55,6 +61,7 @@ struct NewnewApp: App {
         if !boardWaitsForFeed {
           while LaunchState.shared.isShowing { try? await Task.sleep(for: .milliseconds(100)) }
         }
+        await outlets.refreshCatalog()
         await syncInForeground()
         await Alerts.updateSubscriptions()
       }

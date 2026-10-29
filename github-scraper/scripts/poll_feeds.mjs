@@ -389,6 +389,20 @@ async function writeChunks(articles, generatedAt) {
   return runs.length
 }
 
+/** One entry per outlet: its name, its categories, and its kinds of feed (article, video, podcast, chart). */
+export function outletCatalog(feeds) {
+  const byOutlet = new Map()
+  for (const feed of feeds) {
+    const entry = byOutlet.get(feed.outlet) ?? { outlet: feed.outlet, categories: [], kinds: [] }
+    if (feed.category && !entry.categories.includes(feed.category)) entry.categories.push(feed.category)
+    // "article" for an ordinary news feed, so the app can tell video-only outlets apart.
+    const kind = feed.kind ?? 'article'
+    if (!entry.kinds.includes(kind)) entry.kinds.push(kind)
+    byOutlet.set(feed.outlet, entry)
+  }
+  return { outlets: [...byOutlet.values()] }
+}
+
 // MARK: Run
 
 async function main() {
@@ -475,6 +489,9 @@ async function main() {
   await writeFile(OUT_FILE, JSON.stringify({ generatedAt, articles }))
   const chunkCount = await writeChunks(articles, generatedAt)
   await writeFile(path.join(OUT_DIR, 'status.json'), JSON.stringify(status, null, 2))
+  // The outlets readers choose from in the app (onboarding, Settings › Outlets): each outlet
+  // once, with the kinds of feed it has. The app ships a copy for a first launch offline.
+  await writeFile(path.join(OUT_DIR, 'outlets.json'), JSON.stringify(outletCatalog(feeds)))
   await writeFile(path.join(OUT_DIR, '.nojekyll'), '')
 
   const failed = results.filter((r) => r.error)
