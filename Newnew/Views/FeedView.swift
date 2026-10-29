@@ -369,6 +369,10 @@ struct FeedView: View {
             Task { @MainActor in
               await Task.yield()
               scrollPosition.scrollTo(y: pinOffset)
+              // The top's height changes with the filter (lines come and go) and is measured
+              // after it's drawn: aim again with the new height if the bar didn't pin.
+              try? await Task.sleep(for: .milliseconds(120))
+              if !barPinned { scrollPosition.scrollTo(y: pinOffset) }
             }
           }
         }
@@ -379,6 +383,15 @@ struct FeedView: View {
       // No fade at the top: the pinned filter bar covers what scrolls under it.
       .scrollEdgeEffectHidden(true, for: .top)
       .dotRefreshable(isSyncing: pipeline.isSyncing, isShowing: $boardShowing) { await pipeline.sync() }
+      // Nothing shows behind the clock and the round buttons: page colour from the top of the
+      // screen to the bottom of the toolbar, whatever the scroll position (the pinned bar
+      // covers the rest).
+      .overlay(alignment: .top) {
+        Color.clear
+          .frame(height: 0)
+          .background(alignment: .bottom) { Swiss.canvas.ignoresSafeArea(edges: .top) }
+          .allowsHitTesting(false)
+      }
       .navigationDestination(for: StoryCluster.self) { initialCluster in
         StoryPagerView(
           initialCluster: initialCluster,

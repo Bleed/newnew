@@ -154,8 +154,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   scrolling); choosing Briefing shows a row of regions, which narrow the news. A topic filter
   shows the stories that topic raised. There is no Local region (removed on request);
   local-news outlets still carry `country` from feeds.json.
+- **Top edge of Today**: a page-coloured strip covers the status bar and toolbar area at every
+  scroll position (scroll edge effect is off), so nothing shows behind the clock or buttons.
 - **Filters on Today**: changing filter while the bar is pinned scrolls to `topHeight + 12` a
-  frame later, so the filter starts at its first story (ScrollPosition offsets count from the
+  frame later (and again 120 ms on if the bar didn't pin: the top's height changes with the
+  filter), so the filter starts at its first story (ScrollPosition offsets count from the
   page top; scrolling to the pinned header itself is a no-op). The pill row keeps the chosen
   pill centred with `scrollPosition(id:)`, so its ForEach ids must be the filters' `raw`
   strings. A sideways swipe between filters was tried (2026-10-29) and removed: it didn't feel
