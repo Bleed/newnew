@@ -281,17 +281,7 @@ struct FeedView: View {
                 emptyState
               } else if visible.isEmpty {
                 if readHiddenCount > 0 {
-                  EditionCompleteReceipt(
-                    filterTitle: filter.title,
-                    windowHours: newsWindow.rawValue,
-                    storiesRead: readHiddenCount,
-                    articlesSynthesised: sections.readArticlesCount,
-                    outletsScanned: sections.outletsScannedCount,
-                    mutedCount: hiddenCount
-                  ) {
-                    withAnimation(.snappy(duration: 0.2)) { hideRead = false }
-                  }
-                  .padding(.top, 6)
+                  allRead.padding(.top, 6)
                 } else {
                   Text("Nothing on \(filter.title) right now.")
                     .font(.subheadline)
@@ -486,6 +476,16 @@ struct FeedView: View {
     }
   }
 
+  /// Everything here read: the same summary as at the end of a swipe run.
+  var allRead: some View {
+    ReadSummary(stories: sections.readClusters, minutes: sections.readingMinutes) {
+      Button("Show read stories") {
+        withAnimation(.snappy(duration: 0.2)) { hideRead = false }
+      }
+      .buttonStyle(.swissPrimary)
+    }
+  }
+
   var emptyState: some View {
     VStack(alignment: .leading, spacing: 8) {
       Text(pipeline.isSyncing ? "Reading the feed…" : "Nothing here yet")
@@ -520,127 +520,6 @@ struct FeedView: View {
   }
 }
 
-// MARK: - Feature 5: "Edition Complete" Dot-Matrix Receipt
-
-struct EditionCompleteReceipt: View {
-  let filterTitle: String
-  var windowHours: Int = 24
-  let storiesRead: Int
-  let articlesSynthesised: Int
-  let outletsScanned: Int
-  let mutedCount: Int
-  var onReviewRead: () -> Void
-
-  @State private var appeared = false
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
-      // 1. Unboxed animated dot-matrix mark + Headline
-      HStack(alignment: .center, spacing: 16) {
-        VStack(alignment: .leading, spacing: 5) {
-          DotText("ALL", pitch: 2.3, motion: .roll, rollsIn: true)
-          DotText("GOOD", pitch: 2.3, motion: .roll, rollsIn: true)
-        }
-        .foregroundStyle(Swiss.ink)
-        .scaleEffect(appeared ? 1 : 0.88, anchor: .leading)
-        .opacity(appeared ? 1 : 0)
-
-        VStack(alignment: .leading, spacing: 3) {
-          Text("All caught up on \(filterTitle).")
-            .font(Swiss.headline(24, relativeTo: .title3))
-            .foregroundStyle(Swiss.ink)
-          Text("Every unread story in this edition has been read.")
-            .font(.footnote)
-            .foregroundStyle(Swiss.muted)
-        }
-      }
-
-      PerforatedRule()
-
-      // 2. Standard sans-serif list labels + animated DotText numbers
-      VStack(spacing: 11) {
-        ledgerRow(label: "Stories read", value: "\(storiesRead)")
-        ledgerRow(label: "Articles synthesised", value: "\(articlesSynthesised)")
-        ledgerRow(label: "Outlets scanned", value: "\(outletsScanned)")
-        if mutedCount > 0 {
-          ledgerRow(label: "Muted noise filtered", value: "\(mutedCount)")
-        }
-      }
-
-      PerforatedRule()
-
-      // 3. Action button only (no FINIS · 0 UNREAD)
-      Button(action: onReviewRead) {
-        HStack(spacing: 6) {
-          Text("Review \(storiesRead) read \(storiesRead == 1 ? "story" : "stories")")
-          Image(systemName: "arrow.right")
-        }
-      }
-      .buttonStyle(.swissSecondary)
-    }
-    .padding(18)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .tile(.plain, radius: 20)
-    .overlay(
-      RoundedRectangle(cornerRadius: 20, style: .continuous)
-        .strokeBorder(Swiss.ink.opacity(0.16), lineWidth: 1.2)
-    )
-    .onAppear {
-      withAnimation(.spring(response: 0.45, dampingFraction: 0.82)) {
-        appeared = true
-      }
-    }
-  }
-
-  private func ledgerRow(label: String, value: String) -> some View {
-    HStack(alignment: .center, spacing: 8) {
-      Text(label)
-        .font(.subheadline)
-        .foregroundStyle(Swiss.muted)
-        .fixedSize()
-
-      PerforatedLeader()
-
-      DotText(value, pitch: 1.8, motion: .roll, rollsIn: true)
-        .foregroundStyle(Swiss.ink)
-        .fixedSize()
-    }
-  }
-}
-
-/// Subtle dotted leader line between the label and the animated DotText number.
-private struct PerforatedLeader: View {
-  var body: some View {
-    Canvas { context, size in
-      var path = Path()
-      path.move(to: CGPoint(x: 0, y: size.height / 2))
-      path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-      context.stroke(
-        path,
-        with: .color(Swiss.ink.opacity(0.18)),
-        style: StrokeStyle(lineWidth: 1, lineCap: .round, dash: [1, 5])
-      )
-    }
-    .frame(height: 2)
-  }
-}
-
-private struct PerforatedRule: View {
-  var body: some View {
-    Canvas { context, size in
-      var path = Path()
-      path.move(to: CGPoint(x: 0, y: size.height / 2))
-      path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
-      context.stroke(
-        path,
-        with: .color(Swiss.ink.opacity(0.18)),
-        style: StrokeStyle(lineWidth: 1, dash: [4, 4])
-      )
-    }
-    .frame(height: 2)
-  }
-}
-
 /// Interactive horizontal pager that moves the story page left and right with your finger,
 /// while completely ignoring vertical scroll gestures so `StoryDetailView` scrolls at 120Hz.
 /// The end of a run of stories swiped through: a rebus top like Today's ("3 STORIES / READ IN
@@ -655,76 +534,85 @@ struct PagerEndPage: View {
   var backToToday: () -> Void
   var startOver: () -> Void
 
-  @State private var footerShown = false
-  @State private var blink = false
+  var body: some View {
+    ScrollView {
+      ReadSummary(stories: viewed, minutes: max(1, Int(Date.now.timeIntervalSince(startedAt) / 60))) {
+        Button("Back to Today", action: backToToday).buttonStyle(.swissPrimary)
+        Button("Start over", action: startOver).buttonStyle(.swissSecondary)
+      }
+      .padding(.top, 20)
+      .padding(.horizontal, Swiss.pageInset)
+      .padding(.bottom, 32)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .swissCanvas()
+  }
+}
+
+/// What was read, the same at the end of a swipe run (`PagerEndPage`) and at the bottom of
+/// Today when every story there is read: a rebus top ("3 STORIES / READ IN 12 MIN / MOST FROM
+/// BBC"), a small table in the dot face, and the buttons. The table rows come in one after
+/// another (0.12 s apart) as a departures board, then the buttons.
+struct ReadSummary<Actions: View>: View {
+  let stories: [StoryCluster]
+  let minutes: Int
+  @ViewBuilder var actions: Actions
+
+  @State private var actionsShown = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-  var articles: [ArticleItem] { viewed.flatMap(\.articles) }
+  var articles: [ArticleItem] { stories.flatMap(\.articles) }
   var outlets: Int { Set(articles.map(\.outlet)).count }
-  /// The outlet with the most articles in the run, its first word in letters the dot face has.
+  /// The outlet with the most articles, its first word in letters the dot face has.
   var topOutlet: String {
     let counts = Dictionary(articles.map { ($0.outlet, 1) }, uniquingKeysWith: +)
     guard let top = counts.max(by: { $0.value < $1.value })?.key else { return "-" }
     // The first word ("BBC", "GUARDIAN", "VISUAL"), so it fits beside the name with room for
     // the leader dots.
-    let word = top.replacingOccurrences(of: "The ", with: "").uppercased()
-      .split(separator: " ").first.map { $0.filter { $0.isLetter || $0.isNumber } } ?? ""
-    return word.isEmpty ? "-" : String(word.prefix(8))
+    let words = top.replacingOccurrences(of: "The ", with: "").uppercased().split(separator: " ")
+      .map { $0.filter { $0.isLetter || $0.isNumber } }.filter { !$0.isEmpty }
+    // A name that opens with a filler word goes by its initials: Our World in Data → OWID.
+    if let first = words.first, ["OUR", "A", "AN", "MY"].contains(first), words.count > 2 {
+      return String(words.compactMap(\.first))
+    }
+    return words.first.map { String($0.prefix(8)) } ?? "-"
   }
-  var minutes: Int { max(1, Int(Date.now.timeIntervalSince(startedAt) / 60)) }
 
   var rows: [(name: String, value: String)] {
     [("ARTICLES", "\(articles.count)"), ("OUTLETS", "\(outlets)"), ("MOST READ", topOutlet)]
   }
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 12) {
-        // The page's top as a rebus, like Today's: what this run was.
-        OneSentenceTop(
-          figure: "\(viewed.count) \(viewed.count == 1 ? "STORY" : "STORIES")",
-          detail: [.word("READ IN"), .minutes("\(minutes) MIN"), .check],
-          messages: [KeyMessage(id: "most", tokens: [.word("MOST FROM"), .pill(topOutlet)])],
-          size: 17, figureSize: 44)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.top, 20)
-          .padding(.bottom, 14)
-
-        VStack(alignment: .leading, spacing: 10) {
-          ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-            // In place from the start (added later, rows skipped the decode); each waits its turn.
-            ScoreRow(name: row.name, value: row.value, delay: 0.3 + Double(index) * 0.12)
-          }
-        }
-        .padding(18)
+    VStack(alignment: .leading, spacing: 12) {
+      OneSentenceTop(
+        figure: "\(stories.count) \(stories.count == 1 ? "STORY" : "STORIES")",
+        detail: [.word("READ IN"), .minutes("\(minutes) MIN"), .check],
+        messages: [KeyMessage(id: "most", tokens: [.word("MOST FROM"), .pill(topOutlet)])],
+        size: 17, figureSize: 44)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .tile(.plain)
+        .padding(.bottom, 14)
 
-        VStack(alignment: .leading, spacing: 16) {
-          DotText("NEW STORIES EVERY HALF HOUR", pitch: 1.8)
-            .foregroundStyle(Swiss.muted)
-            .opacity(blink ? 0.35 : 1)
-          HStack(spacing: 10) {
-            Button("Back to Today", action: backToToday).buttonStyle(.swissPrimary)
-            Button("Start over", action: startOver).buttonStyle(.swissSecondary)
-          }
+      VStack(alignment: .leading, spacing: 10) {
+        ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+          // In place from the start (added later, rows skipped the decode); each waits its turn.
+          ScoreRow(name: row.name, value: row.value, delay: 0.3 + Double(index) * 0.12)
         }
-        .padding(.top, 10)
-        .opacity(footerShown ? 1 : 0)
       }
-      .padding(.horizontal, Swiss.pageInset)
-      .padding(.bottom, 32)
+      .padding(18)
       .frame(maxWidth: .infinity, alignment: .leading)
+      .tile(.plain)
+
+      HStack(spacing: 10) { actions }
+        .padding(.top, 10)
+        .opacity(actionsShown ? 1 : 0)
     }
-    .swissCanvas()
     .task {
       if reduceMotion {
-        footerShown = true
+        actionsShown = true
         return
       }
       try? await Task.sleep(for: .seconds(0.3 + Double(rows.count) * 0.12 + 0.4))
-      withAnimation(.easeOut(duration: 0.3)) { footerShown = true }
-      withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true).delay(0.6)) { blink = true }
+      withAnimation(.easeOut(duration: 0.3)) { actionsShown = true }
     }
     .accessibilityElement(children: .contain)
   }
@@ -877,8 +765,8 @@ struct StoryPagerView: View {
 /// The page's one-sentence top, as on Atelier's dashboards:
 ///
 ///     SAT (24) (OCT) 15:30
-///     31 ARTICLES
-///     ARE (NEW) IN (13) STORIES
+///     1043 ARTICLES
+///     (31) (NEW) IN (13) STORIES
 ///     (TOP) STORM ELIN BATTERS… (clock) ⌊20 MIN (→)
 ///
 /// The last line takes turns with the Catchup reel, the read stories hidden and how many
@@ -915,15 +803,19 @@ struct NewsTop: View {
   }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
-  /// New to you: reached this iPhone since you last looked. Not by publish time, because
-  /// articles are a median 41 minutes old by the time the scraper sees them, so nearly all of
-  /// them were "published" before your last look.
-  var fresh: [ArticleItem] { articles.filter { $0.fetchedAt > since } }
+  /// New to you: reached this iPhone since you last looked, and published no more than two
+  /// hours before that (feeds can lag a little). The publish time keeps out articles that
+  /// arrive late but aren't news: a newly chosen outlet's last two days, or everything after
+  /// the store is read in afresh.
+  var fresh: [ArticleItem] {
+    let earliest = since.addingTimeInterval(-2 * 3600)
+    return articles.filter { $0.fetchedAt > since && $0.publishedAt > earliest }
+  }
 
+  /// Every article on the page; the new ones are on the line under it.
   var figure: String {
     if articles.isEmpty { return readHiddenCount > 0 ? "CAUGHT UP" : "READING" }
-    let count = fresh.isEmpty ? articles.count : fresh.count
-    return "\(count) \(count == 1 ? "ARTICLE" : "ARTICLES")"
+    return "\(articles.count) \(articles.count == 1 ? "ARTICLE" : "ARTICLES")"
   }
 
   var detail: [RebusToken] {
@@ -937,7 +829,7 @@ struct NewsTop: View {
       return [.word("IN"), .number("\(visible.count)"), .word(visible.count == 1 ? "STORY" : "STORIES"), .grey("·"), .word("NOTHING"), .pill("NEW")]
     }
     let stories = Set(fresh.compactMap { $0.cluster?.id }).count
-    return [.word(fresh.count == 1 ? "IS" : "ARE"), .pill("NEW"), .word("IN"), .number("\(stories)"), .word(stories == 1 ? "STORY" : "STORIES")]
+    return [.number("\(fresh.count)"), .pill("NEW"), .word("IN"), .number("\(stories)"), .word(stories == 1 ? "STORY" : "STORIES")]
   }
 
   var messages: [KeyMessage] {
@@ -997,14 +889,20 @@ struct FeedSections {
   var hiddenCount = 0
   var readHiddenCount = 0
   var settledReadTotal = 0
-  var readArticlesCount = 0
-  var outletsScannedCount = 0
+  /// The read stories under the filter, for the summary when all are read.
+  var readClusters: [StoryCluster] = []
+
+  /// Reading time for the read stories: first read to last, at least a minute.
+  var readingMinutes: Int {
+    let times = readClusters.compactMap(\.readAt)
+    guard let first = times.min(), let last = times.max() else { return 1 }
+    return max(1, Int(last.timeIntervalSince(first) / 60))
+  }
 
   init() {}
 
   init(clusters: [StoryCluster], filter: FeedFilter, hideRead: Bool = true, window: NewsWindow = .h24) {
     var pillars: [UUID: Pillar] = [:]
-    var allOutlets = Set<String>()
     let now = Date.now
     let cutoff = now.addingTimeInterval(-window.interval)
 
@@ -1014,9 +912,6 @@ struct FeedSections {
         continue
       }
 
-      for article in cluster.articles {
-        allOutlets.insert(article.outlet)
-      }
       if cluster.isMuted { hiddenCount += 1; continue }
       guard !cluster.articles.isEmpty else { continue }
       let pillar = cluster.pillar
@@ -1033,7 +928,7 @@ struct FeedSections {
       switch ReadLedger.status(for: cluster) {
       case .settledRead:
         settledReadTotal += 1
-        readArticlesCount += cluster.articles.count
+        readClusters.append(cluster)
         if hideRead {
           readHiddenCount += 1
           continue
@@ -1048,7 +943,6 @@ struct FeedSections {
       visible.append(cluster)
     }
 
-    self.outletsScannedCount = allOutlets.count
 
     let outlets = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Set($0.articles.map(\.outlet)).count) })
     let importance = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Self.importance($0, outlets: outlets[$0.id] ?? 0, now: now)) })

@@ -137,7 +137,9 @@ import SwiftData
 
   var newSinceRead: Int {
     guard let readAt else { return 0 }
-    return articles.filter { $0.fetchedAt > readAt }.count
+    // Arrived since, and not an old article that came late (see NewsTop.fresh).
+    let earliest = readAt.addingTimeInterval(-2 * 3600)
+    return articles.filter { $0.fetchedAt > readAt && $0.publishedAt > earliest }.count
   }
 
   var brief: ClusterPerspectiveBrief? {
