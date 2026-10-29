@@ -129,7 +129,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   forgets the last chunk so the next sync takes the whole snapshot. Own feeds are found and
   read on the iPhone (`CustomFeedReader`: a site's `<link rel="alternate">` or the usual
   paths; RSS and Atom), never by the scraper. Settings › Outlets has the same picker and the
-  add-your-own panel. Breaking push still covers all outlets (the scraper doesn't know a
+  add-your-own panel. YouTube channels too: their feed's `yt:videoId` makes the items videos
+  (Watch, play mark, `hqdefault` thumbnail), Shorts are skipped. In the EU YouTube puts a
+  cookie-consent page before channel pages, so an @handle can't be looked up from the phone;
+  newnew doesn't answer it, it asks for the channel ID (`UC…`, or a /channel/ link) and builds
+  `feeds/videos.xml?channel_id=` from that. Breaking push still covers all outlets (the scraper doesn't know a
   reader's choice).
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
   (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The

@@ -238,12 +238,12 @@ struct AddFeedPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      Text("Paste a site or its feed address. newnew finds the feed, shows you what it would read, and checks it when it refreshes.")
+      Text("Paste a site, its feed address, or a YouTube channel (its link or ID). newnew finds the feed, shows you what it would read, and checks it when it refreshes.")
         .font(.subheadline)
         .foregroundStyle(Swiss.muted)
         .fixedSize(horizontal: false, vertical: true)
       HStack(spacing: 8) {
-        TextField("Site or feed address", text: $address)
+        TextField("Site, feed or YouTube channel", text: $address)
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .keyboardType(.URL)
@@ -267,7 +267,12 @@ struct AddFeedPanel: View {
             Spacer()
             DotChip("FOUND")
           }
-          Text("\(found.articles.count) articles in the last three days").font(.footnote).foregroundStyle(Swiss.muted)
+          let videos = found.articles.filter { $0.videoID != nil }.count
+          let articles = found.articles.count
+          Text(videos > 0
+            ? "YouTube channel · \(videos) \(videos == 1 ? "video" : "videos") in the last three days"
+            : "\(articles) \(articles == 1 ? "article" : "articles") in the last three days")
+            .font(.footnote).foregroundStyle(Swiss.muted)
           ForEach(found.articles.prefix(2), id: \.url) { article in
             Text(article.title).font(Swiss.headline(20, relativeTo: .body)).fixedSize(horizontal: false, vertical: true)
           }
@@ -291,7 +296,8 @@ struct AddFeedPanel: View {
             HStack {
               VStack(alignment: .leading, spacing: 2) {
                 Text(feed.title).font(.body)
-                Text(URL(string: feed.url)?.host() ?? feed.url).font(.caption).foregroundStyle(Swiss.muted)
+                Text(feed.url.contains("youtube.com") ? "YouTube channel" : URL(string: feed.url)?.host() ?? feed.url)
+                  .font(.caption).foregroundStyle(Swiss.muted)
               }
               Spacer()
               Button("Remove \(feed.title)", systemImage: "xmark") {

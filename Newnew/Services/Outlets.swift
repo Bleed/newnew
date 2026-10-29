@@ -134,24 +134,35 @@ nonisolated enum CustomFeedReader {
   }
 
   enum Failure: LocalizedError {
-    case badAddress, noFeed
+    case badAddress, noFeed, youTubeConsent
     var errorDescription: String? {
       switch self {
       case .badAddress: "That doesn't look like a web address."
       case .noFeed: "No RSS or Atom feed was found there."
+      case .youTubeConsent:
+        "YouTube asks for cookie consent before it shows channel pages here, so newnew can't look up that name. Paste the channel's ID instead: in YouTube, open the channel, tap its description, then Share channel › Copy channel ID."
       }
     }
   }
 
-  /// A site or feed address → the feed and its articles.
+  /// A site, feed or YouTube channel address (or just "@name") → the feed and its articles.
   static func find(_ input: String) async throws -> Found {
     var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    // A YouTube handle on its own: the channel page names its feed.
+    if text.hasPrefix("@"), !text.contains("/") { text = "https://www.youtube.com/" + text }
+    // A bare channel ID ("UC…", 24 characters) or a /channel/UC… link: YouTube's feed by ID.
+    if let id = text.firstMatch(of: /(?:^|channel\/)(UC[A-Za-z0-9_-]{22})/)?.output.1 {
+      return try await read(URL(string: "https://www.youtube.com/feeds/videos.xml?channel_id=\(id)")!)
+    }
     if !text.contains("://") { text = "https://" + text }
     guard let url = URL(string: text), url.host() != nil else { throw Failure.badAddress }
     if let found = try? await read(url) { return found }
     // A web page: the feed it names, then the usual addresses.
     var candidates: [URL] = []
     if let (data, response) = try? await fetch(url), let html = String(data: data, encoding: .utf8) {
+      // In the EU, YouTube puts its cookie-consent page in front of channel pages. newnew
+      // doesn't answer it for the reader; it asks for the channel's ID instead.
+      if response.url?.host()?.hasPrefix("consent.") == true { throw Failure.youTubeConsent }
       candidates += alternateLinks(html, base: response.url ?? url)
     }
     let root = URL(string: "\(url.scheme ?? "https")://\(url.host() ?? "")")!
@@ -185,11 +196,15 @@ nonisolated enum CustomFeedReader {
     let cutoff = Date.now.addingTimeInterval(-72 * 3600)  // FeedSyncPipeline.retention
     let articles = parser.items.compactMap { item -> FeedArticleDTO? in
       guard !item.title.isEmpty, !item.link.isEmpty else { return nil }
+      // YouTube Shorts are vertical and fleeting: not news videos.
+      guard !item.link.contains("/shorts/") else { return nil }
       let date = item.date ?? .now
       guard date > cutoff else { return nil }
+      // A YouTube channel's videos are videos: Watch opens YouTube, the card shows a play mark.
+      let image = item.videoID.map { "https://i.ytimg.com/vi/\($0)/hqdefault.jpg" } ?? item.image
       return FeedArticleDTO(
         title: item.title, snippet: String(plain(item.summary).prefix(280)), outlet: title, url: item.link,
-        imageURL: item.image, publishedAt: min(date, .now), category: nil, country: nil, videoID: nil,
+        imageURL: image, publishedAt: min(date, .now), category: nil, country: nil, videoID: item.videoID,
         audioURL: nil, audioSeconds: nil, isChart: nil, galleryURLs: nil)
     }
     return Found(feed: CustomFeed(url: feedURL, title: title), articles: Array(articles.prefix(40)))
@@ -219,6 +234,8 @@ nonisolated enum CustomFeedReader {
 private nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchecked Sendable {
   struct Item {
     var title = "", link = "", summary = "", image: String?, date: Date?
+    /// YouTube's `<yt:videoId>`.
+    var videoID: String?
   }
 
   var isFeed = false
@@ -258,7 +275,9 @@ private nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchec
     switch name {
     case "title": current?.title = CustomFeedReader.plain(value)
     case "link": if current?.link.isEmpty == true { current?.link = value }
-    case "description", "summary", "content:encoded": if current?.summary.isEmpty == true { current?.summary = value }
+    case "description", "summary", "content:encoded", "media:description":
+      if current?.summary.isEmpty == true { current?.summary = value }
+    case "yt:videoId": current?.videoID = value
     case "pubDate", "published", "updated", "dc:date": if current?.date == nil { current?.date = Self.date(value) }
     case "item", "entry": if let current { items.append(current) }; current = nil
     default: break
