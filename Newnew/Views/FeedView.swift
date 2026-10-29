@@ -212,7 +212,15 @@ struct FeedView: View {
 
   static let headerTop: CGFloat = 24
   static let headerBelowBand: CGFloat = 42
-  private static let feedTopAnchorID = "feed-top-anchor"
+  /// Where Today is scrolled, to start a filter at its top.
+  @State private var scrollPosition = ScrollPosition()
+  /// The filter bar's frame on screen: a sideways swipe that starts on it scrolls its pills,
+  /// not the filters.
+  @State private var barFrame: CGRect = .zero
+  /// A sideways swipe is under way: the card under the finger mustn't open on release.
+  @State private var swiping = false
+  /// Where the bar pins, counted from the top of the page.
+  var pinOffset: CGFloat { topHeight + 12 }
   @State private var boardShowing = false
   @State private var barPinned = false
   /// The top's height with its padding: the filter bar pins once the page has scrolled this far
@@ -244,7 +252,7 @@ struct FeedView: View {
     let settledReadTotal = sections.settledReadTotal
 
     NavigationStack(path: $path) {
-      ScrollViewReader { scrollProxy in
+      ScrollViewReader { _ in
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
             NewsTop(
@@ -267,13 +275,6 @@ struct FeedView: View {
             .padding(.top, boardShowing ? Self.headerBelowBand : Self.headerTop)
             .padding(.bottom, 18)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
-            .overlay(alignment: .bottom) {
-              // Zero-size anchor at the bottom edge of NewsTop so scrolling to it places
-              // FilterBar right at the top without adding extra spacing or overlapping NewsTop.
-              Color.clear
-                .frame(height: 1)
-                .id(Self.feedTopAnchorID)
-            }
 
             // Stays at the top while the stories scroll under it.
             Section {
@@ -291,7 +292,7 @@ struct FeedView: View {
               if !wide.isEmpty {
                 Eyebrow("Top stories").padding(.top, 4)
                 ForEach(wide) { cluster in
-                  NavigationLink(value: cluster) { StoryCard(cluster: cluster) }
+                  Button { open(cluster) } label: { StoryCard(cluster: cluster) }
                     .buttonStyle(.plain)
                     .contextMenu { menu(cluster) }
                 }
@@ -299,7 +300,7 @@ struct FeedView: View {
               if !brief.isEmpty {
                 Eyebrow("In brief").padding(.top, 16)
                 ForEach(brief) { cluster in
-                  NavigationLink(value: cluster) { BriefRow(cluster: cluster) }
+                  Button { open(cluster) } label: { BriefRow(cluster: cluster) }
                     .buttonStyle(.plain)
                     .contextMenu { menu(cluster) }
                 }
@@ -332,11 +333,7 @@ struct FeedView: View {
               }
             } header: {
               FilterBar(
-                selection: Binding(get: { filter }, set: {
-                  // Switching filters always hides read stories so the feed is fresh
-                  if !hideRead { hideRead = true }
-                  filterRaw = $0.raw
-                }),
+                selection: Binding(get: { filter }, set: { choose($0) }),
                 hideRead: $hideRead,
                 // The Read pill shows or hides read stories; with them staying there is nothing to toggle.
                 readCount: readStoriesDisappear ? settledReadTotal : 0,
@@ -344,6 +341,7 @@ struct FeedView: View {
                 topics: followedTopics
               )
               .padding(.vertical, 10)
+              .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.feedSpace)) } action: { barFrame = $0 }
               .background(alignment: .bottom) {
                 if barPinned {
                   Swiss.canvas
@@ -365,11 +363,34 @@ struct FeedView: View {
         } action: { _, isPinned in
           barPinned = isPinned
         }
+        .coordinateSpace(.named(Self.feedSpace))
+        // Sideways: the next or previous filter, as in the bar.
+        .scrollPosition($scrollPosition)
+        .simultaneousGesture(
+          DragGesture(minimumDistance: 20, coordinateSpace: .named(Self.feedSpace))
+            .onChanged { value in
+              if !swiping, !barFrame.contains(value.startLocation), abs(value.translation.width) > abs(value.translation.height) * 1.5 {
+                swiping = true
+              }
+            }
+            .onEnded { value in
+              let dx = value.translation.width, dy = value.translation.height
+              // After the card's button has seen the release.
+              Task { @MainActor in swiping = false }
+              guard !barFrame.contains(value.startLocation), abs(dx) > 70, abs(dx) > abs(dy) * 2.2 else { return }
+              step(dx < 0 ? 1 : -1)
+            }
+        )
+        .sensoryFeedback(.selection, trigger: filterRaw)
         .onChange(of: filterRaw) {
           recomputeSections()
+          // A filter starts at its top: the bar pinned, its first story under it. From higher
+          // up the page the top of the list is already in view. A frame later, once the new
+          // list (and the top above it, whose lines change with the filter) is laid out.
           if barPinned {
-            withAnimation(.snappy(duration: 0.22)) {
-              scrollProxy.scrollTo(Self.feedTopAnchorID, anchor: .top)
+            Task { @MainActor in
+              await Task.yield()
+              scrollPosition.scrollTo(y: pinOffset)
             }
           }
         }
@@ -474,6 +495,29 @@ struct FeedView: View {
       router.articleURL = nil
       path = [cluster]
     }
+  }
+
+  static let feedSpace = "feed"
+
+  func open(_ cluster: StoryCluster) {
+    guard !swiping else { return }
+    path.append(cluster)
+  }
+
+  /// The filters in the bar's order, for swiping: All, the pillars, the topics you follow.
+  var swipeOrder: [FeedFilter] { [.all] + Pillar.allCases.map { .pillar($0) } + followedTopics.map { .topic($0) } }
+
+  func choose(_ next: FeedFilter) {
+    // Switching filters always hides read stories so the feed is fresh
+    if !hideRead { hideRead = true }
+    filterRaw = next.raw
+  }
+
+  /// One filter on (1) or back (-1); a region counts as Briefing.
+  func step(_ by: Int) {
+    let current: FeedFilter = if case .region = filter { .pillar(.briefing) } else { filter }
+    guard let index = swipeOrder.firstIndex(of: current), swipeOrder.indices.contains(index + by) else { return }
+    withAnimation(.snappy(duration: 0.2)) { choose(swipeOrder[index + by]) }
   }
 
   /// Everything here read: the same summary as at the end of a swipe run.
@@ -1070,21 +1114,36 @@ struct FilterBar: View {
   var showsReadToggle = true
   let topics: [String]
 
+  /// The pill the row is scrolled to.
+  @State private var shownPill: String?
+
+  /// The chosen pill in the top row (a region's is Briefing).
+  var mainID: String { if case .region = selection { FeedFilter.pillar(.briefing).raw } else { selection.raw } }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
       ScrollView(.horizontal) {
         HStack(spacing: 6) {
+          // Each pill is known by its filter's `raw`, which is what the row scrolls to.
           pill(.all)
-          ForEach(Pillar.allCases) { pillar in pill(.pillar(pillar)) }
+          ForEach(Pillar.allCases.map { FeedFilter.pillar($0).raw }, id: \.self) { raw in pill(FeedFilter(raw: raw)) }
           if !topics.isEmpty {
             divider
-            ForEach(topics, id: \.self) { topic in pill(.topic(topic)) }
+            ForEach(topics.map { FeedFilter.topic($0).raw }, id: \.self) { raw in pill(FeedFilter(raw: raw)) }
           }
           if showsReadToggle && (readCount > 0 || !hideRead) {
             divider
             readTogglePill
           }
         }
+        .scrollTargetLayout()
+      }
+      // Swiping to a filter brings its pill into view.
+      .scrollPosition(id: $shownPill, anchor: .center)
+      // Once the row has laid out; set at once, the position is ignored.
+      .task(id: mainID) {
+        try? await Task.sleep(for: .milliseconds(60))
+        withAnimation(.snappy(duration: 0.25)) { shownPill = mainID }
       }
       if selection.isNews {
         ScrollView(.horizontal) {
@@ -1125,5 +1184,6 @@ struct FilterBar: View {
       withAnimation(.snappy(duration: 0.2)) { selection = isOn ? otherwise ?? filter : filter }
     }
     .buttonStyle(SelectablePillStyle(isOn: isOn, small: small))
+    .id(filter.raw)
   }
 }

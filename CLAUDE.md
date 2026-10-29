@@ -154,6 +154,13 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   scrolling); choosing Briefing shows a row of regions, which narrow the news. A topic filter
   shows the stories that topic raised. There is no Local region (removed on request);
   local-news outlets still carry `country` from feeds.json.
+- **Filters on Today**: a sideways swipe on the list goes to the next or previous filter in
+  the bar's order (All, the pillars, followed topics; a region counts as Briefing); swipes that
+  start on the bar scroll its pills. Cards ignore the release of a sideways swipe (`swiping`).
+  Changing filter while the bar is pinned scrolls to `topHeight + 12` a frame later, so the
+  filter starts at its first story (ScrollPosition offsets count from the page top; scrolling
+  to the pinned header itself is a no-op). The pill row is positioned with
+  `scrollPosition(id:)`, so its ForEach ids must be the filters' `raw` strings.
 - **Adding a topic** shows at once as a pending row ("Writing example headlines…", "Reading
   the examples…", "Matching today's stories…") while the field's dot chip rolls THINKING →
   LEARNING → MATCHING (`TopicStep`); matching holds the main actor, so the step is drawn first.
