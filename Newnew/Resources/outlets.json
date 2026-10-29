@@ -607,6 +607,42 @@
    ]
   },
   {
+   "outlet": "Inverse",
+   "categories": [
+    "Technology"
+   ],
+   "kinds": [
+    "article"
+   ]
+  },
+  {
+   "outlet": "i-D",
+   "categories": [
+    "Fashion & Style"
+   ],
+   "kinds": [
+    "article"
+   ]
+  },
+  {
+   "outlet": "It's Nice That",
+   "categories": [
+    "Lifestyle & Food"
+   ],
+   "kinds": [
+    "article"
+   ]
+  },
+  {
+   "outlet": "Design Milk",
+   "categories": [
+    "Lifestyle & Food"
+   ],
+   "kinds": [
+    "article"
+   ]
+  },
+  {
    "outlet": "Bloomberg",
    "categories": [
     "Business"
