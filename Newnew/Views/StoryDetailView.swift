@@ -21,6 +21,16 @@ extension ArticleItem {
   }
 }
 
+/// Opens a link in the app that claims it (universal links: YouTube, The New York Times, The
+/// Guardian and most publishers with an app), or runs `otherwise` when no app does.
+enum LinkOpener {
+  static func open(_ url: URL, otherwise: @escaping @MainActor () -> Void) {
+    UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in
+      if !opened { Task { @MainActor in otherwise() } }
+    }
+  }
+}
+
 /// Wrapper so a `URL` can drive a sheet or split pane.
 private struct ActiveWebURL: Identifiable, Equatable {
   let url: URL
@@ -198,8 +208,8 @@ struct StoryDetailView: View {
       .animation(.snappy(duration: 0.24), value: activeWebURL)
       .environment(\.openURL, OpenURLAction { url in
         if isWideScreen, url.scheme == "http" || url.scheme == "https" {
-          withAnimation(.snappy(duration: 0.24)) {
-            activeWebURL = ActiveWebURL(url: url)
+          LinkOpener.open(url) {
+            withAnimation(.snappy(duration: 0.24)) { activeWebURL = ActiveWebURL(url: url) }
           }
           return .handled
         }
@@ -268,9 +278,11 @@ struct StoryDetailView: View {
     openResolvedURL(url)
   }
 
+  /// The publisher's own app first (YouTube, The New York Times, The Guardian…: any app that
+  /// claims its links), else the in-app browser.
   private func openResolvedURL(_ url: URL) {
-    withAnimation(.snappy(duration: 0.24)) {
-      activeWebURL = ActiveWebURL(url: url)
+    LinkOpener.open(url) {
+      withAnimation(.snappy(duration: 0.24)) { activeWebURL = ActiveWebURL(url: url) }
     }
   }
 

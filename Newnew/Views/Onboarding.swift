@@ -206,6 +206,38 @@ struct OutletPicker: View {
         }
       }
       .tile(.plain, radius: 16)
+      channels(item)
+    }
+  }
+
+  /// Suggested YouTube channels for the group: checking one follows it like an own feed.
+  @ViewBuilder func channels(_ item: OutletGroup) -> some View {
+    let channels = YouTubeSuggestions.channels(in: item)
+    if !channels.isEmpty {
+      Text("On YouTube").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted).padding(.top, 4)
+      VStack(spacing: 0) {
+        ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
+          let on = store.customFeeds.contains { $0.url == channel.url }
+          Button {
+            if on { store.remove(channel) } else { store.add(channel) }
+          } label: {
+            HStack(spacing: 10) {
+              Image(systemName: "play.rectangle.fill").font(.footnote).foregroundStyle(Swiss.muted)
+              Text(channel.title.replacingOccurrences(of: " · YouTube", with: "")).font(.body).foregroundStyle(Swiss.ink)
+              Spacer()
+              CheckMark(isOn: on)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .accessibilityLabel("\(channel.title), YouTube channel")
+          .accessibilityAddTraits(on ? .isSelected : [])
+          if index < channels.count - 1 { Divider().overlay(Swiss.ink.opacity(0.06)).padding(.horizontal, 14) }
+        }
+      }
+      .tile(.plain, radius: 16)
     }
   }
 }

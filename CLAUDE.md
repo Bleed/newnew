@@ -133,7 +133,10 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   (Watch, play mark, `hqdefault` thumbnail), Shorts are skipped. In the EU YouTube puts a
   cookie-consent page before channel pages, so an @handle can't be looked up from the phone;
   newnew doesn't answer it, it asks for the channel ID (`UC…`, or a /channel/ link) and builds
-  `feeds/videos.xml?channel_id=` from that. Breaking push still covers all outlets (the scraper doesn't know a
+  `feeds/videos.xml?channel_id=` from that. Each group in the picker suggests a few YouTube
+  channels (`YouTubeSuggestions`, IDs checked 2026-10-29); checking one adds it as an own feed.
+  Links open the publisher's app first (`LinkOpener`: universal links only, so YouTube, NYT,
+  Guardian…), falling back to the in-app browser. Breaking push still covers all outlets (the scraper doesn't know a
   reader's choice).
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
   (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The

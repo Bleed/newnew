@@ -44,6 +44,38 @@ nonisolated struct CustomFeed: Codable, Hashable, Identifiable, Sendable {
   var id: String { url }
 }
 
+/// YouTube channels suggested in each group of the outlet picker, read like the reader's own
+/// feeds (on the iPhone). Active channels with few Shorts, checked 2026-10-29. A channel that
+/// shares an outlet's name is "· YouTube", so its videos stay apart from the outlet's articles.
+nonisolated enum YouTubeSuggestions {
+  static func feed(_ title: String, _ id: String) -> CustomFeed {
+    CustomFeed(url: "https://www.youtube.com/feeds/videos.xml?channel_id=\(id)", title: title)
+  }
+
+  static func channels(in group: OutletGroup) -> [CustomFeed] {
+    switch group {
+    case .pillar(.briefing):
+      [feed("Vox", "UCLXo7UDZvByw2ixzpQCufnA"), feed("TLDR News Global", "UC-uhvujip5deVcEtLxnW8qg"),
+       feed("Kurzgesagt", "UCsXVk37bltHxD1rDPwtNM8Q"), feed("Wendover Productions", "UC9RM-iSvTu1uPJb8X5yp3EQ")]
+    case .pillar(.tech):
+      [feed("Marques Brownlee", "UCBJycsmduvYEL83R_U4JriQ"), feed("Linus Tech Tips", "UCXuqSBlHAE6Xw-yeJA0Tunw"),
+       feed("Dave2D", "UCVYamHliCI9rw1tHR1xbkfw"), feed("Mrwhosetheboss", "UCMiJRAwDNSNzuYeN2uWa0pA")]
+    case .pillar(.fashion):
+      [feed("Vogue · YouTube", "UCRXiA3h1no_PFkb1JCP0yMA"), feed("Highsnobiety · YouTube", "UCNe161YMUykW264kFe5PWxA")]
+    case .pillar(.entertainment):
+      [feed("Vanity Fair", "UCIsbLox_y9dCIMLd8tdC6qg"), feed("Pitchfork · YouTube", "UC7kI8WjpCfFoMSNDuRh_4lA"),
+       feed("Nerdwriter", "UCJkMlOu7faDgqh4PfzbpLdg")]
+    case .pillar(.gaming):
+      [feed("IGN", "UCKy1dAqELo0zrOtPkf0eTMw"), feed("Game Maker's Toolkit", "UCqJ-Xo29CKyLTjn6z2XwYAw"),
+       feed("Noclip", "UC0fDG3byEcMtbOqPMymDNbw")]
+    case .pillar(.lifestyle):
+      [feed("Bon Appétit · YouTube", "UCbpMy0Fg74eXXkvxJrtEn3w"), feed("Joshua Weissman", "UChBEbMKI1eCcejTtmI32UEw"),
+       feed("Dezeen · YouTube", "UCsWG9ANbrmgR0z-eFk_A3YQ")]
+    default: []
+    }
+  }
+}
+
 /// Which outlets newnew reads: the reader's choice (onboarding, Settings › Outlets) and their
 /// own feeds. Articles from an outlet not chosen are never stored. Kept in UserDefaults.
 @MainActor @Observable final class OutletStore {
