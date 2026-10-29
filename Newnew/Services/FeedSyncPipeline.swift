@@ -112,6 +112,30 @@ import SwiftData
     set { UserDefaults.standard.set(newValue, forKey: "feedLastChunk") }
   }
 
+  /// Away longer than this, opening the app is a big catch-up (six or more scraper runs,
+  /// hundreds of articles to read on the device): the full-screen loader stays up with its
+  /// progress bar until it's done, instead of the small pull-down band.
+  static let bigCatchUp: TimeInterval = 3 * 3600
+
+  /// Whether the next sync has a lot to do: nothing stored yet, or the newest piece this iPhone
+  /// has is older than `bigCatchUp`. Piece IDs are their run's time, 2026-10-24T18-35-58Z.
+  /// The loading board finishes on a done (or failed) phase; when it comes back for a catch-up
+  /// the last sync's "done" must not end it before the new sync starts.
+  func prepareForCatchUp() {
+    if !isSyncing { phase = .downloading }
+  }
+
+  var hasALotToLoad: Bool {
+    guard storyCount > 0 else { return true }
+    guard let id = lastChunkID else { return true }
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.timeZone = TimeZone(identifier: "UTC")
+    formatter.dateFormat = "yyyy-MM-dd'T'HH-mm-ss'Z'"
+    guard let date = formatter.date(from: id) else { return false }
+    return Date.now.timeIntervalSince(date) > Self.bigCatchUp
+  }
+
   /// What a sync brings in: articles to add or update, and the newest piece they came from.
   struct Download {
     var articles: [FeedArticleDTO]

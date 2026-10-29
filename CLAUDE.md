@@ -156,6 +156,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 
 ## Loading board and alerts
 
+- The full-screen loader waits for the sync, with its progress bar, on a first launch and on a
+  big catch-up: the newest stored feed piece older than 3 h (`FeedSyncPipeline.hasALotToLoad`),
+  at launch or on returning to the app. Otherwise it plays once and the sync runs behind the
+  pull-down band. Test: launch with `-feedLastChunk <old run ID>` (argument domain).
+
 - `LoadingBoard` (Design/DotMatrix.swift; Figma › Loading animation) replaces the launch board on
   every launch: a 28-column dot board with "new" over "new" rolling in. With stories stored it
   fades after 2 s (the launch sync waits 2.4 s so it can't hold the board up). On a first launch
