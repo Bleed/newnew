@@ -343,15 +343,28 @@ struct LegalFooterSection: View {
     VStack(alignment: .leading, spacing: 8) {
       Eyebrow("Publishers & privacy")
       VStack(alignment: .leading, spacing: 8) {
-        Text("newnew indexes public RSS feeds, displays headlines and very short extracts (EU DSM Directive Art. 15), and links directly to each publisher's website. All headlines, preview images, and trademarks belong to their respective publishers.")
+        Text("newnew reads public RSS feeds, shows each outlet's headline with a very short extract, and links to the publisher for the full story. Headlines, pictures and names belong to their publishers.")
           .font(.caption)
           .tileSecondary()
           .fixedSize(horizontal: false, vertical: true)
 
-        Text("Your followed topics, muted topics, reading history, and Apple Intelligence summaries are computed locally on this iPhone and never leave your device.")
+        Text("Your topics, reading history, own feeds and Apple Intelligence summaries stay on this iPhone. newnew collects nothing about you.")
           .font(.caption)
           .tileSecondary()
           .fixedSize(horizontal: false, vertical: true)
+
+        Button {
+          if let url = URL(string: "https://bleed.github.io/newnew/privacy.html") { openURL(url) }
+        } label: {
+          HStack(spacing: 4) {
+            Text("Privacy policy")
+            Image(systemName: "arrow.up.right")
+          }
+          .font(.caption.weight(.medium))
+          .foregroundStyle(Swiss.ink)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 2)
 
         Button {
           if let url = URL(string: "mailto:publishers@newnew.news?subject=Publisher%20RSS%20Inquiry") {

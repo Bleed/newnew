@@ -1,7 +1,7 @@
 // Polls the curated RSS feeds in feeds.json and writes one static file, public/latest_news.json,
 // that the Newnew app downloads. Runs every 30 minutes in GitHub Actions; costs nothing.
 //
-// What goes out per article: headline, a short snippet (≤ 280 characters), outlet, link, picture,
+// What goes out per article: headline, a very short extract (≤ 150 characters), outlet, link, picture,
 // time, category and, for local-news feeds, the country. Never the article body: the app links
 // out to the publisher.
 //
@@ -37,7 +37,7 @@
 //   node scripts/poll_feeds.mjs                 writes public/ (see "Output" below)
 //   PREVIOUS_FEED_URL=https://… node …          reuses pictures already found in the last run
 
-import { readFile, writeFile, mkdir, rm } from 'node:fs/promises'
+import { readFile, writeFile, mkdir, rm, copyFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import Parser from 'rss-parser'
@@ -52,7 +52,9 @@ const USER_AGENT = 'NewnewBot/1.0 (headline aggregator; links to publishers)'
 const MAX_AGE_HOURS = 48
 const PER_FEED = 30
 const TOTAL = 1600
-const SNIPPET_LENGTH = 280
+/// Very short extracts only: the published feed is a public file, so it carries no more than
+/// the app shows (the EU press publishers' right exempts very short extracts).
+const SNIPPET_LENGTH = 150
 const FEED_TIMEOUT = 15_000
 const PAGE_TIMEOUT = 6_000
 const PAGE_BYTES = 25_000
@@ -493,6 +495,8 @@ async function main() {
   // once, with the kinds of feed it has. The app ships a copy for a first launch offline.
   await writeFile(path.join(OUT_DIR, 'outlets.json'), JSON.stringify(outletCatalog(feeds)))
   await writeFile(path.join(OUT_DIR, '.nojekyll'), '')
+  // The app's privacy policy, at a stable public address (App Store Connect links to it).
+  await copyFile(path.join(root, 'site', 'privacy.html'), path.join(OUT_DIR, 'privacy.html'))
 
   const failed = results.filter((r) => r.error)
   console.log(`${articles.length} articles from ${results.length - failed.length}/${results.length} feeds`)

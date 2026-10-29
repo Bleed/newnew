@@ -389,7 +389,6 @@ private struct CatchupBackdropImage: View {
   let size: CGSize
 
   @State private var uiImage: UIImage?
-  @State private var kenBurns = false
 
   init(cluster: StoryCluster, size: CGSize) {
     self.cluster = cluster
@@ -398,23 +397,23 @@ private struct CatchupBackdropImage: View {
   }
 
   var body: some View {
-    ZStack {
+    ZStack(alignment: .top) {
+      Color.black
+      // The publisher's picture as a framed card in the upper part of the slide, never full
+      // screen: a preview that links to the article, not a reproduction of the photo.
       if let uiImage {
         Image(uiImage: uiImage)
           .resizable()
           .scaledToFill()
-          .frame(width: size.width, height: size.height)
-          .scaleEffect(kenBurns ? 1.07 : 1.0)
-          .animation(.easeInOut(duration: 7.0), value: kenBurns)
-          .clipped()
+          .frame(width: size.width - 40, height: min((size.width - 40) * 0.75, size.height * 0.38))
+          .clipShape(RoundedRectangle(cornerRadius: Swiss.tileRadius, style: .continuous))
+          .padding(.top, 120)
+          .transition(.opacity)
       } else {
         CatchupFlatBlackLogoFallback()
       }
     }
     .frame(width: size.width, height: size.height)
-    .onAppear {
-      kenBurns = true
-    }
     .task(id: cluster.id) {
       if uiImage == nil {
         uiImage = await CatchupImagePreloader.shared.load(for: cluster).value

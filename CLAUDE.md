@@ -229,6 +229,18 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 6. News pictures go through `ImagePipeline` (`CGImageSourceCreateThumbnailAtIndex` at the shown
    size), never `AsyncImage` or `UIImage(data:)`. No blurs, shadows or live blend modes in rows.
 
+## Legal care (review 2026-10-29; not legal advice)
+
+- The public feed carries very short extracts only: 150 characters (`SNIPPET_LENGTH`), the
+  same as the app shows. Pictures are links to the publisher's own files.
+- Photos are never full screen: the Catchup reel shows the picture as a framed card.
+- The AI read has "Report a mistake in the summary" (email to feedback@newnew.news with the
+  headline, outlets and summary) beside "Hide AI summary".
+- Coverage-spectrum badges describe, not judge: SPECIALIST PRESS, GENERAL NEWS, MANY DESKS.
+- Privacy policy: github-scraper/site/privacy.html, published with the feed at
+  https://bleed.github.io/newnew/privacy.html, linked in Settings and for App Store Connect.
+- Mailboxes the app names: feedback@newnew.news, publishers@newnew.news.
+
 ## Look (from Atelier CRM)
 
 - The name is lower case: "newnew" (home screen, prompts, accessibility).

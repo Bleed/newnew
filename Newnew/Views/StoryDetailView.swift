@@ -238,6 +238,9 @@ struct StoryDetailView: View {
           }
           if cluster.brief != nil && !briefDismissed {
             Divider()
+            Button("Report a mistake in the summary", systemImage: "exclamationmark.bubble") {
+              if let url = reportURL { UIApplication.shared.open(url) }
+            }
             Button("Hide AI summary", systemImage: "eye.slash") {
               withAnimation(.snappy) {
                 briefDismissed = true
@@ -271,6 +274,28 @@ struct StoryDetailView: View {
         .font(.footnote)
         .lineLimit(1)
     }
+  }
+
+  /// An email to newnew about a wrong AI summary: the story's headline, its outlets and the
+  /// summary as written, so the mistake can be checked.
+  var reportURL: URL? {
+    var parts = URLComponents()
+    parts.scheme = "mailto"
+    parts.path = "feedback@newnew.news"
+    let summary = cluster.brief?.summary ?? ""
+    parts.queryItems = [
+      URLQueryItem(name: "subject", value: "Mistake in an AI summary"),
+      URLQueryItem(name: "body", value: """
+        What's wrong:
+
+
+        ---
+        Story: \(cluster.lead?.title ?? "")
+        Outlets: \(cluster.outlets.joined(separator: ", "))
+        Summary: \(summary)
+        """),
+    ]
+    return parts.url
   }
 
   private func openArticleURL(_ raw: String) {
@@ -466,19 +491,19 @@ struct CoverageSpectrum {
     let hasCulture = !(grouped[.culture] ?? []).isEmpty
 
     if seen.count >= 3 && !hasWire {
-      self.blindspotBadge = "BLINDSPOT · GENERAL NEWS"
+      self.blindspotBadge = "SPECIALIST PRESS"
       if hasTech && hasMarkets {
-        self.insightLine = "Covered across tech and financial desks, but not picked up by general news wires yet."
+        self.insightLine = "Covered by tech and financial outlets; none of the general news outlets here has it yet."
       } else if hasTech {
-        self.insightLine = "Specialist tech coverage only—mainstream news outlets haven't reported on this."
+        self.insightLine = "Covered by tech outlets; none of the general news outlets here has it yet."
       } else {
-        self.insightLine = "Driving specialist coverage, with zero mainstream wire or public broadcaster reports so far."
+        self.insightLine = "Covered by specialist outlets; none of the general news outlets here has it yet."
       }
     } else if seen.count >= 3 && hasWire && !hasMarkets && !hasTech && !hasCulture {
-      self.blindspotBadge = "WIRE CONSENSUS"
-      self.insightLine = "Reported strictly by general news wires and broadsheets (\(seen.count) outlets)."
+      self.blindspotBadge = "GENERAL NEWS"
+      self.insightLine = "Covered by general news outlets (\(seen.count) outlets)."
     } else if segments.count >= 3 {
-      self.blindspotBadge = "BROAD SPECTRUM"
+      self.blindspotBadge = "MANY DESKS"
       self.insightLine = "Cross-desk story spanning \(segments.map { $0.lens.shortLabel.lowercased() }.joined(separator: ", ")) outlets."
     } else if let dominant = segments.first {
       self.blindspotBadge = nil
