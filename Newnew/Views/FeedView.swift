@@ -643,18 +643,17 @@ private struct PerforatedRule: View {
 
 /// Interactive horizontal pager that moves the story page left and right with your finger,
 /// while completely ignoring vertical scroll gestures so `StoryDetailView` scrolls at 120Hz.
-/// The end of a run of stories swiped through: "END OF RUN" and a table of the run in the dot
-/// face (Figma: Screens › "End of run · high score", since simplified: no score panel, no
-/// ranks). Everything counts this run only: the stories opened in this pager since it opened.
+/// The end of a run of stories swiped through: a rebus top like Today's ("3 STORIES / READ IN
+/// 12 MIN / MOST FROM BBC") and a small table of the run in the dot face. Everything counts this
+/// run only: the stories opened in this pager since it opened.
 ///
-/// Entrance: every dot line comes in as a departures board (`DotText` board entrance), the
-/// table rows one after another (0.12 s apart) with their leader dots drawing in, then the
-/// footer fades in, its prompt blinking slowly.
+/// Entrance: the dot lines come in as a departures board (`DotText` board entrance), the table
+/// rows one after another (0.12 s apart) with their leader dots drawing in, then the footer.
 struct PagerEndPage: View {
   let viewed: [StoryCluster]
   let startedAt: Date
   var backToToday: () -> Void
-  var playAgain: () -> Void
+  var startOver: () -> Void
 
   @State private var footerShown = false
   @State private var blink = false
@@ -662,7 +661,7 @@ struct PagerEndPage: View {
 
   var articles: [ArticleItem] { viewed.flatMap(\.articles) }
   var outlets: Int { Set(articles.map(\.outlet)).count }
-  /// The outlet with the most articles in the run, in letters the dot face has.
+  /// The outlet with the most articles in the run, its first word in letters the dot face has.
   var topOutlet: String {
     let counts = Dictionary(articles.map { ($0.outlet, 1) }, uniquingKeysWith: +)
     guard let top = counts.max(by: { $0.value < $1.value })?.key else { return "-" }
@@ -675,24 +674,23 @@ struct PagerEndPage: View {
   var minutes: Int { max(1, Int(Date.now.timeIntervalSince(startedAt) / 60)) }
 
   var rows: [(name: String, value: String)] {
-    [("ARTICLES", "\(articles.count)"), ("STORIES", "\(viewed.count)"), ("OUTLETS", "\(outlets)"),
-     ("TOP SRC", topOutlet), ("MINUTES", "\(minutes)")]
+    [("ARTICLES", "\(articles.count)"), ("OUTLETS", "\(outlets)"), ("MOST READ", topOutlet)]
   }
 
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: 12) {
-        DotText("END OF RUN", pitch: 6).foregroundStyle(Swiss.ink)
-          .padding(.top, 28)
-          .padding(.bottom, 10)
+        // The page's top as a rebus, like Today's: what this run was.
+        OneSentenceTop(
+          figure: "\(viewed.count) \(viewed.count == 1 ? "STORY" : "STORIES")",
+          detail: [.word("READ IN"), .minutes("\(minutes) MIN"), .check],
+          messages: [KeyMessage(id: "most", tokens: [.word("MOST FROM"), .pill(topOutlet)])],
+          size: 17, figureSize: 44)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.top, 20)
+          .padding(.bottom, 14)
 
-        VStack(alignment: .leading, spacing: 14) {
-          HStack(spacing: 0) {
-            DotText("NAME", pitch: 1.6)
-            Spacer(minLength: 8)
-            DotText("SCORE", pitch: 1.6)
-          }
-          .foregroundStyle(Swiss.muted)
+        VStack(alignment: .leading, spacing: 10) {
           ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
             // In place from the start (added later, rows skipped the decode); each waits its turn.
             ScoreRow(name: row.name, value: row.value, delay: 0.3 + Double(index) * 0.12)
@@ -703,12 +701,12 @@ struct PagerEndPage: View {
         .tile(.plain)
 
         VStack(alignment: .leading, spacing: 16) {
-          DotText("SWIPE BACK · NEW STORIES SOON", pitch: 1.8)
+          DotText("NEW STORIES EVERY HALF HOUR", pitch: 1.8)
             .foregroundStyle(Swiss.muted)
             .opacity(blink ? 0.35 : 1)
           HStack(spacing: 10) {
             Button("Back to Today", action: backToToday).buttonStyle(.swissPrimary)
-            Button("Play again", action: playAgain).buttonStyle(.swissSecondary)
+            Button("Start over", action: startOver).buttonStyle(.swissSecondary)
           }
         }
         .padding(.top, 10)
@@ -742,7 +740,7 @@ private struct ScoreRow: View {
 
   var body: some View {
     HStack(alignment: .center, spacing: 0) {
-      DotText(name, pitch: 3, decodeDelay: delay).fixedSize()
+      DotText(name, pitch: 2, decodeDelay: delay).fixedSize()
       Canvas { context, size in
         var path = Path()
         path.move(to: CGPoint(x: 0, y: size.height / 2))
@@ -752,7 +750,7 @@ private struct ScoreRow: View {
       .frame(height: 2)
       .mask(alignment: .leading) { GeometryReader { proxy in Rectangle().frame(width: proxy.size.width * leader) } }
       .padding(.horizontal, 8)
-      DotText(value, pitch: 3, decodeDelay: delay + 0.2).fixedSize()
+      DotText(value, pitch: 2, decodeDelay: delay + 0.2).fixedSize()
     }
     .foregroundStyle(Swiss.ink)
     .onAppear { withAnimation(.easeOut(duration: 0.35).delay(delay + 0.1)) { leader = 1 } }
@@ -800,7 +798,7 @@ struct StoryPagerView: View {
       if atEnd {
         PagerEndPage(viewed: stories.filter { viewedIDs.contains($0.id) }, startedAt: startedAt) {
           dismiss()
-        } playAgain: {
+        } startOver: {
           viewedIDs = [stories[0].id]
           startedAt = .now
           withAnimation(.snappy(duration: 0.25)) { currentIndex = 0 }
