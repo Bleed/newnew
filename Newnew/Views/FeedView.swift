@@ -637,8 +637,7 @@ private struct PerforatedRule: View {
 /// (Figma: Screens › "End of run · high score"). Everything counts this run only: the stories
 /// opened in this pager since it opened.
 ///
-/// Entrance: "END OF RUN" decodes, "HI-SCORE" rolls in, the score rolls up to the run's
-/// articles, then the table rows decode one after another (0.12 s apart) with their leader
+/// Entrance: every dot line decodes (two scramble rounds, left to right), then the table rows decode one after another (0.12 s apart) with their leader
 /// dots drawing in, and the footer fades in, its prompt blinking slowly.
 struct PagerEndPage: View {
   let viewed: [StoryCluster]
@@ -677,14 +676,14 @@ struct PagerEndPage: View {
       VStack(alignment: .leading, spacing: 12) {
         VStack(alignment: .leading, spacing: 10) {
           DotText("END OF RUN", pitch: 2.4).foregroundStyle(Swiss.muted)
-          DotText("HI-SCORE", pitch: 6, motion: .roll, rollsIn: true).foregroundStyle(Swiss.ink)
+          DotText("HI-SCORE", pitch: 6).foregroundStyle(Swiss.ink)
         }
         .padding(.top, 28)
         .padding(.bottom, 10)
 
         VStack(alignment: .leading, spacing: 10) {
           DotText("SCORE", pitch: 2).foregroundStyle(Swiss.onInk.opacity(0.6))
-          DotText(score, pitch: 7, unlit: 0.12, motion: .roll, rollsIn: true).foregroundStyle(Swiss.onInk)
+          DotText(score, pitch: 7, unlit: 0.12).foregroundStyle(Swiss.onInk)
         }
         .padding(.horizontal, 18)
         .padding(.top, 16)
