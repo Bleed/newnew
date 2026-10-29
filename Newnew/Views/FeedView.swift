@@ -221,8 +221,12 @@ struct FeedView: View {
   @State private var swiping = false
   /// The page follows the finger sideways, then slides out and the next filter slides in, as
   /// between stories (`StoryPagerView`).
-  @GestureState private var liveDrag: CGFloat = 0
+  @GestureState(resetTransaction: Transaction(animation: .spring(response: 0.30, dampingFraction: 0.88)))
+  private var liveDrag: CGFloat = 0
   @State private var slide: CGFloat = 0
+  /// The bar's share of a swipe that's leaving: its pills glide on to the next filter, then it
+  /// stays (the pages slide in under it).
+  @State private var barSlide: CGFloat = 0
   @State private var pageWidth: CGFloat = 400
   /// Where the bar pins, counted from the top of the page.
   var pinOffset: CGFloat { topHeight + 12 }
@@ -280,9 +284,11 @@ struct FeedView: View {
             .padding(.top, boardShowing ? Self.headerBelowBand : Self.headerTop)
             .padding(.bottom, 18)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
+            .offset(x: slide + liveDrag)
 
             // Stays at the top while the stories scroll under it.
             Section {
+              Group {
               if clusters.isEmpty {
                 emptyState
               } else if visible.isEmpty {
@@ -336,6 +342,9 @@ struct FeedView: View {
                 .padding(.top, 12)
                 .frame(maxWidth: .infinity)
               }
+              }
+              // The stories slide with the swipe; the bar above them stays.
+              .offset(x: slide + liveDrag)
             } header: {
               FilterBar(
                 selection: Binding(get: { filter }, set: { choose($0) }),
@@ -343,7 +352,9 @@ struct FeedView: View {
                 // The Read pill shows or hides read stories; with them staying there is nothing to toggle.
                 readCount: readStoriesDisappear ? settledReadTotal : 0,
                 showsReadToggle: readStoriesDisappear,
-                topics: followedTopics
+                topics: followedTopics,
+                // Toward the next filter (+) or the previous (-), as the page moves.
+                progress: pageWidth > 0 ? max(-1, min(1, -(liveDrag + barSlide) / pageWidth)) : 0
               )
               .padding(.vertical, 10)
               .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { barFrame = $0 }
@@ -369,7 +380,6 @@ struct FeedView: View {
           barPinned = isPinned
         }
         .scrollPosition($scrollPosition)
-        .offset(x: slide + liveDrag)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if $0 > 0 { pageWidth = $0 } }
         // Sideways: the next or previous filter, as in the bar. Screen coordinates, since the
         // page itself moves under the finger.
@@ -392,11 +402,23 @@ struct FeedView: View {
               let by = dx < -pageWidth * 0.22 || predicted < -pageWidth * 0.45 ? 1
                 : dx > pageWidth * 0.22 || predicted > pageWidth * 0.45 ? -1 : 0
               guard by != 0, let next = neighbour(by) else { return }
-              slide = dx
-              withAnimation(.easeOut(duration: 0.14)) { slide = -CGFloat(by) * pageWidth }
+              var now = Transaction()
+              now.disablesAnimations = true
+              withTransaction(now) {
+                slide = dx
+                barSlide = dx
+              }
+              withAnimation(.easeOut(duration: 0.14)) {
+                slide = -CGFloat(by) * pageWidth
+                barSlide = -CGFloat(by) * pageWidth
+              }
               DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
-                choose(next)
-                slide = CGFloat(by) * pageWidth
+                // The pills already show the next filter: they stay; the page slides in.
+                withTransaction(now) {
+                  choose(next)
+                  barSlide = 0
+                  slide = CGFloat(by) * pageWidth
+                }
                 withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) { slide = 0 }
               }
             }
@@ -1136,9 +1158,29 @@ struct FilterBar: View {
   var readCount: Int = 0
   var showsReadToggle = true
   let topics: [String]
+  /// How far a swipe has gone toward the next filter (up to 1) or the previous (down to -1):
+  /// the pills glide that share of the way from this pill to that one.
+  var progress: CGFloat = 0
 
   /// The pill the row is scrolled to.
   @State private var shownPill: String?
+  /// Set while a swipe has glided the row most of the way to a neighbour.
+  @State private var glidedTo: CGFloat?
+  /// Each pill's centre in the row.
+  @State private var centres: [String: CGFloat] = [:]
+
+  /// The top row's pills in order, by `raw`.
+  var order: [String] {
+    [FeedFilter.all.raw] + Pillar.allCases.map { FeedFilter.pillar($0).raw } + topics.map { FeedFilter.topic($0).raw }
+  }
+
+  /// How far the row is pushed: the distance to the neighbouring pill, times the progress.
+  var glide: CGFloat {
+    guard progress != 0, let index = order.firstIndex(of: mainID) else { return 0 }
+    let to = index + (progress > 0 ? 1 : -1)
+    guard order.indices.contains(to), let from = centres[mainID], let target = centres[order[to]] else { return 0 }
+    return -(target - from) * abs(progress)
+  }
 
   /// The chosen pill in the top row (a region's is Briefing).
   var mainID: String { if case .region = selection { FeedFilter.pillar(.briefing).raw } else { selection.raw } }
@@ -1160,13 +1202,30 @@ struct FilterBar: View {
           }
         }
         .scrollTargetLayout()
+        .coordinateSpace(.named("pills"))
+        .offset(x: glide)
       }
       // Swiping to a filter brings its pill into view.
       .scrollPosition(id: $shownPill, anchor: .center)
       // Once the row has laid out; set at once, the position is ignored.
-      .task(id: mainID) {
+      .onChange(of: progress) { _, value in
+        if abs(value) > 0.5 { glidedTo = value }
+      }
+      .onChange(of: mainID) { _, id in
+        // A swipe glided the row there already: centre it at once, no second move. A tap
+        // still animates.
+        if glidedTo != nil {
+          shownPill = id
+          glidedTo = nil
+        } else {
+          withAnimation(.snappy(duration: 0.25)) { shownPill = id }
+        }
+      }
+      // The bar is drawn afresh when the list changes under it, and a position set before the
+      // row has laid out is ignored: centre the chosen pill once it has.
+      .task {
         try? await Task.sleep(for: .milliseconds(60))
-        withAnimation(.snappy(duration: 0.25)) { shownPill = mainID }
+        shownPill = mainID
       }
       if selection.isNews {
         ScrollView(.horizontal) {
@@ -1208,5 +1267,9 @@ struct FilterBar: View {
     }
     .buttonStyle(SelectablePillStyle(isOn: isOn, small: small))
     .id(filter.raw)
+    // Only real changes: a write of the same value redraws the bar, which measures again.
+    .onGeometryChange(for: CGFloat.self) { ($0.frame(in: .named("pills")).midX).rounded() } action: { midX in
+      if centres[filter.raw] != midX { centres[filter.raw] = midX }
+    }
   }
 }

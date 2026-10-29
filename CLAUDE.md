@@ -154,9 +154,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   scrolling); choosing Briefing shows a row of regions, which narrow the news. A topic filter
   shows the stories that topic raised. There is no Local region (removed on request);
   local-news outlets still carry `country` from feeds.json.
-- **Filters on Today**: a sideways swipe on the list moves the page with the finger and slides
-  to the next or previous filter (same thresholds, timing and spring as `StoryPagerView`;
-  resistance past the ends), in the bar's order (All, the pillars, followed topics; a region counts as Briefing); swipes that
+- **Filters on Today**: a sideways swipe moves the top and the stories with the finger and
+  slides to the next or previous filter (same thresholds, timing and spring as
+  `StoryPagerView`; resistance past the ends). The filter bar stays put (sticky) and its pills
+  glide toward the neighbouring pill in step (`FilterBar.progress`; pill centres are measured,
+  and stored only when they change, or the bar redraws itself endlessly). In the bar's order (All, the pillars, followed topics; a region counts as Briefing); swipes that
   start on the bar scroll its pills. Cards ignore the release of a sideways swipe (`swiping`).
   Changing filter while the bar is pinned scrolls to `topHeight + 12` a frame later, so the
   filter starts at its first story (ScrollPosition offsets count from the page top; scrolling
