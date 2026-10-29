@@ -237,8 +237,9 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - The AI read has "Report a mistake in the summary" (email to feedback@newnew.news with the
   headline, outlets and summary) beside "Hide AI summary".
 - Coverage-spectrum badges describe, not judge: SPECIALIST PRESS, GENERAL NEWS, MANY DESKS.
-- Privacy policy: github-scraper/site/privacy.html, published with the feed at
-  https://bleed.github.io/newnew/privacy.html, linked in Settings and for App Store Connect.
+- Privacy policy: lives at https://newnew.news/privacypolicy (the app links there, and so
+  should App Store Connect). The text is github-scraper/site/privacy.html, also published with
+  the feed at https://bleed.github.io/newnew/privacy.html as a copy.
 - Mailboxes the app names: feedback@newnew.news, publishers@newnew.news.
 
 ## Look (from Atelier CRM)

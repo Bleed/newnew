@@ -354,7 +354,7 @@ struct LegalFooterSection: View {
           .fixedSize(horizontal: false, vertical: true)
 
         Button {
-          if let url = URL(string: "https://bleed.github.io/newnew/privacy.html") { openURL(url) }
+          if let url = URL(string: "https://newnew.news/privacypolicy") { openURL(url) }
         } label: {
           HStack(spacing: 4) {
             Text("Privacy policy")
