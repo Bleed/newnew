@@ -633,8 +633,70 @@ private struct PerforatedRule: View {
 
 /// Interactive horizontal pager that moves the story page left and right with your finger,
 /// while completely ignoring vertical scroll gestures so `StoryDetailView` scrolls at 120Hz.
+/// The end of a run of stories swiped through: "ALL GOOD" in the dot face, what was covered,
+/// and the way back. Swipe right to go back to the last story.
+struct PagerEndPage: View {
+  let stories: [StoryCluster]
+  var backToToday: () -> Void
+  var startOver: () -> Void
+
+  var outlets: Int { Set(stories.flatMap { $0.articles.map(\.outlet) }).count }
+  var articles: Int { stories.reduce(0) { $0 + $1.articles.count } }
+
+  var body: some View {
+    ScrollView {
+      VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 6) {
+          DotText("ALL", pitch: 4.2, motion: .roll, rollsIn: true, scales: false)
+          DotText("GOOD", pitch: 4.2, motion: .roll, rollsIn: true, scales: false)
+        }
+        .foregroundStyle(Swiss.ink)
+        .padding(.top, 40)
+
+        VStack(alignment: .leading, spacing: 6) {
+          Text("You're at the end.")
+            .font(Swiss.headline(34, relativeTo: .title))
+            .foregroundStyle(Swiss.ink)
+            .fixedSize(horizontal: false, vertical: true)
+          Text("That was the last story here. New coverage comes in every half hour.")
+            .font(.subheadline)
+            .foregroundStyle(Swiss.muted)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        VStack(spacing: 11) {
+          row("Stories here", stories.count)
+          row("Articles", articles)
+          row("Outlets", outlets)
+        }
+        .padding(18)
+        .tile(.plain)
+
+        HStack(spacing: 10) {
+          Button("Back to Today", action: backToToday).buttonStyle(.swissPrimary)
+          Button("Start over", action: startOver).buttonStyle(.swissSecondary)
+        }
+      }
+      .padding(.horizontal, Swiss.pageInset)
+      .padding(.bottom, 32)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .swissCanvas()
+  }
+
+  func row(_ label: String, _ value: Int) -> some View {
+    HStack {
+      Text(label).font(.subheadline).foregroundStyle(Swiss.muted)
+      Spacer()
+      Text("\(value)").font(Swiss.smallFigure).foregroundStyle(Swiss.ink)
+    }
+  }
+}
+
+/// Past the last story there is one more page: the end of the run (`PagerEndPage`).
 struct StoryPagerView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
+  @Environment(\.dismiss) private var dismiss
   @State private var stories: [StoryCluster]
   @State private var currentIndex: Int
   @State private var transitionOffset: CGFloat = 0
@@ -657,9 +719,24 @@ struct StoryPagerView: View {
     stories[min(max(currentIndex, 0), stories.count - 1)]
   }
 
+  /// The end page's index, one past the last story.
+  private var endIndex: Int { stories.count }
+  private var atEnd: Bool { currentIndex >= endIndex }
+
   var body: some View {
-    StoryDetailView(cluster: currentCluster)
-      .id(currentCluster.id)
+    Group {
+      if atEnd {
+        PagerEndPage(stories: stories) {
+          dismiss()
+        } startOver: {
+          withAnimation(.snappy(duration: 0.25)) { currentIndex = 0 }
+        }
+        .id("end")
+      } else {
+        StoryDetailView(cluster: currentCluster)
+          .id(currentCluster.id)
+      }
+    }
       .offset(x: transitionOffset + liveDragOffset)
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
         if width > 0 { pageWidth = width }
@@ -672,7 +749,7 @@ struct StoryPagerView: View {
             let dy = value.translation.height
             guard abs(dx) > abs(dy) * 1.5 else { return }
 
-            if (currentIndex == 0 && dx > 0) || (currentIndex == stories.count - 1 && dx < 0) {
+            if (currentIndex == 0 && dx > 0) || (currentIndex == endIndex && dx < 0) {
               state = dx * 0.25
             } else {
               state = dx
@@ -687,7 +764,7 @@ struct StoryPagerView: View {
             let predictedDx = value.predictedEndTranslation.width
             let threshold = pageWidth * 0.22
 
-            if (dx < -threshold || predictedDx < -pageWidth * 0.45), currentIndex < stories.count - 1 {
+            if (dx < -threshold || predictedDx < -pageWidth * 0.45), currentIndex < endIndex {
               transitionOffset = dx
               withAnimation(.easeOut(duration: 0.14)) {
                 transitionOffset = -pageWidth
@@ -695,8 +772,10 @@ struct StoryPagerView: View {
               DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                 currentIndex += 1
                 transitionOffset = pageWidth
-                pipeline.markRead(stories[currentIndex])
-                ReadLedger.record(stories[currentIndex])
+                if currentIndex < endIndex {
+                  pipeline.markRead(stories[currentIndex])
+                  ReadLedger.record(stories[currentIndex])
+                }
                 withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
                   transitionOffset = 0
                 }
