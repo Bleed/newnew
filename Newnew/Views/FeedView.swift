@@ -466,6 +466,16 @@ struct FeedView: View {
 
   /// A tapped alert: open its story.
   func openRoutedStory() {
+    #if DEBUG
+      // Debug builds only: launch with -openLastStory to land on the last story, one swipe from
+      // the end-of-run page.
+      if ProcessInfo.processInfo.arguments.contains("-openLastStory"), path.isEmpty,
+        let last = (sections.wide + sections.brief).last
+      {
+        path = [last]
+        return
+      }
+    #endif
     let router = Router.shared
     if let id = router.storyID, let cluster = clusters.first(where: { $0.id == id }) {
       router.storyID = nil
