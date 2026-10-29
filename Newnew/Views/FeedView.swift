@@ -633,63 +633,152 @@ private struct PerforatedRule: View {
 
 /// Interactive horizontal pager that moves the story page left and right with your finger,
 /// while completely ignoring vertical scroll gestures so `StoryDetailView` scrolls at 120Hz.
-/// The end of a run of stories swiped through: "ALL GOOD" in the dot face, what was covered,
-/// and the way back. Swipe right to go back to the last story.
+/// The end of a run of stories swiped through, as an arcade high-score table in the dot face
+/// (Figma: Screens › "End of run · high score"). Everything counts this run only: the stories
+/// opened in this pager since it opened.
+///
+/// Entrance: "END OF RUN" decodes, "HI-SCORE" rolls in, the score rolls up to the run's
+/// articles, then the table rows decode one after another (0.12 s apart) with their leader
+/// dots drawing in, and the footer fades in, its prompt blinking slowly.
 struct PagerEndPage: View {
-  let stories: [StoryCluster]
+  let viewed: [StoryCluster]
+  let startedAt: Date
   var backToToday: () -> Void
-  var startOver: () -> Void
+  var playAgain: () -> Void
 
-  var outlets: Int { Set(stories.flatMap { $0.articles.map(\.outlet) }).count }
-  var articles: Int { stories.reduce(0) { $0 + $1.articles.count } }
+  @State private var rowsShown = 0
+  @State private var footerShown = false
+  @State private var blink = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var articles: [ArticleItem] { viewed.flatMap(\.articles) }
+  var outlets: Int { Set(articles.map(\.outlet)).count }
+  /// The outlet with the most articles in the run, in letters the dot face has.
+  var topOutlet: String {
+    let counts = Dictionary(articles.map { ($0.outlet, 1) }, uniquingKeysWith: +)
+    guard let top = counts.max(by: { $0.value < $1.value })?.key else { return "-" }
+    // The first word ("BBC", "GUARDIAN", "VISUAL"), so it fits beside the name with room for
+    // the leader dots.
+    let word = top.replacingOccurrences(of: "The ", with: "").uppercased()
+      .split(separator: " ").first.map { $0.filter { $0.isLetter || $0.isNumber } } ?? ""
+    return word.isEmpty ? "-" : String(word.prefix(8))
+  }
+  var minutes: Int { max(1, Int(Date.now.timeIntervalSince(startedAt) / 60)) }
+  /// Six digits, like an arcade score.
+  var score: String { String(format: "%06d", min(articles.count, 999_999)) }
+
+  var rows: [(rank: String, name: String, value: String)] {
+    [("1ST", "ARTICLES", "\(articles.count)"), ("2ND", "STORIES", "\(viewed.count)"),
+     ("3RD", "OUTLETS", "\(outlets)"), ("4TH", "TOP SRC", topOutlet), ("5TH", "MINUTES", "\(minutes)")]
+  }
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 18) {
-        VStack(alignment: .leading, spacing: 6) {
-          DotText("ALL", pitch: 4.2, motion: .roll, rollsIn: true, scales: false)
-          DotText("GOOD", pitch: 4.2, motion: .roll, rollsIn: true, scales: false)
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
+          DotText("END OF RUN", pitch: 2.4).foregroundStyle(Swiss.muted)
+          DotText("HI-SCORE", pitch: 6, motion: .roll, rollsIn: true).foregroundStyle(Swiss.ink)
         }
-        .foregroundStyle(Swiss.ink)
-        .padding(.top, 40)
+        .padding(.top, 28)
+        .padding(.bottom, 10)
 
-        VStack(alignment: .leading, spacing: 6) {
-          Text("You're at the end.")
-            .font(Swiss.headline(34, relativeTo: .title))
-            .foregroundStyle(Swiss.ink)
-            .fixedSize(horizontal: false, vertical: true)
-          Text("That was the last story here. New coverage comes in every half hour.")
-            .font(.subheadline)
-            .foregroundStyle(Swiss.muted)
-            .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+          DotText("SCORE", pitch: 2).foregroundStyle(Swiss.onInk.opacity(0.6))
+          DotText(score, pitch: 7, unlit: 0.12, motion: .roll, rollsIn: true).foregroundStyle(Swiss.onInk)
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Swiss.ink, in: RoundedRectangle(cornerRadius: Swiss.tileRadius, style: .continuous))
 
-        VStack(spacing: 11) {
-          row("Stories here", stories.count)
-          row("Articles", articles)
-          row("Outlets", outlets)
+        VStack(alignment: .leading, spacing: 14) {
+          HStack(spacing: 0) {
+            DotText("RANK", pitch: 1.6).frame(width: 62, alignment: .leading)
+            DotText("NAME", pitch: 1.6)
+            Spacer(minLength: 8)
+            DotText("SCORE", pitch: 1.6)
+          }
+          .foregroundStyle(Swiss.muted)
+          ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+            // Each row is put in when its turn comes, so its dots decode then.
+            ZStack {
+              if index < rowsShown {
+                ScoreRow(rank: row.rank, name: row.name, value: row.value)
+                  .transition(.opacity)
+              } else {
+                Color.clear
+              }
+            }
+            .frame(height: 21)
+          }
         }
         .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .tile(.plain)
 
-        HStack(spacing: 10) {
-          Button("Back to Today", action: backToToday).buttonStyle(.swissPrimary)
-          Button("Start over", action: startOver).buttonStyle(.swissSecondary)
+        VStack(alignment: .leading, spacing: 16) {
+          DotText("SWIPE BACK · NEW STORIES SOON", pitch: 1.8)
+            .foregroundStyle(Swiss.muted)
+            .opacity(blink ? 0.35 : 1)
+          HStack(spacing: 10) {
+            Button("Back to Today", action: backToToday).buttonStyle(.swissPrimary)
+            Button("Play again", action: playAgain).buttonStyle(.swissSecondary)
+          }
         }
+        .padding(.top, 10)
+        .opacity(footerShown ? 1 : 0)
       }
       .padding(.horizontal, Swiss.pageInset)
       .padding(.bottom, 32)
       .frame(maxWidth: .infinity, alignment: .leading)
     }
     .swissCanvas()
-  }
-
-  func row(_ label: String, _ value: Int) -> some View {
-    HStack {
-      Text(label).font(.subheadline).foregroundStyle(Swiss.muted)
-      Spacer()
-      Text("\(value)").font(Swiss.smallFigure).foregroundStyle(Swiss.ink)
+    .task {
+      if reduceMotion {
+        rowsShown = rows.count
+        footerShown = true
+        return
+      }
+      try? await Task.sleep(for: .seconds(0.5))
+      for index in rows.indices {
+        withAnimation(.easeOut(duration: 0.15)) { rowsShown = index + 1 }
+        try? await Task.sleep(for: .seconds(0.12))
+      }
+      try? await Task.sleep(for: .seconds(0.3))
+      withAnimation(.easeOut(duration: 0.3)) { footerShown = true }
+      withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true).delay(0.6)) { blink = true }
     }
+    .accessibilityElement(children: .contain)
+  }
+}
+
+/// One high-score row: rank, name, leader dots drawing in, the value on the right.
+private struct ScoreRow: View {
+  let rank: String
+  let name: String
+  let value: String
+  @State private var leader: CGFloat = 0
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 0) {
+      DotText(rank, pitch: 3).frame(width: 62, alignment: .leading)
+      DotText(name, pitch: 3).fixedSize()
+      Canvas { context, size in
+        var path = Path()
+        path.move(to: CGPoint(x: 0, y: size.height / 2))
+        path.addLine(to: CGPoint(x: size.width, y: size.height / 2))
+        context.stroke(path, with: .color(Swiss.ink.opacity(0.18)), style: StrokeStyle(lineWidth: 1.2, lineCap: .round, dash: [1, 5]))
+      }
+      .frame(height: 2)
+      .mask(alignment: .leading) { GeometryReader { proxy in Rectangle().frame(width: proxy.size.width * leader) } }
+      .padding(.horizontal, 8)
+      DotText(value, pitch: 3).fixedSize()
+    }
+    .foregroundStyle(Swiss.ink)
+    .onAppear { withAnimation(.easeOut(duration: 0.35).delay(0.15)) { leader = 1 } }
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("\(name.lowercased()): \(value)")
   }
 }
 
@@ -702,6 +791,9 @@ struct StoryPagerView: View {
   @State private var transitionOffset: CGFloat = 0
   @GestureState private var liveDragOffset: CGFloat = 0
   @State private var pageWidth: CGFloat = 400
+  /// This run, for the end page: the stories opened since the pager opened, and when.
+  @State private var viewedIDs: Set<UUID> = []
+  @State private var startedAt = Date.now
 
   init(initialCluster: StoryCluster, orderedClusters: [StoryCluster]) {
     let list: [StoryCluster]
@@ -713,6 +805,7 @@ struct StoryPagerView: View {
       _currentIndex = State(initialValue: 0)
     }
     _stories = State(initialValue: list)
+    _viewedIDs = State(initialValue: [initialCluster.id])
   }
 
   private var currentCluster: StoryCluster {
@@ -726,9 +819,11 @@ struct StoryPagerView: View {
   var body: some View {
     Group {
       if atEnd {
-        PagerEndPage(stories: stories) {
+        PagerEndPage(viewed: stories.filter { viewedIDs.contains($0.id) }, startedAt: startedAt) {
           dismiss()
-        } startOver: {
+        } playAgain: {
+          viewedIDs = [stories[0].id]
+          startedAt = .now
           withAnimation(.snappy(duration: 0.25)) { currentIndex = 0 }
         }
         .id("end")
@@ -773,6 +868,7 @@ struct StoryPagerView: View {
                 currentIndex += 1
                 transitionOffset = pageWidth
                 if currentIndex < endIndex {
+                  viewedIDs.insert(stories[currentIndex].id)
                   pipeline.markRead(stories[currentIndex])
                   ReadLedger.record(stories[currentIndex])
                 }
@@ -788,6 +884,7 @@ struct StoryPagerView: View {
               DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                 currentIndex -= 1
                 transitionOffset = -pageWidth
+                viewedIDs.insert(stories[currentIndex].id)
                 pipeline.markRead(stories[currentIndex])
                 ReadLedger.record(stories[currentIndex])
                 withAnimation(.spring(response: 0.30, dampingFraction: 0.88)) {
