@@ -655,7 +655,6 @@ struct PagerEndPage: View {
   var backToToday: () -> Void
   var playAgain: () -> Void
 
-  @State private var rowsShown = 0
   @State private var footerShown = false
   @State private var blink = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -710,16 +709,8 @@ struct PagerEndPage: View {
           }
           .foregroundStyle(Swiss.muted)
           ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-            // Each row is put in when its turn comes, so its dots decode then.
-            ZStack {
-              if index < rowsShown {
-                ScoreRow(rank: row.rank, name: row.name, value: row.value)
-                  .transition(.opacity)
-              } else {
-                Color.clear
-              }
-            }
-            .frame(height: 21)
+            // In place from the start (added later, rows skipped the decode); each waits its turn.
+            ScoreRow(rank: row.rank, name: row.name, value: row.value, delay: 0.5 + Double(index) * 0.12)
           }
         }
         .padding(18)
@@ -745,16 +736,10 @@ struct PagerEndPage: View {
     .swissCanvas()
     .task {
       if reduceMotion {
-        rowsShown = rows.count
         footerShown = true
         return
       }
-      try? await Task.sleep(for: .seconds(0.5))
-      for index in rows.indices {
-        withAnimation(.easeOut(duration: 0.15)) { rowsShown = index + 1 }
-        try? await Task.sleep(for: .seconds(0.12))
-      }
-      try? await Task.sleep(for: .seconds(0.3))
+      try? await Task.sleep(for: .seconds(0.5 + Double(rows.count) * 0.12 + 0.4))
       withAnimation(.easeOut(duration: 0.3)) { footerShown = true }
       withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true).delay(0.6)) { blink = true }
     }
@@ -767,12 +752,14 @@ private struct ScoreRow: View {
   let rank: String
   let name: String
   let value: String
+  /// When this row's turn comes, after the page has landed.
+  var delay: Double = 0
   @State private var leader: CGFloat = 0
 
   var body: some View {
     HStack(alignment: .center, spacing: 0) {
-      DotText(rank, pitch: 3).frame(width: 62, alignment: .leading)
-      DotText(name, pitch: 3).fixedSize()
+      DotText(rank, pitch: 3, decodeDelay: delay).frame(width: 62, alignment: .leading)
+      DotText(name, pitch: 3, decodeDelay: delay + 0.08).fixedSize()
       Canvas { context, size in
         var path = Path()
         path.move(to: CGPoint(x: 0, y: size.height / 2))
@@ -782,10 +769,10 @@ private struct ScoreRow: View {
       .frame(height: 2)
       .mask(alignment: .leading) { GeometryReader { proxy in Rectangle().frame(width: proxy.size.width * leader) } }
       .padding(.horizontal, 8)
-      DotText(value, pitch: 3).fixedSize()
+      DotText(value, pitch: 3, decodeDelay: delay + 0.2).fixedSize()
     }
     .foregroundStyle(Swiss.ink)
-    .onAppear { withAnimation(.easeOut(duration: 0.35).delay(0.15)) { leader = 1 } }
+    .onAppear { withAnimation(.easeOut(duration: 0.35).delay(delay + 0.1)) { leader = 1 } }
     .accessibilityElement(children: .ignore)
     .accessibilityLabel("\(name.lowercased()): \(value)")
   }

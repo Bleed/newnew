@@ -127,8 +127,9 @@ struct DotText: View {
 
   init(
     _ text: String, pitch: CGFloat = 1.8, unlit: Double = 0, motion: Motion = .flip, rollsIn: Bool = false, scales: Bool = true,
-    clock: (start: Date, now: Date)? = nil, glyphTime: Double = DotText.glyphTime
+    clock: (start: Date, now: Date)? = nil, glyphTime: Double = DotText.glyphTime, decodeDelay: Double = 0
   ) {
+    self.decodeDelay = decodeDelay
     self.glyphSeconds = glyphTime
     self.scales = scales
     self.clock = clock
@@ -139,6 +140,9 @@ struct DotText: View {
     self.rollsIn = rollsIn
     _scaledPitch = ScaledMetric(wrappedValue: pitch, relativeTo: .body)
   }
+
+  /// Seconds the decode waits after the text is on screen, to stagger lines (a score table).
+  var decodeDelay: Double = 0
 
   static let rowDelay = 0.014
   static let glyphTime = 0.06
@@ -193,7 +197,7 @@ struct DotText: View {
     }
     .task(id: pixelStart) {
       guard pixelStart != nil else { return }
-      try? await Task.sleep(for: .seconds(pixelTime + 0.05))
+      try? await Task.sleep(for: .seconds(decodeDelay + pixelTime + 0.05))
       pixelsDone = true
       pixelStart = nil
     }
@@ -214,7 +218,8 @@ struct DotText: View {
 
   func startPixels() {
     guard pixelsIn, !pixelsDone, !reduceMotion, pixelStart == nil, launchClear, onScreen else { return }
-    pixelStart = .now
+    // Before its delay is up the decode draws blank cells (negative elapsed time).
+    pixelStart = Date.now.addingTimeInterval(decodeDelay)
   }
 
   func begin(from old: [Character]) {
