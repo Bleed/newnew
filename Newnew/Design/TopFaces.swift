@@ -153,7 +153,9 @@ enum LCDFont {
 
 /// A heavy display face: every glyph a solid square cut by hairline slits and notches (Figma:
 /// "Block face · specimen"). Units: a 10 × 10 cell, I and 1 narrower. Big only: below about
-/// 40 pt the slits close up.
+/// 40 pt the slits close up. Cuts are taken out of the block (`Path.subtracting`) and those
+/// that reach an edge run past it, so no hairline of ink is left along the edge. Letters stand
+/// further apart (`gap`) than a slit is wide, so a word never reads as one slab.
 enum BlockFont {
   enum Cut {
     case rect(CGFloat, CGFloat, CGFloat, CGFloat)
@@ -164,33 +166,46 @@ enum BlockFont {
   static func across(_ y: CGFloat, _ x0: CGFloat, _ x1: CGFloat) -> Cut { .rect(x0, y - slit / 2, x1, y + slit / 2) }
   static func down(_ x: CGFloat, _ y0: CGFloat, _ y1: CGFloat) -> Cut { .rect(x - slit / 2, y0, x + slit / 2, y1) }
   static func poly(_ points: (CGFloat, CGFloat)...) -> Cut { .polygon(points.map { CGPoint(x: $0.0, y: $0.1) }) }
+  /// Corner notches cut at 45°, `size` along each edge, drawn past the corner.
+  static func topLeft(_ size: CGFloat) -> Cut { poly((-1, -1), (size + 1, -1), (-1, size + 1)) }
+  static func topRight(_ size: CGFloat) -> Cut { poly((11, -1), (9 - size, -1), (11, size + 1)) }
+  static func bottomLeft(_ size: CGFloat) -> Cut { poly((-1, 11), (size + 1, 11), (-1, 9 - size)) }
+  static func bottomRight(_ size: CGFloat) -> Cut { poly((11, 11), (9 - size, 11), (11, 9 - size)) }
 
   static let glyphs: [Character: [Cut]] = [
-    "A": [across(4, 3, 7), down(5, 6.5, 10), poly((0, 0), (2, 0), (0, 2))], "B": [across(3.3, 3, 7.5), across(6.7, 3, 7.5)],
-    "C": [across(5, 4, 10)], "D": [across(5, 3, 7)], "E": [across(3.3, 4, 10), across(6.7, 4, 10)],
+    "A": [across(4, 3, 7), down(5, 6.5, 10), topLeft(2), topRight(2)], "B": [across(3.3, 3, 7.5), across(6.7, 3, 7.5)],
+    "C": [across(5, 4, 10)],
+    // D: square on the left, its right corners cut; O: all four cut; Q: O with a tail.
+    "D": [down(5, 3, 7), topRight(2.5), bottomRight(2.5)], "E": [across(3.3, 4, 10), across(6.7, 4, 10)],
     "F": [across(3.3, 4, 10), .rect(4, 6.5, 10, 10)], "G": [across(3.5, 4, 10), across(6.5, 4.5, 7.5)],
-    "H": [down(5, 0, 3.6), down(5, 6.4, 10)], "I": [], "J": [across(6.5, 0, 6), .rect(0, 0, 3, 3.5)],
-    "K": [poly((10, 2.6), (5.6, 5), (10, 7.4)), down(5, 0, 2.5)], "L": [.rect(4, 0, 10, 6.5)],
-    "M": [down(3.3, 4, 10), down(6.7, 4, 10)], "N": [down(6, 0, 6), down(4, 4, 10)], "O": [down(5, 3, 7)],
-    "P": [across(3.3, 3, 7), .rect(4, 6.7, 10, 10)], "Q": [down(5, 3, 6.5), poly((10, 7), (7, 10), (10, 10))],
-    "R": [across(3.3, 3, 7), down(5, 6.7, 10), poly((10, 7.5), (8, 10), (10, 10))], "S": [across(3.3, 3, 10), across(6.7, 0, 7)],
+    "H": [down(5, 0, 3.6), down(5, 6.4, 10)],
+    // I: an I-beam, notched both sides, so it isn't a plain slab.
+    "I": [.rect(0, 2.6, 2.8, 7.4), .rect(7.2, 2.6, 10, 7.4)], "J": [across(6.5, 0, 6), .rect(0, 0, 3, 3.5)],
+    "K": [poly((11, 2.05), (5.6, 5), (11, 7.95)), down(5, 0, 2.5)], "L": [.rect(4, 0, 10, 6.5)],
+    "M": [down(3.3, 4, 10), down(6.7, 4, 10)], "N": [down(6, 0, 6), down(4, 4, 10)],
+    "O": [down(5, 3, 7), topLeft(2), topRight(2), bottomLeft(2), bottomRight(2)],
+    "P": [across(3.3, 3, 7), .rect(4, 6.7, 10, 10)],
+    "Q": [down(5, 2.6, 6.2), topLeft(2), topRight(2), bottomLeft(2), poly((4.75, 6.0), (5.35, 5.8), (11.2, 10.6), (10.6, 11.2))],
+    "R": [across(3.3, 3, 7), down(5, 6.7, 10), poly((11, 6.25), (7.2, 11), (11, 11))], "S": [across(3.3, 3, 10), across(6.7, 0, 7)],
     "T": [.rect(0, 3.6, 3.6, 10), .rect(6.4, 3.6, 10, 10)], "U": [down(5, 0, 7)],
-    "V": [down(5, 0, 6), poly((0, 7), (3, 10), (0, 10)), poly((10, 7), (7, 10), (10, 10))], "W": [down(3.3, 0, 6), down(6.7, 0, 6)],
-    "X": [poly((3.6, 0), (5, 2.8), (6.4, 0)), poly((3.6, 10), (5, 7.2), (6.4, 10)), poly((0, 3.6), (2.8, 5), (0, 6.4)), poly((10, 3.6), (7.2, 5), (10, 6.4))],
+    "V": [down(5, 0, 6), poly((-1, 6), (4, 11), (-1, 11)), poly((11, 6), (6, 11), (11, 11))], "W": [down(3.3, 0, 6), down(6.7, 0, 6)],
+    "X": [poly((3.1, -1), (5, 2.8), (6.9, -1)), poly((3.1, 11), (5, 7.2), (6.9, 11)), poly((-1, 3.1), (2.8, 5), (-1, 6.9)), poly((11, 3.1), (7.2, 5), (11, 6.9))],
     "Y": [down(5, 0, 3.6), .rect(0, 6.4, 3.6, 10), .rect(6.4, 6.4, 10, 10)], "Z": [across(3.3, 0, 7), across(6.7, 3, 10)],
-    // The 1 carries a foot on the right, so it doesn't read as a J.
-    "0": [down(5, 3, 7), poly((3.5, 7), (4, 7), (6.5, 3), (6, 3))], "1": [.rect(0, 0, 2.5, 7.5), .rect(0, 7.5, 1.5, 10)],
+    // The 0: like the O, its middle just a line, a little longer.
+    "0": [down(5, 2.4, 7.6), topLeft(2), topRight(2), bottomLeft(2), bottomRight(2)],
+    // The 1: a flag at the top left, the stem, a base across, so it isn't a J or an I.
+    "1": [.rect(0, 3, 3.6, 7.4), .rect(7.6, 0, 10, 7.4)],
     "2": [across(3.3, 0, 7), across(6.7, 3, 10)], "3": [across(3.3, 0, 7), across(6.7, 0, 7)], "4": [down(5, 0, 4), .rect(0, 6.5, 6, 10)],
     "5": [across(3.3, 3, 10), across(6.7, 0, 7)], "6": [across(3.3, 3, 10), across(6.7, 3, 7)], "7": [.rect(0, 3.6, 5, 10)],
     "8": [across(3.3, 3, 7), across(6.7, 3, 7)], "9": [across(3.3, 3, 7), across(6.7, 0, 7)],
   ]
   static let letters = Array("ABCDEFGHJKLMNOPQRSTUVWXYZ")
   static let digits = Array("0234567890")
-  static let gap: CGFloat = 0.35
-  static let space: CGFloat = 3
+  static let gap: CGFloat = 1.2
+  static let space: CGFloat = 3.5
 
   static func width(_ character: Character) -> CGFloat {
-    character == " " ? space : character == "I" ? 4 : character == "1" ? 6 : 10
+    character == " " ? space : character == "I" ? 6 : character == "1" ? 7 : 10
   }
 
   /// The whole text's width in cell units.
@@ -198,18 +213,25 @@ enum BlockFont {
     text.isEmpty ? 10 : text.map(width).reduce(0, +) + gap * CGFloat(text.count - 1)
   }
 
+  /// A cut edge on the cell's edge runs past it.
+  private static func past(_ v: CGFloat) -> CGFloat { v <= 0 ? -1 : v >= 10 ? 11 : v }
+
   /// One glyph, `unit` points per cell unit, at `x`.
   static func path(_ character: Character, x: CGFloat, unit: CGFloat) -> Path {
     guard character != " " else { return Path() }
     let w = width(character), scale = w / 10
-    var path = Path(CGRect(x: 0, y: 0, width: w, height: 10))
+    var cuts = Path()
     for cut in glyphs[character] ?? [] {
       switch cut {
-      case .rect(let x0, let y0, let x1, let y1): path.addRect(CGRect(x: x0 * scale, y: y0, width: (x1 - x0) * scale, height: y1 - y0))
-      case .polygon(let points): path.addLines(points.map { CGPoint(x: $0.x * scale, y: $0.y) }); path.closeSubpath()
+      case .rect(let x0, let y0, let x1, let y1):
+        let a = past(x0) * scale, b = past(x1) * scale
+        cuts.addRect(CGRect(x: a, y: past(y0), width: b - a, height: past(y1) - past(y0)))
+      case .polygon(let points): cuts.addLines(points.map { CGPoint(x: $0.x * scale, y: $0.y) }); cuts.closeSubpath()
       }
     }
-    return path.applying(CGAffineTransform(scaleX: unit, y: unit).concatenating(CGAffineTransform(translationX: x, y: 0)))
+    let block = Path(CGRect(x: 0, y: 0, width: w, height: 10))
+    return block.subtracting(cuts)
+      .applying(CGAffineTransform(scaleX: unit, y: unit).concatenating(CGAffineTransform(translationX: x, y: 0)))
   }
 }
 
@@ -290,7 +312,7 @@ struct BlockText: View {
       }
       x += (BlockFont.width(character) + BlockFont.gap) * unit
     }
-    ctx.fill(path, with: .foreground, style: FillStyle(eoFill: true))
+    ctx.fill(path, with: .foreground)
   }
 }
 
