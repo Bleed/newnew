@@ -496,7 +496,7 @@ struct FeedView: View {
 
   /// Everything here read: the same summary as at the end of a swipe run.
   var allRead: some View {
-    ReadSummary(stories: sections.readClusters, minutes: sections.readingMinutes) {
+    ReadSummary(stories: sections.readClusters, minutes: sections.readingMinutes, showsTop: false) {
       Button("Show read stories") {
         withAnimation(.snappy(duration: 0.2)) { hideRead = false }
       }
@@ -574,6 +574,9 @@ struct PagerEndPage: View {
 struct ReadSummary<Actions: View>: View {
   let stories: [StoryCluster]
   let minutes: Int
+  /// Its own rebus top ("3 STORIES / READ IN 12 MIN"). Off on Today, whose sentence top
+  /// already says "CAUGHT UP · N STORIES READ": the table then carries the counts.
+  var showsTop = true
   @ViewBuilder var actions: Actions
 
   @State private var actionsShown = false
@@ -597,18 +600,21 @@ struct ReadSummary<Actions: View>: View {
   }
 
   var rows: [(name: String, value: String)] {
-    [("ARTICLES", "\(articles.count)"), ("OUTLETS", "\(outlets)"), ("MOST READ", topOutlet)]
+    let counts = [("ARTICLES", "\(articles.count)"), ("OUTLETS", "\(outlets)"), ("MOST READ", topOutlet)]
+    return showsTop ? counts : [("READ IN", "\(minutes) MIN")] + counts
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      OneSentenceTop(
-        figure: "\(stories.count) \(stories.count == 1 ? "STORY" : "STORIES")",
-        detail: [.word("READ IN"), .minutes("\(minutes) MIN"), .check],
-        messages: [KeyMessage(id: "most", tokens: [.word("MOST FROM"), .pill(topOutlet)])],
-        size: 17, figureSize: 44)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.bottom, 14)
+      if showsTop {
+        OneSentenceTop(
+          figure: "\(stories.count) \(stories.count == 1 ? "STORY" : "STORIES")",
+          detail: [.word("READ IN"), .minutes("\(minutes) MIN"), .check],
+          messages: [KeyMessage(id: "most", tokens: [.word("MOST FROM"), .pill(topOutlet)])],
+          size: 17, figureSize: 44)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.bottom, 14)
+      }
 
       VStack(alignment: .leading, spacing: 10) {
         ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
