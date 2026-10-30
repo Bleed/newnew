@@ -344,6 +344,18 @@ private struct CatchupCardPage: View {
               .lineLimit(4)
               .fixedSize(horizontal: false, vertical: true)
               .allowsHitTesting(false)
+            Button {
+              guard let url = URL(string: lead.url) else { return }
+              LinkOpener.open(url) { openURL(url) }
+            } label: {
+              HStack(spacing: 4) {
+                Text("Headline from \(lead.outlet)").font(.footnote.weight(.medium))
+                Image(systemName: "arrow.up.right").font(.caption2.weight(.semibold))
+              }
+              .foregroundStyle(.white.opacity(0.85))
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the article")
           }
 
           // Tap-to-open Outlet Pills (Locked order & zero animation)

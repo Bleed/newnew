@@ -21,6 +21,7 @@ struct StoryCard: View {
           .foregroundStyle(isSettled ? Swiss.muted : Swiss.ink)
           .multilineTextAlignment(.leading)
           .fixedSize(horizontal: false, vertical: true)
+        HeadlineCredit(article: lead)
         if !extract.isEmpty {
           Text(extract)
             .font(.subheadline)
@@ -159,6 +160,30 @@ struct BriefRow: View {
   }
 }
 
+/// Whose headline (and picture) the card shows, like a byline: "Variety ↗". A tap opens that
+/// article, in the publisher's app when it has one.
+struct HeadlineCredit: View {
+  let article: ArticleItem
+  @Environment(\.openURL) private var openURL
+
+  var body: some View {
+    Button {
+      guard let url = URL(string: article.url) else { return }
+      LinkOpener.open(url) { openURL(url) }
+    } label: {
+      HStack(spacing: 4) {
+        Text(article.outlet).font(.footnote.weight(.medium))
+        Image(systemName: "arrow.up.right").font(.caption2.weight(.semibold))
+      }
+      .foregroundStyle(Swiss.ink)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel("Headline from \(article.outlet)")
+    .accessibilityHint("Opens the article")
+  }
+}
+
 /// What VoiceOver reads for a story in a list: "Ukraine says at least 13 killed…. World, 42
 /// minutes ago, 10 sources, developing, read."
 enum StoryAccessibility {
@@ -172,6 +197,7 @@ enum StoryAccessibility {
     }
     if let signal { parts.append(signal) }
     if case .settledRead = ReadLedger.status(for: cluster) { parts.append("read") }
+    if outlet == nil { parts.insert("headline from \(lead.outlet)", at: 0) }
     return "\(lead.title). " + parts.joined(separator: ", ")
   }
 }
@@ -191,6 +217,9 @@ private struct StoryMediaActions: ViewModifier {
     let playing = episode.map { player.isPlaying($0.audioURL ?? "") } ?? false
     content
       .accessibilityActions {
+        if let lead = cluster.lead, let url = URL(string: lead.url) {
+          Button("Open \(lead.outlet)'s article") { LinkOpener.open(url) { openURL(url) } }
+        }
         if let video = cluster.video, let url = video.videoURL {
           Button("Watch on \(video.outlet)") { openURL(url) }
         }

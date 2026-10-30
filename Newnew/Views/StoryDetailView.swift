@@ -97,11 +97,33 @@ struct StoryDetailView: View {
               }
               .foregroundStyle(Swiss.muted)
 
-              Text(lead.title)
-                .font(Swiss.headline(34, relativeTo: .title))
-                .foregroundStyle(Swiss.ink)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
+              // The headline is the lead outlet's: it links to that article, with its credit under it.
+              Button { openArticleURL(lead.url) } label: {
+                Text(lead.title)
+                  .font(Swiss.headline(34, relativeTo: .title))
+                  .foregroundStyle(Swiss.ink)
+                  .multilineTextAlignment(.leading)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+              .buttonStyle(.plain)
+              .accessibilityAddTraits(.isHeader)
+              .accessibilityHint("Opens \(lead.outlet)'s article")
+
+              Button { openArticleURL(lead.url) } label: {
+                HStack(spacing: 5) {
+                  Text("Headline from").foregroundStyle(Swiss.muted)
+                  Text(lead.outlet).fontWeight(.medium).foregroundStyle(Swiss.ink)
+                  Image(systemName: "arrow.up.right").font(.caption2.weight(.semibold)).foregroundStyle(Swiss.ink)
+                }
+                .font(.footnote)
+                .padding(.horizontal, 10)
+                .pillHeight()
+                .background(Swiss.ink.opacity(0.07), in: Capsule())
+              }
+              .buttonStyle(.plain)
+              .accessibilityElement(children: .ignore)
+              .accessibilityLabel("Headline from \(lead.outlet)")
+              .accessibilityAddTraits(.isLink)
             }
 
             if !updatesSinceLastRead.isEmpty {
