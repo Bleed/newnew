@@ -109,13 +109,13 @@ struct MiniDotBoard: View {
   var fill: CGFloat
   var first: Bool
   var second: Bool
-
-  static let pitch: CGFloat = 4
+  /// 4 in the pull-to-refresh band; onboarding draws it larger (and small, still, as a masthead).
+  var pitch: CGFloat = 4
   static let cols = StackedWords.cols + 2
   static let rows = StackedWords.rows + 2
 
   var body: some View {
-    let p = Self.pitch, d = p * 0.82
+    let p = pitch, d = p * 0.82
     let filled = Int((CGFloat(Self.cols) * fill).rounded())
     ZStack(alignment: .topLeading) {
       Canvas { ctx, _ in

@@ -1,25 +1,41 @@
+import SwiftData
 import SwiftUI
 
-/// First launch: the reader chooses which outlets newnew reads, can add their own feeds, and
-/// may switch on alerts (Figma: Onboarding). Legally the point is that the reader picks the
-/// sources; newnew shows headlines and short extracts and links out.
+/// First launch (Figma: Onboarding · editorial, sketch B): calm and classic. The loading board
+/// is the masthead, "new" over "new" rolling in; then one serif headline and a grey line per
+/// step, and the app's own tiles, pills and switches. Welcome, outlets, your own feeds, topics,
+/// how Today begins, staying up to date, then the first edition while the first sync runs.
+/// Legally the point is that the reader picks the sources; newnew shows headlines and short
+/// extracts and links out.
 struct OnboardingView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   var done: () -> Void
-  @State private var step = 0
+  @State private var step = Step.welcome
   @State private var selection = OutletStore.shared.selection
+
+  enum Step: Int, CaseIterable { case welcome, outlets, own, topics, look, updates, firstEdition }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      ProgressDots(step: step, count: 4)
-        .padding(.top, 24)
-        .padding(.bottom, 26)
+      if step != .welcome && step != .firstEdition {
+        // Masthead: the board small and still, the progress dots opposite.
+        HStack {
+          MiniDotBoard(fill: 1, first: true, second: true, pitch: 2)
+          Spacer()
+          ProgressDots(step: step.rawValue - 1, count: 5)
+        }
+        .padding(.top, 20)
+        .padding(.bottom, 24)
+      }
       Group {
         switch step {
-        case 0: welcome
-        case 1: choose
-        case 2: addOwn
-        default: alerts
+        case .welcome: welcome
+        case .outlets: outlets
+        case .own: own
+        case .topics: OnboardingTopics(next: next)
+        case .look: look
+        case .updates: updates
+        case .firstEdition: FirstEdition(outlets: OutletStore.shared.selection.count, finish: finish)
         }
       }
       .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
@@ -30,80 +46,297 @@ struct OnboardingView: View {
     .animation(.snappy(duration: 0.3), value: step)
   }
 
-  func next() { withAnimation { step += 1 } }
+  func next() { withAnimation { step = Step(rawValue: step.rawValue + 1) ?? .firstEdition } }
+
+  func finish() {
+    OutletStore.shared.finishOnboarding()
+    done()
+  }
 
   // MARK: Steps
 
   var welcome: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      VStack(alignment: .leading, spacing: 6) {
-        DotText("new", pitch: 5, scales: false)
-        DotText("new", pitch: 5, scales: false)
+    VStack(alignment: .leading, spacing: 14) {
+      RollingBoard(pitch: 6)
+        .padding(.top, 56)
+        .padding(.bottom, 20)
+      Eyebrow("Welcome to newnew")
+      OnboardingHeadline("The news, from the outlets you choose.", size: 40)
+      OnboardingDeck("Every story told once, with all the outlets that cover it. Read on this iPhone, no account.")
+      VStack(alignment: .leading, spacing: 14) {
+        ForEach(Array(["You choose the outlets.", "newnew puts their coverage of each story together.", "Every headline links to the publisher."].enumerated()), id: \.offset) { index, line in
+          HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text("\(index + 1)")
+              .font(.footnote.weight(.medium))
+              .frame(width: 24, height: 24)
+              .background(Swiss.card, in: Circle())
+              .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 7 }
+            Text(line).font(.body).fixedSize(horizontal: false, vertical: true)
+          }
+        }
       }
-      .foregroundStyle(Swiss.ink)
-      .padding(.top, 40)
-      .padding(.bottom, 32)
-      RebusLine(tokens: [.word("THE NEWS,"), .pill("GROUPED")], size: 17, delay: 0.2)
-      RebusLine(tokens: [.word("FROM OUTLETS"), .pill("YOU PICK")], size: 17, delay: 0.5).padding(.top, 8)
-      Text("newnew reads public RSS feeds and shows each outlet's headline and a short extract, then links to the publisher for the full story. You choose which outlets it reads, and you can add your own.")
-        .font(.body)
-        .foregroundStyle(Swiss.muted)
-        .fixedSize(horizontal: false, vertical: true)
-        .padding(.top, 24)
+      .padding(16)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .tile(.plain)
+      .accessibilityElement(children: .combine)
       Spacer(minLength: 20)
-      Button("Choose outlets", action: next).buttonStyle(.swissPrimary).padding(.bottom, 12)
+      Button("Begin", action: next).buttonStyle(.swissPrimary).padding(.bottom, 12)
     }
   }
 
-  var choose: some View {
+  var outlets: some View {
     VStack(alignment: .leading, spacing: 0) {
-      ReadingCount(chosen: selection.count, total: OutletStore.shared.catalog.count)
-        .padding(.bottom, 16)
+      OnboardingHeadline("Choose what you read.")
+      OnboardingDeck("\(selection.count) of \(OutletStore.shared.catalog.count) outlets. Change it any time in Settings.")
+        .padding(.top, 8)
+        .padding(.bottom, 14)
       OutletPicker(selection: $selection)
+      Button("Continue") {
+        OutletStore.shared.setChosen(selection)
+        next()
+      }
+      .buttonStyle(.swissPrimary)
+      .disabled(selection.isEmpty)
+      .padding(.vertical, 12)
+    }
+  }
+
+  var own: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      ScrollView {
+        VStack(alignment: .leading, spacing: 14) {
+          OnboardingHeadline("Add a source of your own.")
+          OnboardingDeck("A website, its feed, a YouTube channel, or a Bluesky or Mastodon account.")
+          AddFeedPanel(showsHint: false)
+        }
+      }
+      .scrollIndicators(.hidden)
       HStack(spacing: 10) {
-        Button("Continue") {
-          OutletStore.shared.setChosen(selection)
-          next()
-        }
-        .buttonStyle(.swissPrimary)
-        .disabled(selection.isEmpty)
-        Button("Add your own") {
-          OutletStore.shared.setChosen(selection)
-          next()
-        }
-        .buttonStyle(.swissSecondary)
+        Button("Continue", action: next).buttonStyle(.swissPrimary)
+        if OutletStore.shared.customFeeds.isEmpty { Button("Skip", action: next).buttonStyle(.swissSecondary) }
       }
       .padding(.vertical, 12)
     }
   }
 
-  var addOwn: some View {
+  var look: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      OnboardingHeadline("Choose how Today begins.")
+      OnboardingDeck("The top of Today shows what's new since you last looked. Change it in Settings › Look.")
+      LookChoice()
+      Spacer(minLength: 20)
+      Button("Continue", action: next).buttonStyle(.swissPrimary).padding(.bottom, 12)
+    }
+  }
+
+  var updates: some View {
     VStack(alignment: .leading, spacing: 0) {
-      RebusLine(tokens: [.word("ADD"), .pill("YOUR OWN")], size: 17, delay: 0.1)
-      RebusLine(tokens: [.word("RSS FEED")], size: 17, delay: 0.3).padding(.top, 6)
-      AddFeedPanel().padding(.top, 16)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 14) {
+          OnboardingHeadline("Stay up to date, quietly.")
+          OnboardingDeck("Both optional. Both can be changed in Settings.")
+          BackgroundRefreshSettings()
+          AlertSettings()
+        }
+      }
+      .scrollIndicators(.hidden)
+      Button("Start reading") {
+        next()
+        // Outlets left out go now; own feeds are read in the next sync.
+        Task { await pipeline.applyOutletChoice(added: !OutletStore.shared.customFeeds.isEmpty) }
+      }
+      .buttonStyle(.swissPrimary)
+      .padding(.vertical, 12)
+    }
+  }
+}
+
+/// An onboarding step's headline: the news serif, large and calm.
+struct OnboardingHeadline: View {
+  let text: String
+  var size: CGFloat = 34
+  init(_ text: String, size: CGFloat = 34) { self.text = text; self.size = size }
+  var body: some View {
+    Text(text)
+      .font(Swiss.headline(size, relativeTo: .largeTitle))
+      .foregroundStyle(Swiss.ink)
+      .fixedSize(horizontal: false, vertical: true)
+      .accessibilityAddTraits(.isHeader)
+  }
+}
+
+/// The grey line under a headline.
+struct OnboardingDeck: View {
+  let text: String
+  init(_ text: String) { self.text = text }
+  var body: some View {
+    Text(text).font(.body).foregroundStyle(Swiss.muted).fixedSize(horizontal: false, vertical: true)
+  }
+}
+
+/// The loading board, rolling "new" over "new" in like the launch board, once (or, with
+/// `loops`, until `until` says it's done, always ending with both words in).
+struct RollingBoard: View {
+  var pitch: CGFloat
+  var loops = false
+  var until: @MainActor () -> Bool = { true }
+  @State private var loop = WordLoop()
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  var body: some View {
+    MiniDotBoard(fill: 1, first: loop.first, second: loop.second, pitch: pitch)
+      .task {
+        try? await Task.sleep(for: .seconds(0.3))
+        await loop.run(reduceMotion: reduceMotion) { !loops || until() }
+      }
+      .accessibilityLabel("newnew")
+  }
+}
+
+/// Topics to follow, as on the Topics sheet: suggestions as pills ("+" to follow, outlined with
+/// a tick once followed) and a field for your own. Optional.
+struct OnboardingTopics: View {
+  var next: () -> Void
+  @Environment(FeedSyncPipeline.self) var pipeline
+  @Query(sort: \SemanticTopic.createdAt) var topics: [SemanticTopic]
+  @State private var phrase = ""
+  @State private var adding: Set<String> = []
+
+  func followed(_ name: String) -> SemanticTopic? {
+    topics.first { $0.kind == .follow && $0.phrase.caseInsensitiveCompare(name) == .orderedSame }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      OnboardingHeadline("Follow what you care about.")
+      OnboardingDeck("Followed topics come first in Today and get their own pill. Optional.")
+      HStack(spacing: 8) {
+        TextField("A topic, like “electric cars”", text: $phrase)
+          .submitLabel(.done)
+          .onSubmit { follow(phrase) }
+        Button("Follow") { follow(phrase) }
+          .buttonStyle(.swissPrimary)
+          .disabled(phrase.trimmingCharacters(in: .whitespaces).isEmpty)
+      }
+      .padding(.leading, 16)
+      .padding(.trailing, 8)
+      .padding(.vertical, 8)
+      .tile(.plain, radius: 16)
+      let own = topics.filter { $0.kind == .follow }.map(\.phrase).filter { p in !(TopicsSheet.suggestions[.follow] ?? []).contains { $0.caseInsensitiveCompare(p) == .orderedSame } }
+      FlowLayout(spacing: 8) {
+        ForEach((TopicsSheet.suggestions[.follow] ?? []) + own + adding.filter { a in !own.contains(a) && !(TopicsSheet.suggestions[.follow] ?? []).contains(a) }.sorted(), id: \.self) { name in
+          let on = followed(name) != nil || adding.contains(name)
+          Button {
+            if let topic = followed(name) { withAnimation(.snappy) { pipeline.remove(topic) } } else { follow(name) }
+          } label: {
+            Label(name, systemImage: on ? "checkmark" : "plus")
+          }
+          .buttonStyle(SelectablePillStyle(isOn: on))
+          .id(on)
+          .accessibilityValue(on ? "Following" : "")
+        }
+      }
       Spacer(minLength: 20)
       HStack(spacing: 10) {
         Button("Continue", action: next).buttonStyle(.swissPrimary)
-        if OutletStore.shared.customFeeds.isEmpty { Button("Skip", action: next).buttonStyle(.swissSecondary) }
+        if topics.filter({ $0.kind == .follow }).isEmpty && adding.isEmpty { Button("Skip", action: next).buttonStyle(.swissSecondary) }
       }
       .padding(.bottom, 12)
     }
   }
 
-  var alerts: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      RebusLine(tokens: [.word("ALERTS"), .pill("IF YOU WANT")], size: 17, delay: 0.1)
-      AlertSettings(showsHeading: false).padding(.top, 20)
-      Spacer(minLength: 20)
-      Button("Start reading") {
-        OutletStore.shared.finishOnboarding()
-        done()
-        // Outlets left out go now; own feeds are read in the next sync.
-        Task { await pipeline.applyOutletChoice(added: !OutletStore.shared.customFeeds.isEmpty) }
+  func follow(_ text: String) {
+    let name = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, followed(name) == nil, !adding.contains(name) else { return }
+    phrase = ""
+    withAnimation(.snappy) { _ = adding.insert(name) }
+    Task {
+      await pipeline.addTopic(name, kind: .follow)
+      withAnimation(.snappy) { _ = adding.remove(name) }
+    }
+  }
+}
+
+/// How Today begins: Blocks, Dots or LCD, each a tile with its own top in small, the chosen one
+/// white and outlined (Settings › Look).
+struct LookChoice: View {
+  @AppStorage(TopLook.key) private var raw = TopLook.blocks.rawValue
+
+  var body: some View {
+    VStack(spacing: 12) {
+      ForEach(TopLook.allCases) { look in
+        let on = raw == look.rawValue
+        Button {
+          withAnimation(.snappy(duration: 0.2)) { raw = look.rawValue }
+        } label: {
+          VStack(alignment: .leading, spacing: 12) {
+            HStack {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(look.label).font(.body)
+                Text(Self.line(look)).font(.footnote).foregroundStyle(Swiss.muted)
+              }
+              Spacer()
+              CheckMark(isOn: on)
+            }
+            preview(look)
+              .foregroundStyle(Swiss.ink)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .accessibilityHidden(true)
+          }
+          .padding(16)
+          .background(on ? Swiss.card : Swiss.tile, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+          .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Swiss.ink, lineWidth: on ? 1.6 : 0))
+          .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
       }
-      .buttonStyle(.swissPrimary)
-      .padding(.bottom, 12)
+    }
+  }
+
+  static func line(_ look: TopLook) -> String {
+    switch look {
+    case .blocks: "Bold, the default"
+    case .dots: "A small departures board"
+    case .lcd: "A liquid-crystal display"
+    }
+  }
+
+  @ViewBuilder func preview(_ look: TopLook) -> some View {
+    switch look {
+    case .blocks: BlockText(text: "21 NEW", maxHeight: 44).frame(width: 220, alignment: .leading)
+    case .dots: DotText("21 NEW", pitch: 2.4, unlit: 0.07, motion: .none, scales: false)
+    case .lcd: DotText("21 NEW", pitch: 2.4, unlit: 0.07, motion: .none, scales: false).environment(\.boardFace, .lcd)
+    }
+  }
+}
+
+/// The hand-over: the board large and centred, rolling "new" over "new" while the first sync
+/// runs, with one calm sentence; then Today.
+struct FirstEdition: View {
+  let outlets: Int
+  var finish: () -> Void
+  @Environment(FeedSyncPipeline.self) var pipeline
+  @State private var started = Date.now
+
+  var body: some View {
+    VStack(spacing: 18) {
+      Spacer()
+      // Rolls until the sync is done and the board has been seen for a moment.
+      RollingBoard(pitch: 7, loops: true) { !pipeline.isSyncing && Date.now.timeIntervalSince(started) > 2 }
+      OnboardingHeadline("Your first edition is being made.", size: 32)
+        .multilineTextAlignment(.center)
+      Text("newnew is reading \(outlets) outlets on this iPhone. It takes about a minute, the first time.")
+        .font(.body)
+        .foregroundStyle(Swiss.muted)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+      Spacer()
+    }
+    .frame(maxWidth: .infinity)
+    .task {
+      while pipeline.isSyncing || Date.now.timeIntervalSince(started) < 2.5 { try? await Task.sleep(for: .milliseconds(200)) }
+      finish()
     }
   }
 }
@@ -200,9 +433,10 @@ struct OutletPicker: View {
     }
   }
 
+  /// Rows in one tile, apart by space (no lines between them).
   func rows(_ outlets: [OutletInfo], icon: String? = nil) -> some View {
     VStack(spacing: 0) {
-      ForEach(Array(outlets.enumerated()), id: \.element.id) { index, outlet in
+      ForEach(outlets) { outlet in
         Button {
           if selection.contains(outlet.outlet) { selection.remove(outlet.outlet) } else { selection.insert(outlet.outlet) }
         } label: {
@@ -213,13 +447,12 @@ struct OutletPicker: View {
             CheckMark(isOn: selection.contains(outlet.outlet))
           }
           .padding(.horizontal, 14)
-          .padding(.vertical, 11)
+          .padding(.vertical, 10)
           .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(icon == nil ? outlet.outlet : "\(outlet.outlet), podcast")
         .accessibilityAddTraits(selection.contains(outlet.outlet) ? .isSelected : [])
-        if index < outlets.count - 1 { Divider().overlay(Swiss.ink.opacity(0.06)).padding(.horizontal, 14) }
       }
     }
     .tile(.plain, radius: 16)
@@ -231,7 +464,7 @@ struct OutletPicker: View {
     if !channels.isEmpty {
       Text("On YouTube").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted).padding(.top, 4)
       VStack(spacing: 0) {
-        ForEach(Array(channels.enumerated()), id: \.element.id) { index, channel in
+        ForEach(channels) { channel in
           let on = store.customFeeds.contains { $0.url == channel.url }
           Button {
             if on { store.remove(channel) } else { store.add(channel) }
@@ -249,7 +482,6 @@ struct OutletPicker: View {
           .buttonStyle(.plain)
           .accessibilityLabel("\(channel.title), YouTube channel")
           .accessibilityAddTraits(on ? .isSelected : [])
-          if index < channels.count - 1 { Divider().overlay(Swiss.ink.opacity(0.06)).padding(.horizontal, 14) }
         }
       }
       .tile(.plain, radius: 16)
@@ -277,6 +509,8 @@ struct CheckMark: View {
 struct AddFeedPanel: View {
   /// After a feed is added (true) or removed (false).
   var onChange: (Bool) -> Void = { _ in }
+  /// Off in onboarding, whose step says it in its own line.
+  var showsHint = true
   @State private var address = ""
   @State private var finding = false
   @State private var found: CustomFeedReader.Found?
@@ -288,10 +522,12 @@ struct AddFeedPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      Text(verbatim: "Paste a site, its feed address, a YouTube channel (its link or ID), or a Bluesky or Mastodon account (@name.bsky.social, @name@mastodon.social, or its link). newnew finds the feed, shows you what it would read, and checks it when it refreshes.")
-        .font(.subheadline)
-        .foregroundStyle(Swiss.muted)
-        .fixedSize(horizontal: false, vertical: true)
+      if showsHint {
+        Text(verbatim: "Paste a site, its feed address, a YouTube channel (its link or ID), or a Bluesky or Mastodon account (@name.bsky.social, @name@mastodon.social, or its link). newnew finds the feed, shows you what it would read, and checks it when it refreshes.")
+          .font(.subheadline)
+          .foregroundStyle(Swiss.muted)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       HStack(spacing: 8) {
         TextField("Site, feed, YouTube, Bluesky or Mastodon", text: $address)
           .textInputAutocapitalization(.never)

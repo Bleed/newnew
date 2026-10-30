@@ -151,9 +151,19 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   0.72 cosine clustering threshold was not adopted: the tuned 0.12 linkage above is stricter.
 - **Outlets** (legal basis: the reader picks the sources; newnew shows headlines and short
   extracts and links out). First launch shows onboarding (`OnboardingView`, Figma page
-  Onboarding): welcome, choose outlets (grouped by pillar, all checked to start except
-  podcasts, a group's "All"/"None"; each pillar lists its podcasts under "Podcasts", chosen one
-  by one), add your own feed, alerts. `OutletStore` keeps the choice (`outlets.chosen`,
+  Onboarding · editorial, sketch B): calm and classic, the app's own parts, no lines. The
+  loading board (`MiniDotBoard` via `RollingBoard`, "new" over "new" rolling in like the launch
+  board) is the masthead: large on the welcome, small and still beside the progress dots on
+  the steps. Each step: a serif headline (`OnboardingHeadline`, the news serif) and a grey
+  line (`OnboardingDeck`). Welcome (three points in one tile, Begin); choose outlets (grouped
+  by pillar, all checked to start except podcasts, a group's "All"/"None"; rows in a tile
+  apart by space, no dividers, here and in Settings › Outlets); your own feed (`AddFeedPanel`
+  without its hint); topics to follow (`OnboardingTopics`: the Topics sheet's suggestions as
+  pills, + to follow, outlined with a tick once followed, or typed); how Today begins
+  (`LookChoice`: Blocks, Dots, LCD tiles with their real tops in small); staying up to date
+  (background refresh and alerts, the Settings tiles); then the first edition
+  (`FirstEdition`: the board large, looping until the first sync is done and at least 2.5 s,
+  "Your first edition is being made."), and only then `finishOnboarding`. `OutletStore` keeps the choice (`outlets.chosen`,
   nil = not chosen yet = every outlet but the podcasts) and own feeds (`outlets.custom`) in UserDefaults.
   The catalog is `outlets.json` (each outlet's categories, kinds and feeds), with a bundled
   copy in Resources for an offline first launch. Only chosen outlets' feeds are fetched;
