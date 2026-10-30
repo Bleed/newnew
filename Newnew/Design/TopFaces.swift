@@ -318,9 +318,11 @@ enum BlockToken: Hashable {
 struct BlockRebusLine: View {
   let tokens: [BlockToken]
   let size: CGFloat
+  /// Tight: wrapped lines sit close, like one block of type.
+  static func lineGap(_ size: CGFloat) -> CGFloat { size * 0.12 }
 
   var body: some View {
-    FlowLayout(spacing: size * 0.38) {
+    FlowLayout(spacing: size * 0.38, lineSpacing: Self.lineGap(size)) {
       ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in BlockTokenView(token: token, size: size) }
     }
   }
@@ -329,7 +331,9 @@ struct BlockRebusLine: View {
 struct BlockTokenView: View {
   let token: BlockToken
   let size: CGFloat
-  var height: CGFloat { size * 1.34 }
+  /// Just room for a pill around the caps.
+  static func height(_ size: CGFloat) -> CGFloat { size * 1.2 }
+  var height: CGFloat { Self.height(size) }
   var mono: Font { .system(size: size, weight: .regular, design: .monospaced) }
 
   var body: some View {
@@ -416,7 +420,7 @@ struct BlockMessageRow: View {
     let message = messages[index % messages.count]
     Button(action: message.action) {
       BlockRebusLine(tokens: Self.tokens(message, columns: Int(width / (size * 0.6))), size: size)
-        .frame(maxWidth: .infinity, minHeight: size * 1.34 * 2 + size * 0.38, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: BlockTokenView.height(size) * 2 + BlockRebusLine.lineGap(size), alignment: .topLeading)
         .id(message.id)
         .transition(.opacity)
         .contentShape(Rectangle())

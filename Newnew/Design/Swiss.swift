@@ -382,10 +382,13 @@ extension ToggleStyle where Self == SwissToggleStyle {
 /// Minimal wrapping layout for pills.
 struct FlowLayout: Layout {
   var spacing: CGFloat = 6
+  /// Between lines; `spacing` when nil.
+  var lineSpacing: CGFloat?
+  var lineGap: CGFloat { lineSpacing ?? spacing }
 
   func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
     let rows = arrange(proposal: proposal, subviews: subviews)
-    let height = rows.reduce(0) { $0 + $1.height } + spacing * CGFloat(max(rows.count - 1, 0))
+    let height = rows.reduce(0) { $0 + $1.height } + lineGap * CGFloat(max(rows.count - 1, 0))
     let width = rows.map(\.width).max() ?? 0
     return CGSize(width: proposal.width ?? width, height: height)
   }
@@ -399,7 +402,7 @@ struct FlowLayout: Layout {
         subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
         x += size.width + spacing
       }
-      y += row.height + spacing
+      y += row.height + lineGap
     }
   }
 

@@ -896,8 +896,8 @@ struct NewsTop: View {
 
   var blocks: some View {
     TimelineView(.everyMinute) { context in
-      VStack(alignment: .leading, spacing: 12) {
-        VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
           BlockRebusLine(tokens: dateTokens(context.date), size: rebusSize)
           BlockText(text: blockFigure)
             .foregroundStyle(Swiss.ink)
