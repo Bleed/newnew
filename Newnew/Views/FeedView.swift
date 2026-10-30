@@ -876,40 +876,46 @@ struct NewsTop: View {
     return fresh.isEmpty ? "QUIET" : "\(fresh.count) NEW"
   }
 
-  /// The block look's line under it, in mono.
-  var blockDetail: String {
-    if articles.isEmpty { return detailText }
-    if fresh.isEmpty { return "NOTHING NEW IN \(visible.count) \(visible.count == 1 ? "STORY" : "STORIES")" }
-    let stories = Set(fresh.compactMap { $0.cluster?.id }).count
-    return "IN \(stories) \(stories == 1 ? "STORY" : "STORIES") SINCE YOU LAST LOOKED"
+  /// Settings › Look › Blocks (Figma: Explorations · LCD, AE): what's new in the block face across
+  /// the full width, no tile, and around it a rebus in SF Mono at one size: FRI [30] (OCT) clock
+  /// 20:24 above; IN (26) STORIES, stack [39] under it; then the message, spoken.
+  @ScaledMetric(relativeTo: .body) private var rebusSize: CGFloat = 19
+
+  func dateTokens(_ date: Date) -> [BlockToken] {
+    let weekday = date.formatted(.dateTime.weekday(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
+    let month = date.formatted(.dateTime.month(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
+    let time = date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+    return [.word(weekday), .filled(date.formatted(.dateTime.day())), .outline(month), .clock, .word(time)]
+  }
+
+  var countTokens: [BlockToken] {
+    if articles.isEmpty { return detailText.split(separator: " ").map { .word(String($0)) } }
+    let stories = fresh.isEmpty ? visible.count : Set(fresh.compactMap { $0.cluster?.id }).count
+    return [.word(fresh.isEmpty ? "ALL" : "IN"), .outline("\(stories)"), .word(stories == 1 ? "STORY" : "STORIES"), .stack, .filled("\(articles.count)")]
+  }
+
+  var blocks: some View {
+    TimelineView(.everyMinute) { context in
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
+          BlockRebusLine(tokens: dateTokens(context.date), size: rebusSize)
+          BlockText(text: blockFigure)
+            .foregroundStyle(Swiss.ink)
+          BlockRebusLine(tokens: countTokens, size: rebusSize)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(blockFigure.lowercased()). \(countTokens.map(\.spoken).filter { !$0.isEmpty }.joined(separator: " ")) stories, \(figure.lowercased())")
+        if !boardMessages.isEmpty { BlockMessageRow(messages: boardMessages, size: rebusSize) }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.vertical, 4)
+      // One size for every word; past xxLarge the lines would wrap past two.
+      .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+    }
   }
 
   var body: some View {
     if look == .blocks { blocks } else { board.environment(\.boardFace, look == .lcd ? .lcd : .dots) }
-  }
-
-  /// Settings › Look › Blocks (Figma: Explorations · LCD, V): what's new in the block face across
-  /// the full width, no tile; the day, the count and the message in SF Mono, never bold.
-  var blocks: some View {
-    TimelineView(.everyMinute) { context in
-      VStack(alignment: .leading, spacing: 10) {
-        VStack(alignment: .leading, spacing: 10) {
-          Text("\(Self.dateText(context.date)) · \(articles.count) \(articles.count == 1 ? "ARTICLE" : "ARTICLES")")
-            .font(.system(.footnote, design: .monospaced))
-            .foregroundStyle(Swiss.muted)
-          BlockText(text: blockFigure)
-            .foregroundStyle(Swiss.ink)
-          Text(blockDetail)
-            .font(.system(.subheadline, design: .monospaced))
-            .foregroundStyle(Swiss.ink)
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(blockFigure.lowercased()). \(blockDetail.lowercased()). \(figure.lowercased())")
-        if !boardMessages.isEmpty { MonoMessageRow(messages: boardMessages) }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(.vertical, 4)
-    }
   }
 
   var board: some View {

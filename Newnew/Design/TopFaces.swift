@@ -25,7 +25,7 @@ enum TopLook: String, CaseIterable, Identifiable {
     switch self {
     case .dots: "A small departures board: the day, the count and what's new in dots."
     case .lcd: "The same board as a liquid-crystal display, the unlit segments faintly showing."
-    case .blocks: "What's new in big blocks across the top, everything else in mono."
+    case .blocks: "What's new in big blocks across the top, the rest as a rebus in mono."
     }
   }
 }
@@ -293,34 +293,136 @@ struct BlockText: View {
   }
 }
 
-/// The block top's message line: SF Mono, the age in grey, an ink arrow; the messages take
-/// turns every 7 s, each typing in left to right.
-struct MonoMessageRow: View {
+// MARK: Rebus around the block
+
+/// The block top's words and signs (Figma: Explorations · LCD, AE): SF Mono caps at one size,
+/// numbers in pills (filled, or outlined), small glyphs (clock, stack, a speaking head), an age
+/// in a corner bracket, the arrow in a filled pill. Every token is one height.
+enum BlockToken: Hashable {
+  case word(String)
+  case filled(String)
+  case outline(String)
+  case bracket(String)
+  case clock, stack, head, go
+
+  var spoken: String {
+    switch self {
+    case .word(let s), .filled(let s), .outline(let s): s.lowercased()
+    case .bracket(let s): s.lowercased().replacing(/^1h$/, with: "1 hour").replacing(/h$/, with: " hours").replacing(/m$/, with: " minutes")
+    case .clock, .stack, .head, .go: ""
+    }
+  }
+}
+
+/// One rebus line that wraps at tokens.
+struct BlockRebusLine: View {
+  let tokens: [BlockToken]
+  let size: CGFloat
+
+  var body: some View {
+    FlowLayout(spacing: size * 0.38) {
+      ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in BlockTokenView(token: token, size: size) }
+    }
+  }
+}
+
+struct BlockTokenView: View {
+  let token: BlockToken
+  let size: CGFloat
+  var height: CGFloat { size * 1.34 }
+  var mono: Font { .system(size: size, weight: .regular, design: .monospaced) }
+
+  var body: some View {
+    switch token {
+    case .word(let s): Text(s).font(mono).foregroundStyle(Swiss.ink).frame(height: height)
+    case .filled(let s):
+      Text(s).font(mono).foregroundStyle(Swiss.onInk)
+        .padding(.horizontal, size * 0.42).frame(height: height)
+        .background(Swiss.ink, in: Capsule())
+    case .outline(let s):
+      Text(s).font(mono).foregroundStyle(Swiss.ink)
+        .padding(.horizontal, size * 0.42).frame(height: height)
+        .overlay(Capsule().strokeBorder(Swiss.ink, lineWidth: max(1.3, size / 13)))
+    case .bracket(let s):
+      Text(s).font(mono).foregroundStyle(Swiss.ink)
+        .padding(.leading, size * 0.38).padding(.trailing, size * 0.3).padding(.bottom, size * 0.18)
+        .frame(height: height)
+        .overlay(alignment: .bottomLeading) { CornerBracket().stroke(Swiss.ink, lineWidth: max(1.3, size / 13)) }
+    case .clock: Image(systemName: "clock").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink).frame(height: height)
+    case .stack: Image(systemName: "square.3.layers.3d.down.right").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink).frame(height: height)
+    case .head: SpeakingHead().fill(Swiss.ink).frame(width: size * 1.35, height: size * 1.08).frame(height: height)
+    case .go:
+      Image(systemName: "arrow.right").font(.system(size: size * 0.8, weight: .medium)).foregroundStyle(Swiss.onInk)
+        .padding(.horizontal, size * 0.55).frame(height: height)
+        .background(Swiss.ink, in: Capsule())
+    }
+  }
+}
+
+/// The age's bracket: a line down the left that curves into one along the bottom.
+nonisolated struct CornerBracket: Shape {
+  func path(in rect: CGRect) -> Path {
+    let r = min(rect.height * 0.35, 10)
+    var p = Path()
+    p.move(to: CGPoint(x: rect.minX, y: rect.minY + 2))
+    p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - r))
+    p.addQuadCurve(to: CGPoint(x: rect.minX + r, y: rect.maxY), control: CGPoint(x: rect.minX, y: rect.maxY))
+    p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+    return p
+  }
+}
+
+/// A head in profile, speaking: the sign for a message (drawn on a 30 × 24 grid).
+nonisolated struct SpeakingHead: Shape {
+  func path(in rect: CGRect) -> Path {
+    let sx = rect.width / 30, sy = rect.height / 24
+    func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: rect.minX + x * sx, y: rect.minY + y * sy) }
+    var p = Path()
+    p.move(to: pt(9, 1))
+    p.addCurve(to: pt(17.5, 8.6), control1: pt(14, 1), control2: pt(17.5, 4.4))
+    p.addCurve(to: pt(18.5, 11.6), control1: pt(17.5, 9.8), control2: pt(17.8, 10.5))
+    p.addLine(to: pt(19.8, 13.7))
+    p.addCurve(to: pt(19.2, 15), control1: pt(20.2, 14.3), control2: pt(19.9, 14.9))
+    p.addLine(to: pt(17.8, 15.2))
+    p.addLine(to: pt(17.8, 17.8))
+    p.addCurve(to: pt(15.1, 20.3), control1: pt(17.8, 19.3), control2: pt(16.6, 20.4))
+    p.addLine(to: pt(13.1, 20.2))
+    p.addLine(to: pt(13.1, 23))
+    p.addLine(to: pt(3, 23))
+    p.addLine(to: pt(3, 17.4))
+    p.addCurve(to: pt(0.5, 11), control1: pt(1.5, 15.8), control2: pt(0.5, 13.6))
+    p.addCurve(to: pt(9, 1), control1: pt(0.5, 5.4), control2: pt(4.2, 1))
+    p.closeSubpath()
+    var lines = Path()
+    lines.move(to: pt(22, 7.5)); lines.addLine(to: pt(26.5, 5))
+    lines.move(to: pt(22.5, 12)); lines.addLine(to: pt(27.5, 12))
+    lines.move(to: pt(22, 16.5)); lines.addLine(to: pt(26.5, 19))
+    p.addPath(lines.strokedPath(StrokeStyle(lineWidth: 2.2 * sx, lineCap: .round)))
+    return p
+  }
+}
+
+/// The block top's message: a rebus line, the speaking head first, numbers in pills, the age in
+/// its bracket, the arrow last. Two lines high whatever it says (long headlines are cut), so
+/// nothing under it moves; the messages take turns every 7 s.
+struct BlockMessageRow: View {
   let messages: [BoardMessage]
+  let size: CGFloat
   @State private var index = 0
   @State private var lastSwitch = Date.now
+  @State private var width: CGFloat = 360
 
   var body: some View {
     let message = messages[index % messages.count]
     Button(action: message.action) {
-      HStack(alignment: .center, spacing: 10) {
-        (Text(message.text.uppercased()) + Text(message.grey.isEmpty ? "" : " · \(message.grey)").foregroundStyle(Swiss.muted))
-          .font(.system(.footnote, design: .monospaced))
-          .foregroundStyle(Swiss.ink)
-          .lineLimit(2, reservesSpace: true)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .id(message.id)
-          .transition(.opacity)
-        Image(systemName: "arrow.right")
-          .font(.caption.weight(.semibold))
-          .foregroundStyle(Swiss.onInk)
-          .padding(.horizontal, 7)
-          .frame(height: 20)
-          .background(Swiss.ink, in: Capsule())
-      }
-      .contentShape(Rectangle())
+      BlockRebusLine(tokens: Self.tokens(message, columns: Int(width / (size * 0.6))), size: size)
+        .frame(maxWidth: .infinity, minHeight: size * 1.34 * 2 + size * 0.38, alignment: .topLeading)
+        .id(message.id)
+        .transition(.opacity)
+        .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
+    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
     .accessibilityLabel(message.spoken)
     .task(id: messages.map(\.id)) {
       guard messages.count > 1 else { return }
@@ -332,6 +434,31 @@ struct MonoMessageRow: View {
         lastSwitch = .now
       }
     }
+  }
+
+  /// "TOP · HEADLINE" → head, the headline's words, the age bracketed, the arrow. Numbers in
+  /// other messages go in filled pills. Cut with "..." to fit two lines of `columns` characters.
+  static func tokens(_ message: BoardMessage, columns: Int) -> [BlockToken] {
+    var text = message.text.uppercased()
+    if text.hasPrefix("TOP · ") { text = String(text.dropFirst(6)) }
+    let age = message.grey.isEmpty ? 0 : message.grey.count + 3
+    // Two lines, less the head, the age and the arrow, with room for pills' padding and wraps.
+    let budget = max(columns * 2 - 4 - age - 4 - 6, 8)
+    var words: [String] = []
+    var used = 0
+    for word in text.split(separator: " ").map(String.init) {
+      if used + word.count + 1 > budget {
+        if let last = words.popLast() { words.append(last + "...") }
+        break
+      }
+      words.append(word)
+      used += word.count + 1
+    }
+    var out: [BlockToken] = [.head]
+    out += words.map { $0.allSatisfy(\.isNumber) ? .filled($0) : .word($0) }
+    if !message.grey.isEmpty { out.append(.bracket(message.grey)) }
+    out.append(.go)
+    return out
   }
 }
 
