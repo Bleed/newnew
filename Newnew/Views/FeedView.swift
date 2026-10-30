@@ -384,6 +384,16 @@ struct FeedView: View {
       // No fade at the top: the pinned filter bar covers what scrolls under it.
       .scrollEdgeEffectHidden(true, for: .top)
       .dotRefreshable(isSyncing: pipeline.isSyncing, isShowing: $boardShowing) { await pipeline.sync() }
+      // The loading band opens over the page's top. Near the top, the page settles at its start
+      // under the band (and again when it folds), so the band never covers the top's first line;
+      // further down the page it stays where the reader is.
+      .onChange(of: boardShowing) {
+        guard !barPinned else { return }
+        Task { @MainActor in
+          await Task.yield()
+          withAnimation(.snappy(duration: 0.3)) { scrollPosition.scrollTo(edge: .top) }
+        }
+      }
       // Nothing shows behind the clock and the round buttons: page colour from the top of the
       // screen to the bottom of the toolbar, whatever the scroll position (the pinned bar
       // covers the rest).
