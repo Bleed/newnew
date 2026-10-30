@@ -24,9 +24,41 @@ extension ArticleItem {
 /// Opens a link in the app that claims it (universal links: YouTube, The New York Times, The
 /// Guardian and most publishers with an app), or runs `otherwise` when no app does.
 enum LinkOpener {
+  /// The publisher's app if one claims the link, trying the other forms of the address too
+  /// (with or without "www", and bbc.co.uk ↔ bbc.com: the international BBC News app may
+  /// claim only one); `otherwise` when none does.
   static func open(_ url: URL, otherwise: @escaping @MainActor () -> Void) {
+    attempt([url] + alternates(url), otherwise: otherwise)
+  }
+
+  private static func attempt(_ urls: [URL], otherwise: @escaping @MainActor () -> Void) {
+    guard let url = urls.first else {
+      Task { @MainActor in otherwise() }
+      return
+    }
     UIApplication.shared.open(url, options: [.universalLinksOnly: true]) { opened in
-      if !opened { Task { @MainActor in otherwise() } }
+      if !opened { attempt(Array(urls.dropFirst()), otherwise: otherwise) }
+    }
+  }
+
+  /// Other addresses for the same page, most likely first.
+  static func alternates(_ url: URL) -> [URL] {
+    guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false), let host = parts.host?.lowercased() else { return [] }
+    var hosts: [String] = []
+    // Domains a publisher runs under two names.
+    let twins = [("bbc.co.uk", "bbc.com")]
+    for (a, b) in twins {
+      if host.hasSuffix(a) { hosts.append(host.replacingOccurrences(of: a, with: b)) }
+      if host.hasSuffix(b) { hosts.append(host.replacingOccurrences(of: b, with: a)) }
+    }
+    for h in [host] + hosts {
+      hosts.append(h.hasPrefix("www.") ? String(h.dropFirst(4)) : "www." + h)
+    }
+    var seen: Set<String> = [host]
+    return hosts.compactMap { h in
+      guard seen.insert(h).inserted else { return nil }
+      parts.host = h
+      return parts.url
     }
   }
 }

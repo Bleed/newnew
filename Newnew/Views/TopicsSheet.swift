@@ -277,6 +277,8 @@ struct ReadStoriesSettings: View {
               withAnimation(.snappy(duration: 0.2)) { readStoriesRaw = option.rawValue }
             }
             .buttonStyle(SelectablePillStyle(isOn: isSelected, fillsWidth: true))
+            // Rebuilt when chosen: the style alone didn't always redraw its outline.
+            .id(isSelected)
           }
         }
       }
@@ -288,7 +290,9 @@ struct ReadStoriesSettings: View {
 
 /// Reading the news while the app is closed: Wi-Fi only (the default), Wi-Fi and mobile, or off.
 struct BackgroundRefreshSettings: View {
-  @AppStorage(BackgroundRefresh.key) private var raw = BackgroundRefresh.wifi.rawValue
+  // Own state, saved by hand: @AppStorage with this dotted key ("refresh.background") left the
+  // pills out of date after a tap.
+  @State private var raw = BackgroundRefresh.current.rawValue
   var setting: BackgroundRefresh { BackgroundRefresh(rawValue: raw) ?? .wifi }
 
   var body: some View {
@@ -304,16 +308,23 @@ struct BackgroundRefreshSettings: View {
         }
         HStack(spacing: 8) {
           ForEach(BackgroundRefresh.allCases) { option in
+            let isSelected = raw == option.rawValue
             Button(option.label) {
               withAnimation(.snappy(duration: 0.2)) { raw = option.rawValue }
-              Alerts.scheduleRefresh()
             }
-            .buttonStyle(SelectablePillStyle(isOn: setting == option, fillsWidth: true))
+            .buttonStyle(SelectablePillStyle(isOn: isSelected, fillsWidth: true))
+            // Rebuilt when chosen: the style alone didn't always redraw its outline.
+            .id(isSelected)
           }
         }
       }
       .padding(14)
       .tile(.plain, radius: 16)
+    }
+    // Re-plan the background task after the choice has landed, not inside the tap.
+    .onChange(of: raw) {
+      UserDefaults.standard.set(raw, forKey: BackgroundRefresh.key)
+      Alerts.scheduleRefresh()
     }
   }
 }
@@ -341,6 +352,8 @@ struct FeedWindowSettings: View {
               withAnimation(.snappy(duration: 0.2)) { newsWindowHours = option.rawValue }
             }
             .buttonStyle(SelectablePillStyle(isOn: isSelected, fillsWidth: true))
+            // Rebuilt when chosen: the style alone didn't always redraw its outline.
+            .id(isSelected)
             .accessibilityLabel(option.menuLabel)
           }
         }
