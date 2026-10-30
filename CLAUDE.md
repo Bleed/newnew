@@ -299,8 +299,9 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   (the default, below), Dots (the board above), LCD (Figma: Explorations · LCD, P: the same board, its cells drawn as
   14-segment glyphs by `LCDFont` through `\.boardFace`, unlit segments faint, same timing) or
   Blocks (Figma V, with the rebus of AE: what's new, "32 NEW" ("NULL NEW" when nothing arrived
-  since you last looked; ALL READ, READING without articles), in `BlockText` across the full
-  width, no tile; around it one-size SF Mono rebus lines, `BlockRebusLine`: FRI [30] (OCT)
+  since you last looked; ALL READ, READING without articles), in `BlockText`, always the
+  same full block (as tall as "00 NEW" across the width; longer words condensed, shorter
+  ones widened), no tile; around it one-size SF Mono rebus lines, `BlockRebusLine`: FRI [30] (OCT)
   clock 20:24 above, IN (26) STORIES stack [39] under it, then `BlockMessageRow`: the speaking
   head, the message's words (numbers in filled pills, cut to two lines), the age in a corner
   bracket, the arrow pill; messages take turns every 7 s: the top story; the newest episode or

@@ -235,7 +235,9 @@ enum BlockFont {
   }
 }
 
-/// Text in the block face, as wide as it's given (up to `maxHeight` tall). It arrives like the
+/// Text in the block face, filling the full block: as wide as it's given and always as tall as
+/// "00 NEW" would be there (up to `maxHeight`), so the block keeps its size whatever it says;
+/// longer words are drawn narrower, shorter ones wider. It arrives like the
 /// dot face: a departures board, cells 0.025 s apart left to right, each rolling through
 /// random blocks (a new one every 0.06 s) before it settles; a new text arrives the same way.
 struct BlockText: View {
@@ -246,6 +248,8 @@ struct BlockText: View {
   @State private var launched = false
 
   var glyphs: [Character] { Array(DotFont.boardText(text).filter { $0 == " " || BlockFont.glyphs[$0] != nil }) }
+  /// The block's proportions, in cell units: those of "00 NEW".
+  static let reference = BlockFont.width(Array("00 NEW"))
 
   var duration: Double {
     let last = max(glyphs.count - 1, 0)
@@ -255,7 +259,6 @@ struct BlockText: View {
 
   var body: some View {
     let glyphs = glyphs
-    let units = BlockFont.width(glyphs)
     Group {
       if let start {
         TimelineView(.animation) { context in
@@ -265,7 +268,7 @@ struct BlockText: View {
         Canvas { ctx, size in draw(&ctx, size: size, glyphs: glyphs, elapsed: launched || reduceMotion ? nil : -1) }
       }
     }
-    .aspectRatio(units / 10, contentMode: .fit)
+    .aspectRatio(Self.reference / 10, contentMode: .fit)
     .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .leading)
     .afterLaunch {
       guard !launched else { return }
@@ -312,6 +315,9 @@ struct BlockText: View {
       }
       x += (BlockFont.width(character) + BlockFont.gap) * unit
     }
+    // Stretched or condensed across, to fill the block's width at its height.
+    let width = BlockFont.width(glyphs) * unit
+    if width > 0 { path = path.applying(CGAffineTransform(scaleX: size.width / width, y: 1)) }
     ctx.fill(path, with: .foreground)
   }
 }
