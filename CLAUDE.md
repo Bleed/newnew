@@ -276,7 +276,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   apart and changed values roll; the tile stops growing at xxxLarge text so rows fit. Under a
   dotted rule, inside the tile, `BoardMessageRows` shows the tap-through messages (TOP with the
   age in grey, CATCHUP, read hidden, hidden by topics) in a small dot face (pitch 1.4) on two
-  rows wrapped at words, with an ink arrow; they take turns every 7 s and roll on change.
+  rows wrapped at words, with an ink arrow; they take turns every 7 s. Each message arrives as
+  one departures board read left to right across both rows (`decodesOnChange` replays the
+  entrance on new text; `decodeIndexOffset` lets row 2 and the grey age carry on row 1's cell
+  count, so the line settles strictly in order). Note: DotText plays its entrance only once
+  per view, so views inserted later skip it; keep the views and change their text instead.
   `DotFont.boardText` makes headlines drawable (accents, curly quotes, dashes). The one-sentence top (`OneSentenceTop`) is still used by the read
   summary at the end of a swipe run.
 - News headlines are Times New Roman (`Swiss.headline`), everywhere a headline appears; all

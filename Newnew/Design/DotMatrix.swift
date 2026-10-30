@@ -130,7 +130,7 @@ struct DotText: View {
   static let decodeRowDelay = 0.012
   /// Unlit dots on a board, faint (Figma: 7 %).
   static let boardUnlit = 0.07
-  func decodeSteps(_ index: Int) -> Int { 4 + Int(Double(index) * 0.4) }
+  func decodeSteps(_ index: Int) -> Int { 4 + Int(Double(index + decodeIndexOffset) * 0.4) }
   /// Seconds until the last cell has settled.
   var pixelTime: Double {
     let last = max(target.count - 1, 0)
@@ -146,8 +146,11 @@ struct DotText: View {
 
   init(
     _ text: String, pitch: CGFloat = 1.8, unlit: Double = 0, motion: Motion = .flip, rollsIn: Bool = false, scales: Bool = true,
-    clock: (start: Date, now: Date)? = nil, glyphTime: Double = DotText.glyphTime, decodeDelay: Double = 0
+    clock: (start: Date, now: Date)? = nil, glyphTime: Double = DotText.glyphTime, decodeDelay: Double = 0,
+    decodesOnChange: Bool = false, decodeIndexOffset: Int = 0
   ) {
+    self.decodesOnChange = decodesOnChange
+    self.decodeIndexOffset = decodeIndexOffset
     self.decodeDelay = decodeDelay
     self.glyphSeconds = glyphTime
     self.scales = scales
@@ -162,6 +165,12 @@ struct DotText: View {
 
   /// Seconds the decode waits after the text is on screen, to stagger lines (a score table).
   var decodeDelay: Double = 0
+  /// A new text arrives as a departures board again (after `decodeDelay`), instead of rolling
+  /// in place: lines that take turns, timed together (Today's board messages).
+  var decodesOnChange = false
+  /// Cells before this text in the same reading line (a wrapped message's second row): its
+  /// cells roll as long as they would there, so the whole line settles left to right.
+  var decodeIndexOffset = 0
 
   static let rowDelay = 0.014
   static let glyphTime = 0.06
@@ -195,7 +204,14 @@ struct DotText: View {
     }
     .frame(width: width, height: pitch * 7 - pitch * 0.18)
     .onChange(of: text) { old, _ in
-      guard motion != .none, !reduceMotion else { return }
+      guard !reduceMotion else { return }
+      if decodesOnChange && pixelsIn {
+        pixelsDone = false
+        pixelStart = nil
+        startPixels()
+        return
+      }
+      guard motion != .none else { return }
       begin(from: DotFont.normalized(old))
     }
     .onGeometryChange(for: Bool.self) { [screen = Self.screenSize] proxy in

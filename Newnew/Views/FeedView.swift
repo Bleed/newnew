@@ -1138,15 +1138,22 @@ struct BoardMessageRows: View {
     let rows = Self.rows(message, columns: max(Int((width / pitch + 1) / 6), 8))
     Button(action: message.action) {
       HStack(alignment: .center, spacing: 10) {
+        // One departures board reading left to right across both rows: each cell starts a
+        // stagger after the one before it, row 2 where row 1 ended, the grey age last. A new
+        // message arrives the same way.
+        let starts = Self.starts(rows, base: index == 0 ? 0.36 : 0)
         VStack(alignment: .leading, spacing: pitch * 3) {
           ForEach(0..<2, id: \.self) { row in
-            HStack(spacing: pitch * 6) {
-              DotText(rows[row].main, pitch: 1.4, unlit: 0.07, motion: .roll, decodeDelay: 0.36 + Double(row) * 0.12)
+            // The same two rows stay in place (views added later would skip the entrance);
+            // each new message replays it in reading order.
+            HStack(spacing: rows[row].grey.isEmpty ? 0 : pitch * 6) {
+              DotText(rows[row].main, pitch: 1.4, unlit: 0.07, decodeDelay: starts[row].main, decodesOnChange: true,
+                      decodeIndexOffset: starts[row].mainIndex)
                 .foregroundStyle(Swiss.ink)
-              if !rows[row].grey.isEmpty {
-                DotText(rows[row].grey, pitch: 1.4, unlit: 0.07, motion: .roll, decodeDelay: 0.5)
-                  .foregroundStyle(Swiss.muted)
-              }
+              DotText(rows[row].grey, pitch: 1.4, unlit: 0.07, decodeDelay: starts[row].grey, decodesOnChange: true,
+                      decodeIndexOffset: starts[row].greyIndex)
+                .foregroundStyle(Swiss.muted)
+                .opacity(rows[row].grey.isEmpty ? 0 : 1)
             }
           }
         }
@@ -1173,6 +1180,23 @@ struct BoardMessageRows: View {
         lastSwitch = .now
       }
     }
+  }
+
+  /// When each piece starts its departures-board entrance: cells are `DotText.decodeStagger`
+  /// apart in reading order, so row 2 follows row 1 and the age follows its row's words.
+  static func starts(_ rows: [(main: String, grey: String)], base: Double)
+    -> [(main: Double, grey: Double, mainIndex: Int, greyIndex: Int)] {
+    let step = DotText.decodeStagger
+    var cell = 0
+    var out: [(main: Double, grey: Double, mainIndex: Int, greyIndex: Int)] = []
+    for row in rows {
+      let mainIndex = cell
+      cell += row.main.count + 1
+      let greyIndex = cell
+      if !row.grey.isEmpty { cell += row.grey.count }
+      out.append((base + Double(mainIndex) * step, base + Double(greyIndex) * step, mainIndex, greyIndex))
+    }
+    return out
   }
 
   /// The message wrapped at words onto two rows of `columns` cells, cut with "..." when it runs
