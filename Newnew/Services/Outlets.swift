@@ -54,6 +54,8 @@ nonisolated enum OutletGroup: Hashable, Identifiable, Sendable {
 nonisolated struct CustomFeed: Codable, Hashable, Identifiable, Sendable {
   var url: String
   var title: String
+  /// Named by the reader: never renamed after its site.
+  var named: Bool?
   var id: String { url }
 }
 
@@ -173,7 +175,7 @@ nonisolated enum YouTubeSuggestions {
   /// homepage") get the site's name, by the same rule as when they are added. Their stored
   /// articles keep the old name until the next sync replaces them.
   func renameGenericFeeds() async {
-    for feed in customFeeds where !feed.url.contains("youtube.com") && !namesChecked.contains(feed.url) {
+    for feed in customFeeds where !feed.url.contains("youtube.com") && feed.named != true && !namesChecked.contains(feed.url) {
       namesChecked.insert(feed.url)
       guard let url = URL(string: feed.url), let host = url.host() else { continue }
       if let label = CustomFeedReader.siteLabel(url), CustomFeedReader.names(feed.title, label) { continue }
@@ -187,6 +189,18 @@ nonisolated enum YouTubeSuggestions {
 
   /// Own feeds whose name was checked this launch.
   @ObservationIgnored private var namesChecked: Set<String> = []
+
+  /// The reader's own name for a feed; nil when it is empty or taken by another outlet.
+  @discardableResult func rename(_ feed: CustomFeed, to name: String) -> String? {
+    let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, name != feed.title, let index = customFeeds.firstIndex(where: { $0.url == feed.url }),
+      !customFeeds.contains(where: { $0.title == name }), !catalog.contains(where: { $0.outlet == name })
+    else { return nil }
+    customFeeds[index].title = name
+    customFeeds[index].named = true
+    saveCustom()
+    return name
+  }
 
   func remove(_ feed: CustomFeed) {
     customFeeds.removeAll { $0.url == feed.url }

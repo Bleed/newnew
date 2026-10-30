@@ -205,6 +205,14 @@ import SwiftData
     if added { await sync() }
   }
 
+  /// A feed the reader renamed: its stored articles (and what was read) carry the new name.
+  func renameOutlet(_ old: String, to new: String) {
+    for article in (try? context.fetch(FetchDescriptor<ArticleItem>(predicate: #Predicate { $0.outlet == old }))) ?? [] {
+      article.outlet = new
+    }
+    try? context.save()
+  }
+
   func prune() {
     let cutoff = Date.now.addingTimeInterval(-Self.retention)
     let chartCutoff = Date.now.addingTimeInterval(-Self.chartRetention)

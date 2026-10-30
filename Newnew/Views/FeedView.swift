@@ -806,6 +806,8 @@ struct NewsTop: View {
   var openCatchup: () -> Void = {}
   var showMutes: () -> Void
   var showRead: () -> Void = {}
+  @AppStorage(TopLook.key) private var lookRaw = TopLook.dots.rawValue
+  var look: TopLook { TopLook(rawValue: lookRaw) ?? .dots }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
   /// New to you: reached this iPhone since you last looked, and published no more than two
@@ -868,7 +870,49 @@ struct NewsTop: View {
     return "\(weekday) \(date.formatted(.dateTime.day())) \(month) \(time)"
   }
 
+  /// The block look's headline: what's new, else how things stand.
+  var blockFigure: String {
+    if articles.isEmpty { return readHiddenCount > 0 ? "ALL READ" : "READING" }
+    return fresh.isEmpty ? "QUIET" : "\(fresh.count) NEW"
+  }
+
+  /// The block look's line under it, in mono.
+  var blockDetail: String {
+    if articles.isEmpty { return detailText }
+    if fresh.isEmpty { return "NOTHING NEW IN \(visible.count) \(visible.count == 1 ? "STORY" : "STORIES")" }
+    let stories = Set(fresh.compactMap { $0.cluster?.id }).count
+    return "IN \(stories) \(stories == 1 ? "STORY" : "STORIES") SINCE YOU LAST LOOKED"
+  }
+
   var body: some View {
+    if look == .blocks { blocks } else { board.environment(\.boardFace, look == .lcd ? .lcd : .dots) }
+  }
+
+  /// Settings › Look › Blocks (Figma: Explorations · LCD, V): what's new in the block face across
+  /// the full width, no tile; the day, the count and the message in SF Mono, never bold.
+  var blocks: some View {
+    TimelineView(.everyMinute) { context in
+      VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+          Text("\(Self.dateText(context.date)) · \(articles.count) \(articles.count == 1 ? "ARTICLE" : "ARTICLES")")
+            .font(.system(.footnote, design: .monospaced))
+            .foregroundStyle(Swiss.muted)
+          BlockText(text: blockFigure)
+            .foregroundStyle(Swiss.ink)
+          Text(blockDetail)
+            .font(.system(.subheadline, design: .monospaced))
+            .foregroundStyle(Swiss.ink)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(blockFigure.lowercased()). \(blockDetail.lowercased()). \(figure.lowercased())")
+        if !boardMessages.isEmpty { MonoMessageRow(messages: boardMessages) }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.vertical, 4)
+    }
+  }
+
+  var board: some View {
     VStack(alignment: .leading, spacing: 12) {
       // A small departures board (Figma: Explorations · header, C): the day, the figure and
       // what's new, all in the dot face on one tile, unlit dots showing. Each row arrives as a

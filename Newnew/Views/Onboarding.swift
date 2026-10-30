@@ -281,6 +281,9 @@ struct AddFeedPanel: View {
   @State private var finding = false
   @State private var found: CustomFeedReader.Found?
   @State private var failure: String?
+  @State private var renaming: CustomFeed?
+  @State private var newName = ""
+  @Environment(FeedSyncPipeline.self) private var pipeline
   var store = OutletStore.shared
 
   var body: some View {
@@ -347,6 +350,11 @@ struct AddFeedPanel: View {
                   .font(.caption).foregroundStyle(Swiss.muted)
               }
               Spacer()
+              Button("Rename \(feed.title)", systemImage: "pencil") {
+                newName = feed.title
+                renaming = feed
+              }
+                .buttonStyle(.roundIcon)
               Button("Remove \(feed.title)", systemImage: "xmark") {
                 store.remove(feed)
                 onChange(false)
@@ -363,6 +371,16 @@ struct AddFeedPanel: View {
         .font(.footnote)
         .foregroundStyle(Swiss.muted)
         .fixedSize(horizontal: false, vertical: true)
+    }
+    .alert("Rename feed", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+      TextField("Name", text: $newName)
+      Button("Rename") {
+        if let feed = renaming, let name = store.rename(feed, to: newName) { pipeline.renameOutlet(feed.title, to: name) }
+        renaming = nil
+      }
+      Button("Cancel", role: .cancel) { renaming = nil }
+    } message: {
+      Text("How this feed is named on its stories.")
     }
   }
 

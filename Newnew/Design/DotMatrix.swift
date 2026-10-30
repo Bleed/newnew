@@ -111,6 +111,8 @@ struct DotText: View {
     return max(1, (pitch * displayScale * 0.7).rounded()) / displayScale
   }
   @Environment(\.accessibilityReduceMotion) var reduceMotion
+  /// Settings › Look can draw the cells as LCD segments instead (`LCDFont`), same timing.
+  @Environment(\.boardFace) var face
   @State private var from: [Character] = []
   @State private var start: Date?
   /// The pixel entrance: when it began, nil before and after.
@@ -323,6 +325,14 @@ struct DotText: View {
       for row in 0..<7 {
         let shown = pixels.map { decodeGlyph(index, row: row, elapsed: $0, to: character) }
           ?? elapsed.map { glyph(index, row: row, elapsed: $0, to: character) } ?? character
+        if face == .lcd {
+          // A segment cell has no rows: the whole glyph changes at once, as row 0 does.
+          guard row == 0 else { break }
+          let faint = pixelsIn ? max(unlit, Self.boardUnlit) : unlit
+          LCDFont.draw(shown, in: &ctx, origin: CGPoint(x: x0, y: 0), width: pitch * 5 - pitch * 0.18,
+                       height: pitch * 7 - pitch * 0.18, unlit: faint * 0.8)
+          break
+        }
         for column in 0..<5 {
           let lit = DotFont.isLit(shown, row: row, column: column)
           let faint = pixelsIn ? max(unlit, Self.boardUnlit) : unlit

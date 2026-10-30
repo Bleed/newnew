@@ -129,17 +129,14 @@ struct StoryDetailView: View {
               }
               .foregroundStyle(Swiss.muted)
 
-              // The headline is the lead outlet's: it links to that article, with its credit under it.
-              Button { openArticleURL(lead.url) } label: {
-                Text(lead.title)
-                  .font(Swiss.headline(34, relativeTo: .title))
-                  .foregroundStyle(Swiss.ink)
-                  .multilineTextAlignment(.leading)
-                  .fixedSize(horizontal: false, vertical: true)
-              }
-              .buttonStyle(.plain)
-              .accessibilityAddTraits(.isHeader)
-              .accessibilityHint("Opens \(lead.outlet)'s article")
+              // The headline is the lead outlet's; the pill under it links to that article. The
+              // headline itself isn't a button: swipes that started on it opened the article.
+              Text(lead.title)
+                .font(Swiss.headline(34, relativeTo: .title))
+                .foregroundStyle(Swiss.ink)
+                .multilineTextAlignment(.leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
 
               Button { openArticleURL(lead.url) } label: {
                 HStack(spacing: 5) {

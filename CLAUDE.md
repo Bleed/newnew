@@ -295,6 +295,14 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   per view, so views inserted later skip it; keep the views and change their text instead.
   `DotFont.boardText` makes headlines drawable (accents, curly quotes, dashes). The one-sentence top (`OneSentenceTop`) is still used by the read
   summary at the end of a swipe run.
+- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Dots (the
+  board above, default), LCD (Figma: Explorations · LCD, P: the same board, its cells drawn as
+  14-segment glyphs by `LCDFont` through `\.boardFace`, unlit segments faint, same timing) or
+  Blocks (Figma V: what's new, "32 NEW", in `BlockText` across the full width, no tile; date,
+  count, detail and `MonoMessageRow` in SF Mono Regular). Blocks arrive like the dot face:
+  cells 0.025 s apart roll through random blocks every 0.06 s and settle left to right.
+- The story page's headline is plain text; the "Headline from X ↗" pill under it is the link
+  (a headline button caught swipes).
 - News headlines are Times New Roman (`Swiss.headline`), everywhere a headline appears; all
   other text stays SF.
 - SF Mono for figures, only Light or Regular, never heavier.

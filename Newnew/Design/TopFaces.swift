@@ -1,0 +1,370 @@
+import SwiftUI
+
+// Today's top in other faces, chosen in Settings › Look (Figma: Explorations · LCD, P and V).
+// The dot board stays the default.
+
+/// How Today's top is drawn.
+enum TopLook: String, CaseIterable, Identifiable {
+  /// The dot board on its tile (Figma: Explorations · header, C).
+  case dots
+  /// The same board in a 14-segment LCD face, unlit segments showing (Figma P).
+  case lcd
+  /// What's new in a heavy block face across the full width, the rest in SF Mono (Figma V).
+  case blocks
+
+  static let key = "topLook"
+  var id: String { rawValue }
+  var label: String {
+    switch self {
+    case .dots: "Dots"
+    case .lcd: "LCD"
+    case .blocks: "Blocks"
+    }
+  }
+  var detail: String {
+    switch self {
+    case .dots: "A small departures board: the day, the count and what's new in dots."
+    case .lcd: "The same board as a liquid-crystal display, the unlit segments faintly showing."
+    case .blocks: "What's new in big blocks across the top, everything else in mono."
+    }
+  }
+}
+
+/// What `DotText` draws its cells as.
+enum BoardFace { case dots, lcd }
+
+extension EnvironmentValues {
+  @Entry var boardFace: BoardFace = .dots
+}
+
+// MARK: LCD
+
+/// A 14-segment LCD face drawn in the dot face's cells (5 × 7 pitches), so a board keeps its
+/// layout and its departures-board timing when it changes face. Segments: a top, b c right,
+/// d bottom, e f left, g1 g2 the middle, h j the upper diagonals, i l the centre verticals,
+/// k m the lower diagonals; U L the colon's dots, C a centre dot, P a full stop.
+enum LCDFont {
+  enum Segment: CaseIterable { case a, b, c, d, e, f, g1, g2, h, i, j, k, l, m, upper, lower, centre, stop }
+
+  static let bars: [Segment] = [.a, .b, .c, .d, .e, .f, .g1, .g2, .h, .i, .j, .k, .l, .m]
+
+  private static let source: [Character: String] = [
+    "0": "abcdefjk", "1": "bcj", "2": "abdeg1g2", "3": "abcdg2", "4": "bcfg1g2", "5": "acdfg1g2", "6": "acdefg1g2",
+    "7": "abc", "8": "abcdefg1g2", "9": "abcdfg1g2",
+    "A": "abcefg1g2", "B": "abcdg2il", "C": "adef", "D": "abcdil", "E": "adefg1", "F": "aefg1", "G": "acdefg2",
+    "H": "bcefg1g2", "I": "adil", "J": "bcde", "K": "efg1jm", "L": "def", "M": "bcefhj", "N": "bcefhm", "O": "abcdef",
+    "P": "abefg1g2", "Q": "abcdefm", "R": "abefg1g2m", "S": "acdfg1g2", "T": "ail", "U": "bcdef", "V": "efjk",
+    "W": "bcefkm", "X": "hjkm", "Y": "hjl", "Z": "adjk",
+    ":": "UL", "·": "C", ".": "P", ",": "k", "/": "jk", "%": "cfjk", "-": "g1g2", "+": "g1g2il", "?": "abg2l",
+    "!": "iP", "'": "i",
+  ]
+
+  static let glyphs: [Character: Set<Segment>] = source.mapValues { code in
+    var out: Set<Segment> = []
+    var chars = Array(code)[...]
+    while let first = chars.popFirst() {
+      switch first {
+      case "g": out.insert(chars.popFirst() == "1" ? .g1 : .g2)
+      case "U": out.insert(.upper)
+      case "L": out.insert(.lower)
+      case "C": out.insert(.centre)
+      case "P": out.insert(.stop)
+      default:
+        if let segment = Segment.allCases.first(where: { "\($0)" == String(first) }) { out.insert(segment) }
+      }
+    }
+    return out
+  }
+
+  static func segments(_ character: Character) -> Set<Segment> {
+    glyphs[character] ?? glyphs[Character(character.uppercased())] ?? []
+  }
+
+  /// One segment in a cell `width` × `height`, bars `t` thick, chamfered ends.
+  static func path(_ segment: Segment, width w: CGFloat, height h: CGFloat, thickness t: CGFloat) -> Path {
+    let g = t * 0.32
+    let xm = w / 2, ym = h / 2
+    func horizontal(_ y: CGFloat, _ x0: CGFloat, _ x1: CGFloat) -> Path {
+      Path { p in
+        p.addLines([CGPoint(x: x0, y: y), CGPoint(x: x0 + t / 2, y: y - t / 2), CGPoint(x: x1 - t / 2, y: y - t / 2),
+                    CGPoint(x: x1, y: y), CGPoint(x: x1 - t / 2, y: y + t / 2), CGPoint(x: x0 + t / 2, y: y + t / 2)])
+        p.closeSubpath()
+      }
+    }
+    func vertical(_ x: CGFloat, _ y0: CGFloat, _ y1: CGFloat) -> Path {
+      Path { p in
+        p.addLines([CGPoint(x: x, y: y0), CGPoint(x: x + t / 2, y: y0 + t / 2), CGPoint(x: x + t / 2, y: y1 - t / 2),
+                    CGPoint(x: x, y: y1), CGPoint(x: x - t / 2, y: y1 - t / 2), CGPoint(x: x - t / 2, y: y0 + t / 2)])
+        p.closeSubpath()
+      }
+    }
+    func diagonal(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) -> Path {
+      Path { p in p.move(to: CGPoint(x: x0, y: y0)); p.addLine(to: CGPoint(x: x1, y: y1)) }
+        .strokedPath(StrokeStyle(lineWidth: t * 0.8, lineCap: .butt))
+    }
+    func dot(_ y: CGFloat) -> Path { Path(CGRect(x: xm - t / 2, y: y - t / 2, width: t, height: t)) }
+    let left = t / 2, right = w - t / 2, top = t / 2, bottom = h - t / 2
+    let inner = t * 1.25
+    switch segment {
+    case .a: return horizontal(top, left + g, right - g)
+    case .d: return horizontal(bottom, left + g, right - g)
+    case .g1: return horizontal(ym, left + g, xm - g)
+    case .g2: return horizontal(ym, xm + g, right - g)
+    case .f: return vertical(left, top + g, ym - g)
+    case .e: return vertical(left, ym + g, bottom - g)
+    case .b: return vertical(right, top + g, ym - g)
+    case .c: return vertical(right, ym + g, bottom - g)
+    case .i: return vertical(xm, top + g, ym - g)
+    case .l: return vertical(xm, ym + g, bottom - g)
+    case .h: return diagonal(inner, inner, xm - t * 0.75, ym - t * 0.75)
+    case .j: return diagonal(w - inner, inner, xm + t * 0.75, ym - t * 0.75)
+    case .k: return diagonal(xm - t * 0.75, ym + t * 0.75, inner, h - inner)
+    case .m: return diagonal(xm + t * 0.75, ym + t * 0.75, w - inner, h - inner)
+    case .upper: return dot(h * 0.3)
+    case .lower: return dot(h * 0.7)
+    case .centre: return dot(ym)
+    case .stop: return dot(bottom)
+    }
+  }
+
+  /// One glyph's lit segments (and the unlit bars, faint), at `origin` in a cell.
+  static func draw(
+    _ character: Character, in ctx: inout GraphicsContext, origin: CGPoint, width: CGFloat, height: CGFloat, unlit: Double
+  ) {
+    let t = max(width * 0.17, 0.9)
+    let lit = segments(character)
+    var on = Path(), off = Path()
+    for segment in Segment.allCases {
+      let shape = path(segment, width: width, height: height, thickness: t)
+        .applying(CGAffineTransform(translationX: origin.x, y: origin.y))
+      if lit.contains(segment) { on.addPath(shape) } else if bars.contains(segment) { off.addPath(shape) }
+    }
+    if unlit > 0 {
+      var faint = ctx
+      faint.opacity = unlit
+      faint.fill(off, with: .foreground)
+    }
+    ctx.fill(on, with: .foreground)
+  }
+}
+
+// MARK: Blocks
+
+/// A heavy display face: every glyph a solid square cut by hairline slits and notches (Figma:
+/// "Block face · specimen"). Units: a 10 × 10 cell, I and 1 narrower. Big only: below about
+/// 40 pt the slits close up.
+enum BlockFont {
+  enum Cut {
+    case rect(CGFloat, CGFloat, CGFloat, CGFloat)
+    case polygon([CGPoint])
+  }
+
+  static let slit: CGFloat = 0.5
+  static func across(_ y: CGFloat, _ x0: CGFloat, _ x1: CGFloat) -> Cut { .rect(x0, y - slit / 2, x1, y + slit / 2) }
+  static func down(_ x: CGFloat, _ y0: CGFloat, _ y1: CGFloat) -> Cut { .rect(x - slit / 2, y0, x + slit / 2, y1) }
+  static func poly(_ points: (CGFloat, CGFloat)...) -> Cut { .polygon(points.map { CGPoint(x: $0.0, y: $0.1) }) }
+
+  static let glyphs: [Character: [Cut]] = [
+    "A": [across(4, 3, 7), down(5, 6.5, 10), poly((0, 0), (2, 0), (0, 2))], "B": [across(3.3, 3, 7.5), across(6.7, 3, 7.5)],
+    "C": [across(5, 4, 10)], "D": [across(5, 3, 7)], "E": [across(3.3, 4, 10), across(6.7, 4, 10)],
+    "F": [across(3.3, 4, 10), .rect(4, 6.5, 10, 10)], "G": [across(3.5, 4, 10), across(6.5, 4.5, 7.5)],
+    "H": [down(5, 0, 3.6), down(5, 6.4, 10)], "I": [], "J": [across(6.5, 0, 6), .rect(0, 0, 3, 3.5)],
+    "K": [poly((10, 2.6), (5.6, 5), (10, 7.4)), down(5, 0, 2.5)], "L": [.rect(4, 0, 10, 6.5)],
+    "M": [down(3.3, 4, 10), down(6.7, 4, 10)], "N": [down(6, 0, 6), down(4, 4, 10)], "O": [down(5, 3, 7)],
+    "P": [across(3.3, 3, 7), .rect(4, 6.7, 10, 10)], "Q": [down(5, 3, 6.5), poly((10, 7), (7, 10), (10, 10))],
+    "R": [across(3.3, 3, 7), down(5, 6.7, 10), poly((10, 7.5), (8, 10), (10, 10))], "S": [across(3.3, 3, 10), across(6.7, 0, 7)],
+    "T": [.rect(0, 3.6, 3.6, 10), .rect(6.4, 3.6, 10, 10)], "U": [down(5, 0, 7)],
+    "V": [down(5, 0, 6), poly((0, 7), (3, 10), (0, 10)), poly((10, 7), (7, 10), (10, 10))], "W": [down(3.3, 0, 6), down(6.7, 0, 6)],
+    "X": [poly((3.6, 0), (5, 2.8), (6.4, 0)), poly((3.6, 10), (5, 7.2), (6.4, 10)), poly((0, 3.6), (2.8, 5), (0, 6.4)), poly((10, 3.6), (7.2, 5), (10, 6.4))],
+    "Y": [down(5, 0, 3.6), .rect(0, 6.4, 3.6, 10), .rect(6.4, 6.4, 10, 10)], "Z": [across(3.3, 0, 7), across(6.7, 3, 10)],
+    // The 1 carries a foot on the right, so it doesn't read as a J.
+    "0": [down(5, 3, 7), poly((3.5, 7), (4, 7), (6.5, 3), (6, 3))], "1": [.rect(0, 0, 2.5, 7.5), .rect(0, 7.5, 1.5, 10)],
+    "2": [across(3.3, 0, 7), across(6.7, 3, 10)], "3": [across(3.3, 0, 7), across(6.7, 0, 7)], "4": [down(5, 0, 4), .rect(0, 6.5, 6, 10)],
+    "5": [across(3.3, 3, 10), across(6.7, 0, 7)], "6": [across(3.3, 3, 10), across(6.7, 3, 7)], "7": [.rect(0, 3.6, 5, 10)],
+    "8": [across(3.3, 3, 7), across(6.7, 3, 7)], "9": [across(3.3, 3, 7), across(6.7, 0, 7)],
+  ]
+  static let letters = Array("ABCDEFGHJKLMNOPQRSTUVWXYZ")
+  static let digits = Array("0234567890")
+  static let gap: CGFloat = 0.35
+  static let space: CGFloat = 3
+
+  static func width(_ character: Character) -> CGFloat {
+    character == " " ? space : character == "I" ? 4 : character == "1" ? 6 : 10
+  }
+
+  /// The whole text's width in cell units.
+  static func width(_ text: [Character]) -> CGFloat {
+    text.isEmpty ? 10 : text.map(width).reduce(0, +) + gap * CGFloat(text.count - 1)
+  }
+
+  /// One glyph, `unit` points per cell unit, at `x`.
+  static func path(_ character: Character, x: CGFloat, unit: CGFloat) -> Path {
+    guard character != " " else { return Path() }
+    let w = width(character), scale = w / 10
+    var path = Path(CGRect(x: 0, y: 0, width: w, height: 10))
+    for cut in glyphs[character] ?? [] {
+      switch cut {
+      case .rect(let x0, let y0, let x1, let y1): path.addRect(CGRect(x: x0 * scale, y: y0, width: (x1 - x0) * scale, height: y1 - y0))
+      case .polygon(let points): path.addLines(points.map { CGPoint(x: $0.x * scale, y: $0.y) }); path.closeSubpath()
+      }
+    }
+    return path.applying(CGAffineTransform(scaleX: unit, y: unit).concatenating(CGAffineTransform(translationX: x, y: 0)))
+  }
+}
+
+/// Text in the block face, as wide as it's given (up to `maxHeight` tall). It arrives like the
+/// dot face: a departures board, cells 0.025 s apart left to right, each rolling through
+/// random blocks (a new one every 0.06 s) before it settles; a new text arrives the same way.
+struct BlockText: View {
+  let text: String
+  var maxHeight: CGFloat = 120
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var start: Date?
+  @State private var launched = false
+
+  var glyphs: [Character] { Array(DotFont.boardText(text).filter { $0 == " " || BlockFont.glyphs[$0] != nil }) }
+
+  var duration: Double {
+    let last = max(glyphs.count - 1, 0)
+    return Double(last) * DotText.decodeStagger + Double(steps(last)) * DotText.decodeStepTime + 0.05
+  }
+  func steps(_ index: Int) -> Int { 4 + Int(Double(index) * 0.4) }
+
+  var body: some View {
+    let glyphs = glyphs
+    let units = BlockFont.width(glyphs)
+    Group {
+      if let start {
+        TimelineView(.animation) { context in
+          Canvas { ctx, size in draw(&ctx, size: size, glyphs: glyphs, elapsed: context.date.timeIntervalSince(start)) }
+        }
+      } else {
+        Canvas { ctx, size in draw(&ctx, size: size, glyphs: glyphs, elapsed: launched || reduceMotion ? nil : -1) }
+      }
+    }
+    .aspectRatio(units / 10, contentMode: .fit)
+    .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .leading)
+    .afterLaunch {
+      guard !launched else { return }
+      launched = true
+      if !reduceMotion { start = .now }
+    }
+    .onChange(of: text) {
+      if !reduceMotion { start = .now }
+    }
+    .task(id: start) {
+      guard start != nil else { return }
+      try? await Task.sleep(for: .seconds(duration))
+      start = nil
+    }
+    .accessibilityElement()
+    .accessibilityLabel(text.lowercased())
+  }
+
+  /// `elapsed` nil: settled; negative: before the entrance, nothing shown.
+  func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?) {
+    let unit = size.height / 10
+    var x: CGFloat = 0
+    var path = Path()
+    for (index, character) in glyphs.enumerated() {
+      var shown: Character? = character
+      if let elapsed, character != " " {
+        let t = elapsed - Double(index) * DotText.decodeStagger
+        if t < 0 { shown = nil } else {
+          let round = Int(t / DotText.decodeStepTime)
+          if round < steps(index) {
+            let pool = character.isNumber ? BlockFont.digits : BlockFont.letters
+            let hash = (index &* 7919 &+ round &* 104_729 &+ 31) % 9973
+            let pick = pool[hash % pool.count]
+            shown = pick == character ? pool[(hash + 1) % pool.count] : pick
+          }
+        }
+      }
+      // A rolling cell keeps its own width, so the word doesn't shift as it settles.
+      if let shown {
+        let cell = BlockFont.width(character), drawn = BlockFont.width(shown)
+        var glyph = BlockFont.path(shown, x: 0, unit: unit)
+        if drawn != cell { glyph = glyph.applying(CGAffineTransform(scaleX: cell / drawn, y: 1)) }
+        path.addPath(glyph.applying(CGAffineTransform(translationX: x, y: 0)))
+      }
+      x += (BlockFont.width(character) + BlockFont.gap) * unit
+    }
+    ctx.fill(path, with: .foreground, style: FillStyle(eoFill: true))
+  }
+}
+
+/// The block top's message line: SF Mono, the age in grey, an ink arrow; the messages take
+/// turns every 7 s, each typing in left to right.
+struct MonoMessageRow: View {
+  let messages: [BoardMessage]
+  @State private var index = 0
+  @State private var lastSwitch = Date.now
+
+  var body: some View {
+    let message = messages[index % messages.count]
+    Button(action: message.action) {
+      HStack(alignment: .center, spacing: 10) {
+        (Text(message.text.uppercased()) + Text(message.grey.isEmpty ? "" : " · \(message.grey)").foregroundStyle(Swiss.muted))
+          .font(.system(.footnote, design: .monospaced))
+          .foregroundStyle(Swiss.ink)
+          .lineLimit(2, reservesSpace: true)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .id(message.id)
+          .transition(.opacity)
+        Image(systemName: "arrow.right")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(Swiss.onInk)
+          .padding(.horizontal, 7)
+          .frame(height: 20)
+          .background(Swiss.ink, in: Capsule())
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(message.spoken)
+    .task(id: messages.map(\.id)) {
+      guard messages.count > 1 else { return }
+      while !Task.isCancelled {
+        let wait = max(0.5, 7 - Date.now.timeIntervalSince(lastSwitch))
+        try? await Task.sleep(for: .seconds(wait))
+        guard !Task.isCancelled else { return }
+        withAnimation(.easeInOut(duration: 0.25)) { index += 1 }
+        lastSwitch = .now
+      }
+    }
+  }
+}
+
+/// Settings › Look: how Today's top is drawn.
+struct LookSettings: View {
+  @State private var raw = UserDefaults.standard.string(forKey: TopLook.key) ?? TopLook.dots.rawValue
+  var look: TopLook { TopLook(rawValue: raw) ?? .dots }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Eyebrow("Look")
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 3) {
+          Text("Today's top").font(.body.weight(.medium))
+          Text(look.detail)
+            .font(.footnote)
+            .tileSecondary()
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        HStack(spacing: 8) {
+          ForEach(TopLook.allCases) { option in
+            let isSelected = raw == option.rawValue
+            Button(option.label) {
+              withAnimation(.snappy(duration: 0.2)) { raw = option.rawValue }
+            }
+            .buttonStyle(SelectablePillStyle(isOn: isSelected, fillsWidth: true))
+            .id(isSelected)
+          }
+        }
+      }
+      .padding(14)
+      .tile(.plain, radius: 16)
+    }
+    .onChange(of: raw) { _, new in UserDefaults.standard.set(new, forKey: TopLook.key) }
+  }
+}
