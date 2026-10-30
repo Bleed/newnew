@@ -125,6 +125,7 @@ nonisolated enum YouTubeSuggestions {
 
   /// The published list, next to the feed's index; keeps the bundled one if it can't be read.
   func refreshCatalog() async {
+    await renameGenericFeeds()
     guard let base = FeedSyncPipeline.feedURL?.deletingLastPathComponent() else { return }
     guard let (data, _) = try? await URLSession.shared.data(from: base.appending(path: "outlets.json")),
       let list = try? JSONDecoder().decode(Catalog.self, from: data), !list.outlets.isEmpty,
@@ -168,6 +169,19 @@ nonisolated enum YouTubeSuggestions {
     saveCustom()
   }
 
+  /// Own feeds added under a section's title ("International homepage") get the site's name.
+  /// Their stored articles keep the old name until the next sync replaces them.
+  func renameGenericFeeds() async {
+    for feed in customFeeds where CustomFeedReader.isGeneric(feed.title) {
+      guard let url = URL(string: feed.url), let host = url.host() else { continue }
+      let site = URL(string: "https://\(host.replacingOccurrences(of: "feeds.", with: "www.").replacingOccurrences(of: "rss.", with: "www."))")!
+      let renamed = await CustomFeedReader.named(.init(feed: feed, articles: []), site: site)
+      guard renamed.feed.title != feed.title, let index = customFeeds.firstIndex(where: { $0.url == feed.url }) else { continue }
+      customFeeds[index].title = renamed.feed.title
+      saveCustom()
+    }
+  }
+
   func remove(_ feed: CustomFeed) {
     customFeeds.removeAll { $0.url == feed.url }
     saveCustom()
@@ -209,21 +223,93 @@ nonisolated enum CustomFeedReader {
     }
     if !text.contains("://") { text = "https://" + text }
     guard let url = URL(string: text), url.host() != nil else { throw Failure.badAddress }
-    if let found = try? await read(url) { return found }
+    let root = URL(string: "\(url.scheme ?? "https")://\(url.host() ?? "")")!
+    if let found = try? await read(url) { return await named(found, site: root) }
     // A web page: the feed it names, then the usual addresses.
     var candidates: [URL] = []
+    var pageName: String?
     if let (data, response) = try? await fetch(url), let html = String(data: data, encoding: .utf8) {
       // In the EU, YouTube puts its cookie-consent page in front of channel pages. newnew
       // doesn't answer it for the reader; it asks for the channel's ID instead.
       if response.url?.host()?.hasPrefix("consent.") == true { throw Failure.youTubeConsent }
       candidates += alternateLinks(html, base: response.url ?? url)
+      pageName = siteName(html)
     }
-    let root = URL(string: "\(url.scheme ?? "https")://\(url.host() ?? "")")!
     candidates += ["feed", "rss", "rss.xml", "feed.xml", "atom.xml", "index.xml"].map { root.appending(path: $0) }
     for candidate in candidates {
-      if let found = try? await read(candidate) { return found }
+      if let found = try? await read(candidate) { return await named(found, site: root, known: pageName) }
     }
     throw Failure.noFeed
+  }
+
+  /// A feed's own title is often a section, not the publication ("International homepage" for
+  /// the Financial Times, "RSS feed", "Top stories"): then the site's name is used instead, from
+  /// its page (og:site_name, application-name, or the title before " | ").
+  static func named(_ found: Found, site: URL, known: String? = nil) async -> Found {
+    guard !site.absoluteString.contains("youtube.com"), isGeneric(found.feed.title) else { return found }
+    var name = known
+    if name == nil, let (data, _) = try? await fetch(site), let html = String(data: data, encoding: .utf8) {
+      name = siteName(html)
+    }
+    // No name on the page (or a bot check in front of it): the domain, "ft.com" → "FT".
+    guard let name = name ?? domainName(site), !name.isEmpty else { return found }
+    var renamed = found
+    renamed.feed.title = name
+    renamed.articles = found.articles.map { var article = $0; article.outlet = name; return article }
+    return renamed
+  }
+
+  /// Titles that name a section or the feed itself rather than the publication.
+  static func isGeneric(_ title: String) -> Bool {
+    let lower = title.lowercased().trimmingCharacters(in: .whitespaces)
+    if lower.count < 3 { return true }
+    let words = ["homepage", "home page", "rss", "feed", "top stories", "latest", "headlines", "all articles", "all stories", "front page", "news feed"]
+    return words.contains { lower.contains($0) } || ["home", "news", "articles", "blog", "posts", "stories"].contains(lower)
+  }
+
+  /// "ft.com" → "FT", "kottke.org" → "Kottke", "www.theverge.com" → "Theverge".
+  static func domainName(_ site: URL) -> String? {
+    guard let host = site.host() else { return nil }
+    let parts = host.split(separator: ".").filter { !["www", "feeds", "rss", "m"].contains($0) }
+    guard parts.count >= 2 else { return nil }
+    let label = String(parts[parts.count - 2])
+    return label.count <= 3 ? label.uppercased() : label.prefix(1).uppercased() + label.dropFirst()
+  }
+
+  /// Pages a bot check or an error puts in front of a site: never a name.
+  static func isChallenge(_ text: String) -> Bool {
+    let lower = text.lowercased()
+    return ["security verification", "just a moment", "access denied", "attention required", "are you a robot",
+            "verify you are human", "captcha", "403", "404", "not found", "forbidden", "error"].contains { lower.contains($0) }
+  }
+
+  /// The publication's name from its page.
+  static func siteName(_ html: String) -> String? {
+    if let range = html.range(of: #"<title[^>]*>([^<]+)</title>"#, options: [.regularExpression, .caseInsensitive]),
+      isChallenge(String(html[range])) { return nil }
+    for key in ["og:site_name", "application-name", "apple-mobile-web-app-title"] {
+      let pattern = #"<meta[^>]+(?:property|name)=["']"# + NSRegularExpression.escapedPattern(for: key) + #"["'][^>]*content=["']([^"']+)["']"#
+      let reversed = #"<meta[^>]+content=["']([^"']+)["'][^>]*(?:property|name)=["']"# + NSRegularExpression.escapedPattern(for: key) + #"["']"#
+      for p in [pattern, reversed] {
+        if let range = html.range(of: p, options: [.regularExpression, .caseInsensitive]),
+          let inner = html[range].range(of: #"content=["']([^"']+)["']"#, options: .regularExpression) {
+          let value = html[inner].dropFirst(9).dropLast()
+          let name = plain(String(value))
+          if !name.isEmpty && !isGeneric(name) { return name }
+        }
+      }
+    }
+    if let range = html.range(of: #"<title[^>]*>([^<]+)</title>"#, options: [.regularExpression, .caseInsensitive]) {
+      let raw = plain(String(html[range]).replacingOccurrences(of: #"<[^>]+>"#, with: "", options: .regularExpression))
+      // "Home - Financial Times", "Latest news | The Verge": the part that names the site.
+      var parts = [raw]
+      for separator in [" | ", " - ", " – ", " — ", " · ", " :: "] {
+        parts = parts.flatMap { $0.components(separatedBy: separator) }
+      }
+      let names = parts.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty && !isGeneric($0) && $0.count <= 40 }
+      if let best = names.last { return best }
+    }
+    return nil
   }
 
   /// The articles of a feed added before.

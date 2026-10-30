@@ -26,6 +26,16 @@ import MediaPlayer
 
   func isPlaying(_ url: String) -> Bool { current == url && isPlaying }
 
+  /// Listen: the episode in Apple Podcasts when it's there and the app is installed; otherwise
+  /// here. Pausing (or resuming) an episode already playing here stays here.
+  func listen(_ article: ArticleItem) {
+    if current == article.audioURL { toggle(article); return }
+    Task {
+      guard let url = await PodcastLinks.appleURL(for: article) else { toggle(article); return }
+      LinkOpener.open(url) { AudioPlayer.shared.toggle(article) }
+    }
+  }
+
   /// Plays the episode, or pauses it if it's the one playing.
   func toggle(_ article: ArticleItem) {
     guard let urlString = article.audioURL, let url = URL(string: urlString) else { return }

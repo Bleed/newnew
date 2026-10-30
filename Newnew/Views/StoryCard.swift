@@ -224,7 +224,7 @@ private struct StoryMediaActions: ViewModifier {
           Button("Watch on \(video.outlet)") { openURL(url) }
         }
         if let episode {
-          Button(playing ? "Pause \(episode.outlet)" : "Listen to \(episode.outlet)") { player.toggle(episode) }
+          Button(playing ? "Pause \(episode.outlet)" : "Listen to \(episode.outlet)") { player.listen(episode) }
         }
       }
   }
@@ -263,7 +263,7 @@ struct ListenPill: View {
 
   var body: some View {
     let playing = player.isPlaying(episode.audioURL ?? "")
-    Button { player.toggle(episode) } label: {
+    Button { player.listen(episode) } label: {
       Label(playing ? "Pause\(minutes)" : "Listen\(minutes)", systemImage: playing ? "pause.fill" : "play.fill")
     }
     .buttonStyle(MediaPillStyle())

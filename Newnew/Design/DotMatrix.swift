@@ -600,7 +600,8 @@ struct DotChip: View {
   }
 
   var body: some View {
-    DotText(text, pitch: 1.6)
+    // The board's small size (its message rows), so chips and the board read as one face.
+    DotText(text, pitch: 1.4)
       // Full-strength dots: grey ones vanish on tiles and in dark mode.
       .foregroundStyle(Swiss.ink)
       .padding(.horizontal, 9)

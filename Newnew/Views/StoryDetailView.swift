@@ -891,8 +891,8 @@ struct MediaFold: View {
   var summary: String {
     let hasVideo = media.contains { $0.videoID != nil }
     let hasAudio = media.contains { $0.audioURL != nil }
-    return hasVideo && hasAudio ? "On YouTube and the podcasts' own sites"
-      : hasVideo ? "On YouTube" : "On the podcast's own site"
+    return hasVideo && hasAudio ? "On YouTube and in Podcasts"
+      : hasVideo ? "On YouTube" : "In Podcasts, or played here"
   }
 
   var body: some View {
@@ -924,7 +924,12 @@ struct MediaFold: View {
       if isOpen {
         ForEach(media) { article in
           ArticleRow(article: article) {
-            if let url = article.videoURL ?? URL(string: article.url) { openURL(url) }
+            if article.audioURL != nil {
+              // An episode: Apple Podcasts first, else it plays here.
+              AudioPlayer.shared.listen(article)
+            } else if let url = article.videoURL ?? URL(string: article.url) {
+              openURL(url)
+            }
           }
         }
         .transition(.opacity.combined(with: .move(edge: .top)))

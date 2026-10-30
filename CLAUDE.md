@@ -63,6 +63,15 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
 - Measured in the Simulator: 95+ default feeds answer in ~6 s. Podcasts are off by default
   (each chosen on its own); without them a full refresh is a few MB.
 - `FeedParser` (in Outlets.swift) is shared with own feeds (`CustomFeedReader`).
+- Own feeds: when a feed's title is generic ("International homepage", "RSS", "Top stories"),
+  the site's name is used (og:site_name, application-name, or the non-generic part of the page
+  title), never a bot-check page's; failing that the domain ("ft.com" → "FT"). Feeds added
+  before this are renamed once when the outlet list refreshes.
+- Podcasts: Listen (card, in brief, the story page's episodes) opens the episode in Apple
+  Podcasts when the app is there: `PodcastLinks` finds the show by name in the iTunes Search
+  API and the episode by its audio file's name (redirects stripped) or title, then opens
+  podcasts.apple.com/podcast/id…?i=… as a universal link; otherwise it plays in newnew.
+- Dot chips use pitch 1.4, the board's small size.
 - `lastSyncAt` (UserDefaults) drives `hasALotToLoad` (nothing stored, or > 3 h since).
 - Background refresh (`BackgroundRefresh`, Settings › Background refresh): Wi-Fi (default),
   Always, Off. The BGAppRefresh task (`Alerts.refreshTaskID`, every ≥ 30 min, iOS decides) and
