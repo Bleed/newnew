@@ -302,8 +302,12 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   width, no tile; around it one-size SF Mono rebus lines, `BlockRebusLine`: FRI [30] (OCT)
   clock 20:24 above, IN (26) STORIES stack [39] under it, then `BlockMessageRow`: the speaking
   head, the message's words (numbers in filled pills, cut to two lines), the age in a corner
-  bracket, the arrow pill; messages take turns every 7 s). Blocks arrive like the dot face:
-  cells 0.025 s apart roll through random blocks every 0.06 s and settle left to right.
+  bracket, the arrow pill; messages take turns every 7 s: the top story and the catchup only,
+  not the read-hidden or hidden-by-topics ones). Blocks arrive like the dot face: cells 0.025 s
+  apart roll through random blocks every 0.06 s and settle left to right. The rebus lines
+  arrive the same way, in reading order (day, block, count at 0.3 s, message at 0.6 s): each
+  character rolls through 4 random ones, pills and glyphs pop in (0.6 → 1 over 0.18 s), the
+  age's bracket draws itself, the arrow slides into its pill; a new message replays it at once.
 - The story page's headline is plain text; the "Headline from X ↗" pill under it is the link
   (a headline button caught swipes).
 - News headlines are Times New Roman (`Swiss.headline`), everywhere a headline appears; all

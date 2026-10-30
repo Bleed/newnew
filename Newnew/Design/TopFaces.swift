@@ -314,16 +314,81 @@ enum BlockToken: Hashable {
   }
 }
 
-/// One rebus line that wraps at tokens.
+/// One rebus line that wraps at tokens. It arrives like the dot face's departures board, read
+/// left to right: cells (characters; a glyph or a pill's ends count as cells too) start
+/// `DotText.decodeStagger` apart, each letter rolls through random ones (a new one every
+/// `DotText.decodeStepTime`) before it settles; pills and glyphs pop in (scale 0.6 → 1, fading
+/// up) on their turn. It plays when the launch board has gone, after `delay`, and again
+/// whenever `replay` changes.
 struct BlockRebusLine: View {
   let tokens: [BlockToken]
   let size: CGFloat
+  var delay: Double = 0
+  /// A new value replays the entrance (a new message).
+  var replay: AnyHashable = 0
+  @State private var start: Date?
+  @State private var launched = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
   /// Tight: wrapped lines sit close, like one block of type.
   static func lineGap(_ size: CGFloat) -> CGFloat { size * 0.12 }
+  static let rollSteps = 4
+
+  /// The first cell of each token, in reading order.
+  var cells: [Int] {
+    var out: [Int] = [], cell = 0
+    for token in tokens { out.append(cell); cell += token.cells + 1 }
+    return out
+  }
+  var duration: Double {
+    Double((cells.last ?? 0) + (tokens.last?.cells ?? 0)) * DotText.decodeStagger + Double(Self.rollSteps) * DotText.decodeStepTime + 0.2
+  }
 
   var body: some View {
-    FlowLayout(spacing: size * 0.38, lineSpacing: Self.lineGap(size)) {
-      ForEach(Array(tokens.enumerated()), id: \.offset) { _, token in BlockTokenView(token: token, size: size) }
+    Group {
+      if let start {
+        TimelineView(.animation) { context in line(elapsed: context.date.timeIntervalSince(start)) }
+      } else {
+        // Blank until the entrance first plays; settled after it.
+        line(elapsed: launched || reduceMotion ? nil : -1)
+      }
+    }
+    .afterLaunch {
+      guard !launched else { return }
+      launched = true
+      play(after: delay)
+    }
+    // A new message replays at once; `delay` only staggers the first arrival.
+    .onChange(of: replay) { play(after: 0) }
+    .task(id: start) {
+      guard let start else { return }
+      try? await Task.sleep(for: .seconds(start.timeIntervalSinceNow + duration))
+      self.start = nil
+    }
+  }
+
+  func play(after wait: Double) {
+    guard !reduceMotion else { return }
+    start = Date.now.addingTimeInterval(wait)
+  }
+
+  func line(elapsed: Double?) -> some View {
+    let cells = cells
+    return FlowLayout(spacing: size * 0.38, lineSpacing: Self.lineGap(size)) {
+      ForEach(Array(tokens.enumerated()), id: \.offset) { index, token in
+        BlockTokenView(token: token, size: size, elapsed: elapsed.map { $0 - Double(cells[index]) * DotText.decodeStagger })
+      }
+    }
+  }
+}
+
+extension BlockToken {
+  /// How many cells of the departures board it takes.
+  var cells: Int {
+    switch self {
+    case .word(let s): s.count
+    case .filled(let s), .outline(let s), .bracket(let s): s.count + 2
+    case .clock, .stack, .head, .go: 2
     }
   }
 }
@@ -331,35 +396,75 @@ struct BlockRebusLine: View {
 struct BlockTokenView: View {
   let token: BlockToken
   let size: CGFloat
+  /// Seconds since this token's first cell started (negative: not yet; nil: settled).
+  var elapsed: Double?
   /// Just room for a pill around the caps.
   static func height(_ size: CGFloat) -> CGFloat { size * 1.2 }
   var height: CGFloat { Self.height(size) }
   var mono: Font { .system(size: size, weight: .regular, design: .monospaced) }
 
+  /// The text as it shows: letters not yet started are blank (the width stays), started ones
+  /// roll through random letters or digits, then settle.
+  func rolled(_ text: String, from cell: Int = 0) -> String {
+    guard let elapsed else { return text }
+    let pool = Array("ABCDEFGHJKLMNOPRSTUVWXYZ"), digits = Array("0123456789")
+    return String(text.enumerated().map { index, ch in
+      guard ch != " ", ch != "." else { return elapsed < Double(cell + index) * DotText.decodeStagger ? " " : ch }
+      let t = elapsed - Double(cell + index) * DotText.decodeStagger
+      if t < 0 { return " " }
+      let round = Int(t / DotText.decodeStepTime)
+      guard round < BlockRebusLine.rollSteps else { return ch }
+      let set = ch.isNumber ? digits : pool
+      let hash = (index &* 7919 &+ round &* 104_729 &+ 31) % 9973
+      let pick = set[hash % set.count]
+      return pick == ch ? set[(hash + 1) % set.count] : pick
+    })
+  }
+
+  /// A pill or glyph pops in over 0.18 s at its turn.
+  var pop: Double {
+    guard let elapsed else { return 1 }
+    return min(max(elapsed / 0.18, 0), 1)
+  }
+
   var body: some View {
+    let pop = pop
+    let eased = 1 - pow(1 - pop, 3)
     switch token {
-    case .word(let s): Text(s).font(mono).foregroundStyle(Swiss.ink).frame(height: height)
+    case .word(let s): Text(rolled(s)).font(mono).foregroundStyle(Swiss.ink).frame(height: height)
     case .filled(let s):
-      Text(s).font(mono).foregroundStyle(Swiss.onInk)
+      Text(rolled(s, from: 1)).font(mono).foregroundStyle(Swiss.onInk)
         .padding(.horizontal, size * 0.42).frame(height: height)
-        .background(Swiss.ink, in: Capsule())
+        .background(Swiss.ink.opacity(eased), in: Capsule())
+        .scaleEffect(0.6 + 0.4 * eased)
     case .outline(let s):
-      Text(s).font(mono).foregroundStyle(Swiss.ink)
+      Text(rolled(s, from: 1)).font(mono).foregroundStyle(Swiss.ink)
         .padding(.horizontal, size * 0.42).frame(height: height)
-        .overlay(Capsule().strokeBorder(Swiss.ink, lineWidth: max(1.3, size / 13)))
+        .overlay(Capsule().strokeBorder(Swiss.ink, lineWidth: max(1.3, size / 13)).opacity(eased))
+        .scaleEffect(0.6 + 0.4 * eased)
     case .bracket(let s):
-      Text(s).font(mono).foregroundStyle(Swiss.ink)
+      Text(rolled(s, from: 1)).font(mono).foregroundStyle(Swiss.ink)
         .padding(.leading, size * 0.38).padding(.trailing, size * 0.3).padding(.bottom, size * 0.18)
         .frame(height: height)
-        .overlay(alignment: .bottomLeading) { CornerBracket().stroke(Swiss.ink, lineWidth: max(1.3, size / 13)) }
-    case .clock: Image(systemName: "clock").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink).frame(height: height)
-    case .stack: Image(systemName: "square.3.layers.3d.down.right").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink).frame(height: height)
-    case .head: SpeakingHead().fill(Swiss.ink).frame(width: size * 1.35, height: size * 1.08).frame(height: height)
+        .overlay(alignment: .bottomLeading) {
+          // The bracket draws itself, down then along.
+          CornerBracket().trim(from: 0, to: eased).stroke(Swiss.ink, lineWidth: max(1.3, size / 13))
+        }
+    case .clock: glyph(Image(systemName: "clock").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink), eased)
+    case .stack: glyph(Image(systemName: "square.3.layers.3d.down.right").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink), eased)
+    case .head: glyph(SpeakingHead().fill(Swiss.ink).frame(width: size * 1.35, height: size * 1.08), eased)
     case .go:
-      Image(systemName: "arrow.right").font(.system(size: size * 0.8, weight: .medium)).foregroundStyle(Swiss.onInk)
-        .padding(.horizontal, size * 0.55).frame(height: height)
-        .background(Swiss.ink, in: Capsule())
+      glyph(
+        Image(systemName: "arrow.right").font(.system(size: size * 0.8, weight: .medium)).foregroundStyle(Swiss.onInk)
+          .offset(x: (1 - eased) * -size * 0.3)
+          .padding(.horizontal, size * 0.55).frame(height: height)
+          .background(Swiss.ink, in: Capsule()),
+        eased)
     }
+  }
+
+  func glyph(_ view: some View, _ eased: Double) -> some View {
+    view.frame(height: height).scaleEffect(0.6 + 0.4 * eased).opacity(eased)
   }
 }
 
@@ -412,6 +517,8 @@ nonisolated struct SpeakingHead: Shape {
 struct BlockMessageRow: View {
   let messages: [BoardMessage]
   let size: CGFloat
+  /// Seconds before the first message arrives.
+  var delay: Double = 0
   @State private var index = 0
   @State private var lastSwitch = Date.now
   @State private var width: CGFloat = 360
@@ -419,10 +526,10 @@ struct BlockMessageRow: View {
   var body: some View {
     let message = messages[index % messages.count]
     Button(action: message.action) {
-      BlockRebusLine(tokens: Self.tokens(message, columns: Int(width / (size * 0.6))), size: size)
+      // The same line stays and replays its entrance for each new message: it arrives as a
+      // departures board, after the lines above it the first time.
+      BlockRebusLine(tokens: Self.tokens(message, columns: Int(width / (size * 0.6))), size: size, delay: delay, replay: message.id)
         .frame(maxWidth: .infinity, minHeight: BlockTokenView.height(size) * 2 + BlockRebusLine.lineGap(size), alignment: .topLeading)
-        .id(message.id)
-        .transition(.opacity)
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
@@ -434,7 +541,7 @@ struct BlockMessageRow: View {
         let wait = max(0.5, 7 - Date.now.timeIntervalSince(lastSwitch))
         try? await Task.sleep(for: .seconds(wait))
         guard !Task.isCancelled else { return }
-        withAnimation(.easeInOut(duration: 0.25)) { index += 1 }
+        index += 1
         lastSwitch = .now
       }
     }

@@ -888,6 +888,9 @@ struct NewsTop: View {
     return [.word(weekday), .filled(date.formatted(.dateTime.day())), .outline(month), .clock, .word(time)]
   }
 
+  /// The block top's messages: the top story and the catchup; what's hidden stays off it.
+  var blockMessages: [BoardMessage] { boardMessages.filter { !$0.id.hasPrefix("read-") && !$0.id.hasPrefix("hidden-") } }
+
   var countTokens: [BlockToken] {
     if articles.isEmpty { return detailText.split(separator: " ").map { .word(String($0)) } }
     let stories = fresh.isEmpty ? visible.count : Set(fresh.compactMap { $0.cluster?.id }).count
@@ -898,14 +901,15 @@ struct NewsTop: View {
     TimelineView(.everyMinute) { context in
       VStack(alignment: .leading, spacing: 8) {
         VStack(alignment: .leading, spacing: 10) {
+          // In reading order: the day, the block, what it counts, then the message.
           BlockRebusLine(tokens: dateTokens(context.date), size: rebusSize)
           BlockText(text: blockFigure)
             .foregroundStyle(Swiss.ink)
-          BlockRebusLine(tokens: countTokens, size: rebusSize)
+          BlockRebusLine(tokens: countTokens, size: rebusSize, delay: 0.3)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(blockFigure.lowercased()). \(countTokens.map(\.spoken).filter { !$0.isEmpty }.joined(separator: " ")) stories, \(figure.lowercased())")
-        if !boardMessages.isEmpty { BlockMessageRow(messages: boardMessages, size: rebusSize) }
+        if !blockMessages.isEmpty { BlockMessageRow(messages: blockMessages, size: rebusSize, delay: 0.6) }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .padding(.vertical, 4)
