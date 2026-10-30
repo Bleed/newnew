@@ -1,16 +1,17 @@
 import SwiftUI
 
 // Today's top in other faces, chosen in Settings › Look (Figma: Explorations · LCD, P and V).
-// The dot board stays the default.
+// Blocks is the default.
 
 /// How Today's top is drawn.
 enum TopLook: String, CaseIterable, Identifiable {
+  /// What's new in a heavy block face across the full width, a one-size mono rebus around it
+  /// (Figma V and AE). The default.
+  case blocks
   /// The dot board on its tile (Figma: Explorations · header, C).
   case dots
   /// The same board in a 14-segment LCD face, unlit segments showing (Figma P).
   case lcd
-  /// What's new in a heavy block face across the full width, the rest in SF Mono (Figma V).
-  case blocks
 
   static let key = "topLook"
   var id: String { rawValue }
@@ -303,13 +304,13 @@ enum BlockToken: Hashable {
   case filled(String)
   case outline(String)
   case bracket(String)
-  case clock, stack, head, go
+  case clock, stack, head, go, listen, watch
 
   var spoken: String {
     switch self {
     case .word(let s), .filled(let s), .outline(let s): s.lowercased()
-    case .bracket(let s): s.lowercased().replacing(/^1h$/, with: "1 hour").replacing(/h$/, with: " hours").replacing(/m$/, with: " minutes")
-    case .clock, .stack, .head, .go: ""
+    case .bracket(let s): s.lowercased().replacing(/^1h/, with: "1 hour").replacing(/(\d)h/, with: { "\($0.1) hours" }).replacing(/(\d)m/, with: { "\($0.1) minutes" })
+    case .clock, .stack, .head, .go, .listen, .watch: ""
     }
   }
 }
@@ -388,7 +389,7 @@ extension BlockToken {
     switch self {
     case .word(let s): s.count
     case .filled(let s), .outline(let s), .bracket(let s): s.count + 2
-    case .clock, .stack, .head, .go: 2
+    case .clock, .stack, .head, .go, .listen, .watch: 2
     }
   }
 }
@@ -452,6 +453,8 @@ struct BlockTokenView: View {
         }
     case .clock: glyph(Image(systemName: "clock").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink), eased)
     case .stack: glyph(Image(systemName: "square.3.layers.3d.down.right").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink), eased)
+    case .listen: glyph(Image(systemName: "headphones").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink), eased)
+    case .watch: glyph(Image(systemName: "play.rectangle").font(.system(size: size * 0.95)).foregroundStyle(Swiss.ink), eased)
     case .head: glyph(SpeakingHead().fill(Swiss.ink).frame(width: size * 1.35, height: size * 1.08), eased)
     case .go:
       glyph(
@@ -552,6 +555,10 @@ struct BlockMessageRow: View {
   static func tokens(_ message: BoardMessage, columns: Int) -> [BlockToken] {
     var text = message.text.uppercased()
     if text.hasPrefix("TOP · ") { text = String(text.dropFirst(6)) }
+    // A new episode or video: its sign, the show, the length or age; the freshness line: the
+    // clock and the age, nothing to tap.
+    let lead: BlockToken = message.id.hasPrefix("listen-") ? .listen : message.id.hasPrefix("watch-") ? .watch : message.id == "fresh" ? .clock : .head
+    let tappable = message.id != "fresh"
     let age = message.grey.isEmpty ? 0 : message.grey.count + 3
     // Two lines, less the head, the age and the arrow, with room for pills' padding and wraps.
     let budget = max(columns * 2 - 4 - age - 4 - 6, 8)
@@ -565,18 +572,18 @@ struct BlockMessageRow: View {
       words.append(word)
       used += word.count + 1
     }
-    var out: [BlockToken] = [.head]
+    var out: [BlockToken] = [lead]
     out += words.map { $0.allSatisfy(\.isNumber) ? .filled($0) : .word($0) }
     if !message.grey.isEmpty { out.append(.bracket(message.grey)) }
-    out.append(.go)
+    if tappable { out.append(.go) }
     return out
   }
 }
 
 /// Settings › Look: how Today's top is drawn.
 struct LookSettings: View {
-  @State private var raw = UserDefaults.standard.string(forKey: TopLook.key) ?? TopLook.dots.rawValue
-  var look: TopLook { TopLook(rawValue: raw) ?? .dots }
+  @State private var raw = UserDefaults.standard.string(forKey: TopLook.key) ?? TopLook.blocks.rawValue
+  var look: TopLook { TopLook(rawValue: raw) ?? .blocks }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {

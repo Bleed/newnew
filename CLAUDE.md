@@ -295,19 +295,23 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   per view, so views inserted later skip it; keep the views and change their text instead.
   `DotFont.boardText` makes headlines drawable (accents, curly quotes, dashes). The one-sentence top (`OneSentenceTop`) is still used by the read
   summary at the end of a swipe run.
-- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Dots (the
-  board above, default), LCD (Figma: Explorations · LCD, P: the same board, its cells drawn as
+- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Blocks
+  (the default, below), Dots (the board above), LCD (Figma: Explorations · LCD, P: the same board, its cells drawn as
   14-segment glyphs by `LCDFont` through `\.boardFace`, unlit segments faint, same timing) or
   Blocks (Figma V, with the rebus of AE: what's new, "32 NEW", in `BlockText` across the full
   width, no tile; around it one-size SF Mono rebus lines, `BlockRebusLine`: FRI [30] (OCT)
   clock 20:24 above, IN (26) STORIES stack [39] under it, then `BlockMessageRow`: the speaking
   head, the message's words (numbers in filled pills, cut to two lines), the age in a corner
-  bracket, the arrow pill; messages take turns every 7 s: the top story and the catchup only,
-  not the read-hidden or hidden-by-topics ones). Blocks arrive like the dot face: cells 0.025 s
+  bracket, the arrow pill; messages take turns every 7 s: the top story; the newest episode or
+  video of the last day (headphones or play sign, the show, its length or age; a tap plays or
+  opens it); and UPDATED [7M AGO] with the clock, no arrow. No catchup, nothing about what's
+  hidden). Blocks arrive like the dot face: cells 0.025 s
   apart roll through random blocks every 0.06 s and settle left to right. The rebus lines
   arrive the same way, in reading order (day, block, count at 0.3 s, message at 0.6 s): each
   character rolls through 4 random ones, pills and glyphs pop in (0.6 → 1 over 0.18 s), the
   age's bracket draws itself, the arrow slides into its pill; a new message replays it at once.
+- Feed titles and summaries go through `CustomFeedReader.plain`, which also decodes numbered
+  entities some feeds encode twice ("Google&#8217;s"); stored titles are rewritten on the next sync.
 - The story page's headline is plain text; the "Headline from X ↗" pill under it is the link
   (a headline button caught swipes).
 - News headlines are Times New Roman (`Swiss.headline`), everywhere a headline appears; all

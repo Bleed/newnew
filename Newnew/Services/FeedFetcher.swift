@@ -133,7 +133,8 @@ nonisolated enum FeedFetcher {
   }
 
   static func article(_ item: FeedParser.Item, feed: FeedSource, outlet: String, light: Bool) -> FeedArticleDTO? {
-    let title = item.title
+    // Titles too can carry entities a feed encoded twice ("Google&#8217;s").
+    let title = CustomFeedReader.plain(item.title)
     // Podcast episodes often have no page (Megaphone): their audio is the link.
     let page = item.link.isEmpty && feed.kind == "podcast" ? item.audio ?? "" : item.link
     guard !title.isEmpty, let link = canonicalURL(page), let date = item.date else { return nil }

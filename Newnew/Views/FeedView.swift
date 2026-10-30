@@ -256,6 +256,7 @@ struct FeedView: View {
               top: wide.first,
               catchupCount: min(wide.count, 8),
               hiddenCount: hiddenCount,
+              lastSync: pipeline.lastSync,
               readHiddenCount: readHiddenCount
             ) {
               path.append($0)
@@ -801,13 +802,15 @@ struct NewsTop: View {
   let top: StoryCluster?
   var catchupCount: Int = 0
   let hiddenCount: Int
+  /// When the feeds were last read, for the block top's "updated" line.
+  var lastSync: Date?
   var readHiddenCount: Int = 0
   var open: (StoryCluster) -> Void
   var openCatchup: () -> Void = {}
   var showMutes: () -> Void
   var showRead: () -> Void = {}
-  @AppStorage(TopLook.key) private var lookRaw = TopLook.dots.rawValue
-  var look: TopLook { TopLook(rawValue: lookRaw) ?? .dots }
+  @AppStorage(TopLook.key) private var lookRaw = TopLook.blocks.rawValue
+  var look: TopLook { TopLook(rawValue: lookRaw) ?? .blocks }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
   /// New to you: reached this iPhone since you last looked, and published no more than two
@@ -888,8 +891,35 @@ struct NewsTop: View {
     return [.word(weekday), .filled(date.formatted(.dateTime.day())), .outline(month), .clock, .word(time)]
   }
 
-  /// The block top's messages: the top story and the catchup; what's hidden stays off it.
-  var blockMessages: [BoardMessage] { boardMessages.filter { !$0.id.hasPrefix("read-") && !$0.id.hasPrefix("hidden-") } }
+  @Environment(\.openURL) private var openURL
+
+  /// The block top's messages: the top story, the newest episode or video of the last day, and
+  /// when the feeds were last read. No catchup, nothing about what's hidden.
+  var blockMessages: [BoardMessage] {
+    var out = boardMessages.filter { $0.id.hasPrefix("top-") }
+    let dayAgo = Date.now.addingTimeInterval(-24 * 3600)
+    if let media = articles.filter({ ($0.audioURL != nil || $0.videoID != nil) && $0.publishedAt > dayAgo }).max(by: { $0.publishedAt < $1.publishedAt }) {
+      if media.audioURL != nil {
+        let minutes = media.audioSeconds.map { "\(max(1, Int((Double($0) / 60).rounded())))M" } ?? ""
+        out.append(BoardMessage(
+          id: "listen-\(media.url)", text: "NEW EPISODE · \(media.outlet)", grey: minutes,
+          spoken: "New episode from \(media.outlet). Listen", action: { AudioPlayer.shared.listen(media) }))
+      } else if let url = media.videoURL {
+        out.append(BoardMessage(
+          id: "watch-\(media.url)", text: "NEW VIDEO · \(media.outlet)", grey: Self.shortAge(media.publishedAt),
+          spoken: "New video from \(media.outlet). Watch", action: { openURL(url) }))
+      }
+    }
+    if let lastSync {
+      out.append(BoardMessage(id: "fresh", text: "UPDATED", grey: "\(Self.shortAge(lastSync)) AGO", spoken: "Updated \(lastSync.formatted(.relative(presentation: .named)))", action: {}))
+    }
+    return out
+  }
+
+  /// "4M", "1H".
+  static func shortAge(_ date: Date) -> String {
+    age(date).replacingOccurrences(of: " MIN", with: "M").replacingOccurrences(of: " ", with: "")
+  }
 
   var countTokens: [BlockToken] {
     if articles.isEmpty { return detailText.split(separator: " ").map { .word(String($0)) } }

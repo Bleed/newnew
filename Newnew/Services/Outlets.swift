@@ -420,7 +420,7 @@ nonisolated enum CustomFeedReader {
       // A YouTube channel's videos are videos: Watch opens YouTube, the card shows a play mark.
       let image = item.videoID.map { "https://i.ytimg.com/vi/\($0)/hqdefault.jpg" } ?? item.image ?? item.inlineImage
       return FeedArticleDTO(
-        title: item.title, snippet: FeedFetcher.truncate(plain(item.summary), FeedFetcher.snippetLength), outlet: title, url: item.link,
+        title: plain(item.title), snippet: FeedFetcher.truncate(plain(item.summary), FeedFetcher.snippetLength), outlet: title, url: item.link,
         imageURL: image, publishedAt: min(date, .now), category: nil, country: nil, videoID: item.videoID,
         audioURL: nil, audioSeconds: nil, isChart: nil, galleryURLs: nil)
     }
@@ -442,6 +442,11 @@ nonisolated enum CustomFeedReader {
     var text = html.replacingOccurrences(of: #"<[^>]+>"#, with: " ", options: .regularExpression)
     for (entity, char) in ["&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'", "&apos;": "'", "&nbsp;": " "] {
       text = text.replacingOccurrences(of: entity, with: char)
+    }
+    // Numbered entities, in feeds that encode them twice ("Google&#8217;s", "&#x2019;").
+    text = text.replacing(/&#(x?)([0-9A-Fa-f]+);/) { match in
+      let value = UInt32(match.output.2, radix: match.output.1.isEmpty ? 10 : 16)
+      return value.flatMap(Unicode.Scalar.init).map { String(Character($0)) } ?? String(match.output.0)
     }
     return text.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: .whitespaces)
   }
