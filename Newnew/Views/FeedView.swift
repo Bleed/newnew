@@ -886,7 +886,8 @@ struct NewsTop: View {
   /// The block look's headline: what's new, else how things stand.
   var blockFigure: String {
     if articles.isEmpty { return readHiddenCount > 0 ? "ALL READ" : "READING" }
-    return fresh.isEmpty ? "QUIET" : "\(fresh.count) NEW"
+    // Always a number while there's news: "0 NEW" when nothing arrived since you last looked.
+    return "\(fresh.count) NEW"
   }
 
   /// Settings › Look › Blocks (Figma: Explorations · LCD, AE): what's new in the block face across
