@@ -208,6 +208,9 @@ struct TopicRow: View {
             .lineLimit(1)
         }
       }
+      // One item: "Climate, 5 stories today, storm surge, coastal erosion"; Remove stays apart.
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(([topic.phrase, summary] + topic.keywords).joined(separator: ", "))
       Spacer(minLength: 0)
       Button("Remove \(topic.phrase)", systemImage: "xmark", action: remove)
         .buttonStyle(.roundIcon)

@@ -35,9 +35,20 @@ struct StoryCard: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .tile(.plain)
       .contentShape(RoundedRectangle(cornerRadius: Swiss.tileRadius, style: .continuous))
-      // Contain, not combine: the Listen and Watch pills stay buttons for VoiceOver.
-      .accessibilityElement(children: .contain)
+      // One element for VoiceOver: the headline first, then what the card shows around it.
+      // Watch and Listen stay reachable as actions.
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(StoryAccessibility.label(cluster, lead: lead, signal: signalText))
+      .storyMediaActions(cluster)
     }
+  }
+
+  /// The signal pill's words, for VoiceOver.
+  var signalText: String? {
+    if case .updated(let count, _) = ReadLedger.status(for: cluster) { return "\(count) new" }
+    if cluster.newSinceRead > 0 { return "\(cluster.newSinceRead) new" }
+    if case .unread = ReadLedger.status(for: cluster), isDeveloping { return "developing" }
+    return nil
   }
 
   /// Single social-preview image (`og:image` / RSS enclosure) linking to the lead article.
@@ -141,8 +152,52 @@ struct BriefRow: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .tile(.plain, radius: 16)
       .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-      .accessibilityElement(children: .contain)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(StoryAccessibility.label(cluster, lead: lead, signal: nil, outlet: lead.outlet))
+      .storyMediaActions(cluster)
     }
+  }
+}
+
+/// What VoiceOver reads for a story in a list: "Ukraine says at least 13 killed…. World, 42
+/// minutes ago, 10 sources, developing, read."
+enum StoryAccessibility {
+  static func label(_ cluster: StoryCluster, lead: ArticleItem, signal: String?, outlet: String? = nil) -> String {
+    var parts: [String] = []
+    if let topic = cluster.followedBy { parts.append(topic) } else if let outlet { parts.append(outlet) } else if let category = lead.category { parts.append(category) }
+    parts.append(cluster.updatedAt.formatted(.relative(presentation: .named)))
+    if outlet == nil {
+      let count = cluster.outlets.count
+      parts.append("\(count) \(count == 1 ? "source" : "sources")")
+    }
+    if let signal { parts.append(signal) }
+    if case .settledRead = ReadLedger.status(for: cluster) { parts.append("read") }
+    return "\(lead.title). " + parts.joined(separator: ", ")
+  }
+}
+
+extension View {
+  /// Watch (opens YouTube) and Listen / Pause (plays here) as VoiceOver actions on a story.
+  func storyMediaActions(_ cluster: StoryCluster) -> some View { modifier(StoryMediaActions(cluster: cluster)) }
+}
+
+private struct StoryMediaActions: ViewModifier {
+  let cluster: StoryCluster
+  var player = AudioPlayer.shared
+  @Environment(\.openURL) var openURL
+
+  func body(content: Content) -> some View {
+    let episode = cluster.episode
+    let playing = episode.map { player.isPlaying($0.audioURL ?? "") } ?? false
+    content
+      .accessibilityActions {
+        if let video = cluster.video, let url = video.videoURL {
+          Button("Watch on \(video.outlet)") { openURL(url) }
+        }
+        if let episode {
+          Button(playing ? "Pause \(episode.outlet)" : "Listen to \(episode.outlet)") { player.toggle(episode) }
+        }
+      }
   }
 }
 

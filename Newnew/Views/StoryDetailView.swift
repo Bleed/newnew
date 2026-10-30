@@ -508,12 +508,25 @@ struct CoverageSpectrumCard: View {
 
   var body: some View {
     if spectrum.totalOutlets > 1 {
-      if compact {
-        compactBar
-      } else {
-        fullCard
+      Group {
+        if compact {
+          compactBar
+        } else {
+          fullCard
+        }
       }
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(spokenSummary)
     }
+  }
+
+  /// "Coverage spectrum: wire 6, markets 2, tech 2. Many desks. Cross-desk story spanning…"
+  private var spokenSummary: String {
+    let counts = spectrum.segments.map { "\($0.lens.shortLabel.lowercased()) \($0.outlets.count)" }.joined(separator: ", ")
+    var text = "Coverage spectrum: \(counts)."
+    if let badge = spectrum.blindspotBadge { text += " \(badge.capitalized)." }
+    if !spectrum.insightLine.isEmpty { text += " \(spectrum.insightLine)" }
+    return text
   }
 
   private var compactBar: some View {

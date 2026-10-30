@@ -49,7 +49,12 @@ struct RebusLine: View {
 extension RebusToken {
   var spoken: String {
     switch self {
-    case .word(let s), .grey(let s), .number(let s), .pill(let s), .nudge(let s), .minutes(let s): s.lowercased()
+    case .word(let s), .grey(let s), .number(let s), .pill(let s), .nudge(let s): s.lowercased()
+    // "42 MIN" → "42 minutes", "1 H" → "1 hour".
+    case .minutes(let s):
+      s.lowercased()
+        .replacing(/^1 min$/, with: "1 minute").replacing(/\ min$/, with: " minutes")
+        .replacing(/^1 h$/, with: "1 hour").replacing(/\ h$/, with: " hours")
     case .arrow, .talk, .clock, .check: ""
     }
   }

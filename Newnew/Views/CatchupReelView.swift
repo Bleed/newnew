@@ -126,7 +126,19 @@ struct CatchupReelView: View {
     }
     .preferredColorScheme(.dark)
     .statusBarHidden(true)
+    // VoiceOver: the tap zones and hold-to-pause as actions; slides don't move on by
+    // themselves while it reads, and each new slide is announced.
+    .accessibilityActions {
+      Button("Next story") { nextSlide() }
+      Button("Previous story") { previousSlide() }
+      Button(isPaused ? "Resume" : "Pause") { isPaused.toggle(); lastTick = .now }
+    }
+    .onChange(of: currentIndex) { _, index in
+      guard stories.indices.contains(index), let lead = stories[index].lead else { return }
+      AccessibilityNotification.Announcement("Story \(index + 1) of \(stories.count). \(lead.title)").post()
+    }
     .onAppear {
+      if UIAccessibility.isVoiceOverRunning { isPaused = true }
       lastTick = .now
       // Ensure all stories in the deck are preloading immediately
       CatchupImagePreloader.shared.preload(clusters: stories)
