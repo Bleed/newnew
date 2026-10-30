@@ -63,6 +63,15 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
 - Measured in the Simulator: 95+ default feeds answer in ~6 s. Podcasts are off by default
   (each chosen on its own); without them a full refresh is a few MB.
 - `FeedParser` (in Outlets.swift) is shared with own feeds (`CustomFeedReader`).
+- Own feeds can be Bluesky and Mastodon accounts (`CustomFeedReader.socialFeed`): a profile
+  link, "@name@instance", "instance/@name", "@name.bsky.social" or a custom-domain handle
+  ("@nytimes.com", tried on Bluesky first, then as a YouTube handle) becomes the account's
+  public RSS feed (bsky.app/profile/<handle>/rss, <instance>/@<name>.rss). Posts have no
+  title: the first sentence stands in (`postTitle`: links dropped, "U.S."/"Dr." not taken as
+  ends, cut near 110 characters). They keep the account's name ("@nytimes.com - The New York
+  Times" → "The New York Times") and are never renamed after their site (`isSocial`).
+  TikTok, Instagram and Threads have no public feeds; a reader can paste an RSS bridge's
+  address like any feed.
 - Own feeds are named after the site their articles link to (`CustomFeedReader.named`): the
   feed's title, or its part, when it names that site ("World | The Guardian" → "The Guardian",
   "NYT > Top Stories" → "NYT", initials count: "Financial Times" for ft.com); else the site's

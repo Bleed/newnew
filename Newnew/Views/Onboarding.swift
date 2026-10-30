@@ -288,12 +288,12 @@ struct AddFeedPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 14) {
-      Text("Paste a site, its feed address, or a YouTube channel (its link or ID). newnew finds the feed, shows you what it would read, and checks it when it refreshes.")
+      Text(verbatim: "Paste a site, its feed address, a YouTube channel (its link or ID), or a Bluesky or Mastodon account (@name.bsky.social, @name@mastodon.social, or its link). newnew finds the feed, shows you what it would read, and checks it when it refreshes.")
         .font(.subheadline)
         .foregroundStyle(Swiss.muted)
         .fixedSize(horizontal: false, vertical: true)
       HStack(spacing: 8) {
-        TextField("Site, feed or YouTube channel", text: $address)
+        TextField("Site, feed, YouTube, Bluesky or Mastodon", text: $address)
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .keyboardType(.URL)

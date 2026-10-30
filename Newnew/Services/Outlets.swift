@@ -175,7 +175,7 @@ nonisolated enum YouTubeSuggestions {
   /// homepage") get the site's name, by the same rule as when they are added. Their stored
   /// articles keep the old name until the next sync replaces them.
   func renameGenericFeeds() async {
-    for feed in customFeeds where !feed.url.contains("youtube.com") && feed.named != true && !namesChecked.contains(feed.url) {
+    for feed in customFeeds where !feed.url.contains("youtube.com") && !CustomFeedReader.isSocial(feed.url) && feed.named != true && !namesChecked.contains(feed.url) {
       namesChecked.insert(feed.url)
       guard let url = URL(string: feed.url), let host = url.host() else { continue }
       if let label = CustomFeedReader.siteLabel(url), CustomFeedReader.names(feed.title, label) { continue }
@@ -235,6 +235,12 @@ nonisolated enum CustomFeedReader {
   /// A site, feed or YouTube channel address (or just "@name") → the feed and its articles.
   static func find(_ input: String) async throws -> Found {
     var text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+    // Bluesky and Mastodon accounts: each has a public RSS feed of its posts.
+    if let social = socialFeed(text) {
+      if let found = try? await read(social) { return socialNamed(found) }
+      // "@name.tld" can be a YouTube handle too: tried below when Bluesky has no such account.
+      if !(text.hasPrefix("@") && !text.dropFirst().contains("@") && !text.contains("/")) { throw Failure.noFeed }
+    }
     // A YouTube handle on its own: the channel page names its feed.
     if text.hasPrefix("@"), !text.contains("/") { text = "https://www.youtube.com/" + text }
     // A bare channel ID ("UC…", 24 characters) or a /channel/UC… link: YouTube's feed by ID.
@@ -260,6 +266,59 @@ nonisolated enum CustomFeedReader {
       if let found = try? await read(candidate) { return await named(found, site: root, known: pageName) }
     }
     throw Failure.noFeed
+  }
+
+  /// A Bluesky or Mastodon account's RSS feed, from what the reader typed: a profile link
+  /// ("bsky.app/profile/nytimes.com", "mastodon.social/@Mastodon"), a full Mastodon address
+  /// ("@Mastodon@mastodon.social"), or a Bluesky handle ("@name.bsky.social", "@nytimes.com").
+  static func socialFeed(_ text: String) -> URL? {
+    let trimmed = text.replacingOccurrences(of: #"^https?://"#, with: "", options: .regularExpression)
+    if let handle = trimmed.firstMatch(of: /^bsky\.app\/profile\/([^\/?#]+)/)?.output.1 {
+      return URL(string: "https://bsky.app/profile/\(handle)/rss")
+    }
+    if let match = trimmed.firstMatch(of: /^@?([A-Za-z0-9_]+)@([A-Za-z0-9.-]+\.[A-Za-z]{2,})$/) {
+      return URL(string: "https://\(match.output.2)/@\(match.output.1).rss")
+    }
+    if !trimmed.contains("youtube.com"), let match = trimmed.firstMatch(of: /^([A-Za-z0-9.-]+\.[A-Za-z]{2,})\/@([A-Za-z0-9_]+)\/?$/) {
+      return URL(string: "https://\(match.output.1)/@\(match.output.2).rss")
+    }
+    if let handle = trimmed.firstMatch(of: /^@?([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)$/)?.output.1,
+      trimmed.hasPrefix("@") || handle.hasSuffix(".bsky.social") {
+      return URL(string: "https://bsky.app/profile/\(handle)/rss")
+    }
+    return nil
+  }
+
+  /// A Bluesky or Mastodon account's feed: named after the account, never after its site.
+  static func isSocial(_ url: String) -> Bool {
+    url.contains("bsky.app/profile/") || url.firstMatch(of: /\/@[A-Za-z0-9_]+\.rss$/) != nil
+  }
+
+  /// A social account keeps its own name: Bluesky's "@nytimes.com - The New York Times" →
+  /// "The New York Times"; Mastodon's feed is titled with the display name already.
+  static func socialNamed(_ found: Found) -> Found {
+    let title = found.feed.title
+    guard title.hasPrefix("@"), let range = title.range(of: " - ") else { return found }
+    let name = String(title[range.upperBound...]).trimmingCharacters(in: .whitespaces)
+    return name.isEmpty ? found : rename(found, name)
+  }
+
+  /// A post's headline: its first sentence (links left out), cut at a word near 110 characters.
+  static func postTitle(_ text: String) -> String {
+    let words = text.split(separator: " ").filter { !$0.hasPrefix("http") && $0.firstMatch(of: /^[\w.-]+\.[a-z]{2,}\/\S*$/) == nil }
+    let clean = words.joined(separator: " ")
+    var sentence = clean
+    // The first full stop that ends a sentence: not one in "U.S." or after "Dr".
+    for end in clean.matches(of: /[.!?](\s|$)/) where clean.distance(from: clean.startIndex, to: end.range.lowerBound) >= 20 {
+      let before = clean[..<end.range.lowerBound]
+      let word = before.split(separator: " ").last.map(String.init) ?? ""
+      if word.firstMatch(of: /(^|\.)[A-Z]$/) != nil || ["Mr", "Mrs", "Ms", "Dr", "St", "Jr", "vs", "No"].contains(word) { continue }
+      sentence = String(clean[..<end.range.upperBound]).trimmingCharacters(in: .whitespaces)
+      break
+    }
+    guard sentence.count > 110 else { return sentence }
+    let cut = sentence.prefix(110)
+    return (cut.range(of: " ", options: .backwards).map { String(cut[..<$0.lowerBound]) } ?? String(cut)) + "…"
   }
 
   /// A feed's own title is often a section, not the publication ("International homepage" for
@@ -412,7 +471,10 @@ nonisolated enum CustomFeedReader {
     let feedURL = (response.url ?? url).absoluteString
     let cutoff = Date.now.addingTimeInterval(-72 * 3600)  // FeedSyncPipeline.retention
     let articles = parser.items.compactMap { item -> FeedArticleDTO? in
-      guard !item.title.isEmpty, !item.link.isEmpty else { return nil }
+      guard !item.link.isEmpty else { return nil }
+      // Posts (Bluesky, Mastodon) have no title: their first sentence stands in.
+      let headline = item.title.isEmpty ? postTitle(plain(item.summary)) : plain(item.title)
+      guard !headline.isEmpty else { return nil }
       // YouTube Shorts are vertical and fleeting: not news videos.
       guard !item.link.contains("/shorts/") else { return nil }
       let date = item.date ?? .now
@@ -420,7 +482,7 @@ nonisolated enum CustomFeedReader {
       // A YouTube channel's videos are videos: Watch opens YouTube, the card shows a play mark.
       let image = item.videoID.map { "https://i.ytimg.com/vi/\($0)/hqdefault.jpg" } ?? item.image ?? item.inlineImage
       return FeedArticleDTO(
-        title: plain(item.title), snippet: FeedFetcher.truncate(plain(item.summary), FeedFetcher.snippetLength), outlet: title, url: item.link,
+        title: headline, snippet: FeedFetcher.truncate(plain(item.summary), FeedFetcher.snippetLength), outlet: title, url: item.link,
         imageURL: image, publishedAt: min(date, .now), category: nil, country: nil, videoID: item.videoID,
         audioURL: nil, audioSeconds: nil, isChart: nil, galleryURLs: nil)
     }
@@ -558,7 +620,7 @@ nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchecked Send
     if let date = try? Date(text, strategy: .iso8601) { return date }
     let formatter = DateFormatter()
     formatter.locale = Locale(identifier: "en_US_POSIX")
-    for format in ["EEE, dd MMM yyyy HH:mm:ss Z", "EEE, dd MMM yyyy HH:mm:ss zzz", "dd MMM yyyy HH:mm:ss Z", "EEE, dd MMM yyyy HH:mm Z"] {
+    for format in ["EEE, dd MMM yyyy HH:mm:ss Z", "EEE, dd MMM yyyy HH:mm:ss zzz", "dd MMM yyyy HH:mm:ss Z", "EEE, dd MMM yyyy HH:mm Z", "dd MMM yyyy HH:mm Z"] {
       formatter.dateFormat = format
       if let date = formatter.date(from: text) { return date }
     }
