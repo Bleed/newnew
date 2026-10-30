@@ -149,56 +149,6 @@ struct KeyMessage: Identifiable, Equatable {
   static func == (a: KeyMessage, b: KeyMessage) -> Bool { a.id == b.id && a.tokens == b.tokens }
 }
 
-/// Key messages taking turns in one line, 7 s each, the height of the tallest so nothing below
-/// jumps; ones with an action are buttons. Today's board uses it under the board.
-struct MessageLine: View {
-  let messages: [KeyMessage]
-  var size: CGFloat
-  var delay: Double = 1.3
-  @State private var messageIndex = 0
-  @State private var lastSwitch = Date.now
-  @Environment(\.accessibilityReduceMotion) var reduceMotion
-
-  var body: some View {
-    if !messages.isEmpty {
-      let message = messages[messageIndex % messages.count]
-      ZStack(alignment: .topLeading) {
-        ForEach(messages) { candidate in
-          RebusLine(tokens: candidate.tokens, size: size, delay: nil).hidden().accessibilityHidden(true)
-        }
-        Group {
-          if let action = message.action {
-            Button(action: action) { RebusLine(tokens: message.tokens, size: size, delay: delay) }
-              .buttonStyle(.plain)
-          } else {
-            RebusLine(tokens: message.tokens, size: size, delay: delay)
-          }
-        }
-        .id(message.id)
-        .transition(
-          reduceMotion ? .opacity
-            : .asymmetric(insertion: .move(edge: .bottom).combined(with: .opacity), removal: .move(edge: .top).combined(with: .opacity)))
-      }
-      .clipped()
-      .animation(.easeInOut(duration: 0.35), value: messageIndex)
-      .task(id: messages.map(\.id)) {
-        guard messages.count > 1 else { return }
-        while !Task.isCancelled {
-          let wait = max(0.5, 7 - Date.now.timeIntervalSince(lastSwitch))
-          try? await Task.sleep(for: .seconds(wait))
-          guard !Task.isCancelled else { return }
-          messageIndex += 1
-          lastSwitch = .now
-        }
-      }
-      .onChange(of: messages.map(\.id)) { old, new in
-        guard !old.isEmpty, let index = new.firstIndex(of: old[messageIndex % old.count]) else { return }
-        messageIndex = index
-      }
-    }
-  }
-}
-
 /// The top of a dashboard: the day, the figure, what it is and a key message.
 struct OneSentenceTop: View {
   let figure: String

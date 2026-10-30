@@ -273,9 +273,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Today's top is a small departures board (`NewsTop`, Figma: Explorations · header, C): one quiet
   tile with three dot-face rows, unlit dots at 7 %: the date (muted), the figure (every article
   on the page) and what's new ("18 NEW IN 17 STORIES"). Rows arrive as a departures board 0.12 s
-  apart and changed values roll; the tile stops growing at xxxLarge text so rows fit. Under it,
-  `MessageLine` (mono 14) rotates the tap-through messages every 7 s (TOP, CATCHUP, read
-  hidden, hidden by topics). The one-sentence top (`OneSentenceTop`) is still used by the read
+  apart and changed values roll; the tile stops growing at xxxLarge text so rows fit. Under a
+  dotted rule, inside the tile, `BoardMessageRows` shows the tap-through messages (TOP with the
+  age in grey, CATCHUP, read hidden, hidden by topics) in a small dot face (pitch 1.4) on two
+  rows wrapped at words, with an ink arrow; they take turns every 7 s and roll on change.
+  `DotFont.boardText` makes headlines drawable (accents, curly quotes, dashes). The one-sentence top (`OneSentenceTop`) is still used by the read
   summary at the end of a swipe run.
 - News headlines are Times New Roman (`Swiss.headline`), everywhere a headline appears; all
   other text stays SF.

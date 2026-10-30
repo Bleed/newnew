@@ -58,6 +58,17 @@ enum DotFont {
     return (keepsCase ? text : text.uppercased()).map { $0.isWhitespace || $0 == "_" ? " " : $0 }
   }
 
+  /// Text the board can draw: upper case, accents dropped, curly quotes and dashes made plain,
+  /// anything without a glyph left out.
+  static func boardText(_ text: String) -> String {
+    let plain = text.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current).uppercased()
+      .replacingOccurrences(of: "’", with: "'").replacingOccurrences(of: "‘", with: "'")
+      .replacingOccurrences(of: "“", with: "").replacingOccurrences(of: "”", with: "").replacingOccurrences(of: "\"", with: "")
+      .replacingOccurrences(of: "–", with: "-").replacingOccurrences(of: "—", with: "-").replacingOccurrences(of: "&", with: "+")
+      .replacingOccurrences(of: "…", with: "...")
+    return String(plain.filter { $0 == " " || glyphs[$0] != nil })
+  }
+
   static func isLit(_ character: Character, row: Int, column: Int) -> Bool {
     glyphs[character]?[row * 5 + column] ?? false
   }

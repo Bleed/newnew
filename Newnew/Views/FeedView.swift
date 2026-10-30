@@ -806,26 +806,6 @@ struct NewsTop: View {
   var openCatchup: () -> Void = {}
   var showMutes: () -> Void
   var showRead: () -> Void = {}
-  @State private var width: CGFloat = 360
-  /// The message line's size (it sits under the board, smaller than the old sentence top).
-  @ScaledMetric(relativeTo: .body) var size: CGFloat = 14
-
-  /// How many characters of the top headline fit on two lines beside (TOP), the clock,
-  /// "nn MIN" and the arrow. SF Mono is 0.6 em wide; the rest takes about 7 em, and a couple of
-  /// characters go to the gap where the first line breaks.
-  /// The 7 em fits a 3-character age ("1 H"); a longer one ("33 MIN") takes its extra
-  /// characters, and one more for its wider pill.
-  func headlineChars(age: String) -> Int {
-    max(12, Int((width * 2 - size * 7) / (size * 0.6)) - 3 - max(age.count - 3, 0) - (age.count > 3 ? 1 : 0))
-  }
-
-  /// The headline as separate words, so the line can wrap onto a second line.
-  func headlineWords(_ title: String, age: String) -> [RebusToken] {
-    let up = title.uppercased()
-    let budget = headlineChars(age: age)
-    let cut = up.count > budget ? String(up.prefix(budget - 1)).trimmingCharacters(in: .whitespaces) + "…" : up
-    return cut.split(separator: " ").map { .word(String($0)) }
-  }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
   /// New to you: reached this iPhone since you last looked, and published no more than two
@@ -843,48 +823,24 @@ struct NewsTop: View {
     return "\(articles.count) \(articles.count == 1 ? "ARTICLE" : "ARTICLES")"
   }
 
-  var detail: [RebusToken] {
-    if articles.isEmpty {
-      if readHiddenCount > 0 {
-        return [.number("\(readHiddenCount)"), .word(readHiddenCount == 1 ? "STORY" : "STORIES"), .pill("READ")]
-      }
-      return [.word("THE NEWS, ON"), .pill("THIS IPHONE")]
-    }
-    if fresh.isEmpty {
-      return [.word("IN"), .number("\(visible.count)"), .word(visible.count == 1 ? "STORY" : "STORIES"), .grey("·"), .word("NOTHING"), .pill("NEW")]
-    }
-    let stories = Set(fresh.compactMap { $0.cluster?.id }).count
-    return [.number("\(fresh.count)"), .pill("NEW"), .word("IN"), .number("\(stories)"), .word(stories == 1 ? "STORY" : "STORIES")]
-  }
-
-  var messages: [KeyMessage] {
-    var messages: [KeyMessage] = []
+  /// The messages as the board shows them: words in the dot face, the age in grey.
+  var boardMessages: [BoardMessage] {
+    var out: [BoardMessage] = []
     if let top, let lead = top.lead {
-      messages.append(KeyMessage(
-        id: "top-\(top.id)",
-        tokens: [.pill("TOP")] + headlineWords(lead.title, age: Self.age(top.updatedAt))
-          + [.clock, .minutes(Self.age(top.updatedAt)), .arrow],
-        action: { open(top) }))
+      out.append(BoardMessage(
+        id: "top-\(top.id)", text: "TOP · \(lead.title)", grey: Self.age(top.updatedAt).replacingOccurrences(of: " MIN", with: "M").replacingOccurrences(of: " ", with: ""),
+        spoken: "Top story: \(lead.title)", action: { open(top) }))
     }
     if catchupCount > 0 {
-      messages.append(KeyMessage(
-        id: "catchup-\(catchupCount)",
-        tokens: [.pill("CATCHUP"), .number("\(catchupCount)"), .word("TOP STORIES"), .word("REEL"), .arrow],
-        action: openCatchup))
+      out.append(BoardMessage(id: "catchup-\(catchupCount)", text: "CATCHUP · \(catchupCount) TOP STORIES REEL", spoken: "Catchup, \(catchupCount) top stories reel", action: openCatchup))
     }
     if readHiddenCount > 0 {
-      messages.append(KeyMessage(
-        id: "read-\(readHiddenCount)",
-        tokens: [.number("\(readHiddenCount)"), .pill("READ"), .word("HIDDEN"), .grey("·"), .word("SHOW"), .arrow],
-        action: showRead))
+      out.append(BoardMessage(id: "read-\(readHiddenCount)", text: "\(readHiddenCount) READ HIDDEN · SHOW", spoken: "\(readHiddenCount) read stories hidden. Show", action: showRead))
     }
     if hiddenCount > 0 {
-      messages.append(KeyMessage(
-        id: "hidden-\(hiddenCount)",
-        tokens: [.number("\(hiddenCount)"), .word("HIDDEN BY"), .pill("YOUR TOPICS"), .arrow],
-        action: showMutes))
+      out.append(BoardMessage(id: "hidden-\(hiddenCount)", text: "\(hiddenCount) HIDDEN BY YOUR TOPICS", spoken: "\(hiddenCount) stories hidden by your topics", action: showMutes))
     }
-    return messages
+    return out
   }
 
   /// "20 MIN", "3 H".
@@ -919,6 +875,8 @@ struct NewsTop: View {
       // departures board, 0.12 s after the one above; changed values roll (the dot-face rules).
       TimelineView(.everyMinute) { context in
         VStack(alignment: .leading, spacing: 8) {
+          // The three rows read as one sentence; the message under them is its own button.
+          VStack(alignment: .leading, spacing: 8) {
           DotText(Self.dateText(context.date), pitch: 1.8, unlit: 0.07, motion: .roll)
             .foregroundStyle(Swiss.muted)
           ViewThatFits(in: .horizontal) {
@@ -932,6 +890,13 @@ struct NewsTop: View {
             DotText(detailText, pitch: 1.4, unlit: 0.07, motion: .roll, decodeDelay: 0.24)
           }
           .foregroundStyle(Swiss.ink)
+          }
+          .accessibilityElement(children: .ignore)
+          .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(figure.lowercased()). \(detailText.lowercased())")
+          if !boardMessages.isEmpty {
+            DottedRule().padding(.vertical, 2)
+            BoardMessageRows(messages: boardMessages)
+          }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -939,13 +904,9 @@ struct NewsTop: View {
         // The dots grow with the text size up to the largest standard size; past that a board
         // row would run off the screen (the message line under it keeps growing).
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(figure.lowercased()). \(detailText.lowercased())")
       }
-      MessageLine(messages: messages, size: size)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
   }
 }
 
@@ -1136,6 +1097,107 @@ enum FeedFilter: Hashable {
 /// stories you've read; with Briefing chosen, a second row narrows the news to a region (tap the
 /// chosen region again for all of Briefing). The chosen one is an ink outline (selection never
 /// reads as the black primary action); the rest are quiet pills.
+/// A message on Today's board: the words in the dot face, an optional grey tail (the age), what
+/// VoiceOver says, and where a tap goes.
+struct BoardMessage: Identifiable {
+  let id: String
+  let text: String
+  var grey: String = ""
+  let spoken: String
+  let action: () -> Void
+}
+
+/// A row of faint dots across the board, between the figures and the message.
+struct DottedRule: View {
+  var body: some View {
+    Canvas { ctx, size in
+      var x: CGFloat = 1
+      while x < size.width {
+        ctx.fill(Path(ellipseIn: CGRect(x: x - 0.8, y: 0.2, width: 1.6, height: 1.6)), with: .color(Swiss.ink.opacity(0.18)))
+        x += 6
+      }
+    }
+    .frame(height: 2)
+    .accessibilityHidden(true)
+  }
+}
+
+/// The board's last two rows: the message in a small dot face (pitch 1.4), wrapped at words onto
+/// two rows, the age in grey at the end, an ink arrow beside it. The messages take turns every
+/// 7 s; each change rolls the rows like a departures board. The rows are always two high, so
+/// nothing under the board moves.
+struct BoardMessageRows: View {
+  let messages: [BoardMessage]
+  @ScaledMetric(relativeTo: .body) private var pitch: CGFloat = 1.4
+  @State private var index = 0
+  @State private var lastSwitch = Date.now
+  @State private var width: CGFloat = 280
+
+  var body: some View {
+    let message = messages[index % messages.count]
+    let rows = Self.rows(message, columns: max(Int((width / pitch + 1) / 6), 8))
+    Button(action: message.action) {
+      HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: pitch * 3) {
+          ForEach(0..<2, id: \.self) { row in
+            HStack(spacing: pitch * 6) {
+              DotText(rows[row].main, pitch: 1.4, unlit: 0.07, motion: .roll, decodeDelay: 0.36 + Double(row) * 0.12)
+                .foregroundStyle(Swiss.ink)
+              if !rows[row].grey.isEmpty {
+                DotText(rows[row].grey, pitch: 1.4, unlit: 0.07, motion: .roll, decodeDelay: 0.5)
+                  .foregroundStyle(Swiss.muted)
+              }
+            }
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        Image(systemName: "arrow.right")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(Swiss.onInk)
+          .padding(.horizontal, 7)
+          .frame(height: 20)
+          .background(Swiss.ink, in: Capsule())
+      }
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(message.spoken)
+    .task(id: messages.map(\.id)) {
+      guard messages.count > 1 else { return }
+      while !Task.isCancelled {
+        let wait = max(0.5, 7 - Date.now.timeIntervalSince(lastSwitch))
+        try? await Task.sleep(for: .seconds(wait))
+        guard !Task.isCancelled else { return }
+        index += 1
+        lastSwitch = .now
+      }
+    }
+  }
+
+  /// The message wrapped at words onto two rows of `columns` cells, cut with "..." when it runs
+  /// over; the grey tail goes at the end of the last row if it fits there.
+  static func rows(_ message: BoardMessage, columns: Int) -> [(main: String, grey: String)] {
+    let words = DotFont.boardText(message.text).split(separator: " ").map(String.init)
+    let grey = DotFont.boardText(message.grey)
+    var lines = ["", ""]
+    var line = 0
+    var cut = false
+    for word in words {
+      let candidate = lines[line].isEmpty ? word : lines[line] + " " + word
+      if candidate.count <= columns { lines[line] = candidate; continue }
+      if line == 0 { line = 1; lines[1] = String(word.prefix(columns)); continue }
+      cut = true
+      break
+    }
+    if cut { lines[1] = String(lines[1].prefix(columns - 3)).trimmingCharacters(in: .whitespaces) + "..." }
+    let last = lines[1].isEmpty ? 0 : 1
+    let fits = !grey.isEmpty && lines[last].count + 1 + grey.count <= columns
+    if !grey.isEmpty && !fits { lines[1] = String(lines[1].prefix(max(columns - grey.count - 4, 0))).trimmingCharacters(in: .whitespaces) + "..." }
+    return [(lines[0], last == 0 && !grey.isEmpty ? grey : ""), (lines[1], last == 1 || !fits ? grey : "")]
+  }
+}
+
 struct FilterBar: View {
   @Binding var selection: FeedFilter
   @Binding var hideRead: Bool
