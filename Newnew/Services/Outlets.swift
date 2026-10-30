@@ -169,18 +169,24 @@ nonisolated enum YouTubeSuggestions {
     saveCustom()
   }
 
-  /// Own feeds added under a section's title ("International homepage") get the site's name.
-  /// Their stored articles keep the old name until the next sync replaces them.
+  /// Own feeds added under a title that doesn't name their site (a section, "International
+  /// homepage") get the site's name, by the same rule as when they are added. Their stored
+  /// articles keep the old name until the next sync replaces them.
   func renameGenericFeeds() async {
-    for feed in customFeeds where CustomFeedReader.isGeneric(feed.title) {
+    for feed in customFeeds where !feed.url.contains("youtube.com") && !namesChecked.contains(feed.url) {
+      namesChecked.insert(feed.url)
       guard let url = URL(string: feed.url), let host = url.host() else { continue }
-      let site = URL(string: "https://\(host.replacingOccurrences(of: "feeds.", with: "www.").replacingOccurrences(of: "rss.", with: "www."))")!
-      let renamed = await CustomFeedReader.named(.init(feed: feed, articles: []), site: site)
+      if let label = CustomFeedReader.siteLabel(url), CustomFeedReader.names(feed.title, label) { continue }
+      let found = await CustomFeedReader.Found(feed: feed, articles: CustomFeedReader.articles(feed))
+      let renamed = await CustomFeedReader.named(found, site: URL(string: "https://\(host)")!)
       guard renamed.feed.title != feed.title, let index = customFeeds.firstIndex(where: { $0.url == feed.url }) else { continue }
       customFeeds[index].title = renamed.feed.title
       saveCustom()
     }
   }
+
+  /// Own feeds whose name was checked this launch.
+  @ObservationIgnored private var namesChecked: Set<String> = []
 
   func remove(_ feed: CustomFeed) {
     customFeeds.removeAll { $0.url == feed.url }
@@ -243,20 +249,79 @@ nonisolated enum CustomFeedReader {
   }
 
   /// A feed's own title is often a section, not the publication ("International homepage" for
-  /// the Financial Times, "RSS feed", "Top stories"): then the site's name is used instead, from
-  /// its page (og:site_name, application-name, or the title before " | ").
+  /// the Financial Times, "World", "Top stories"). The title is kept only when it names the site
+  /// its articles link to ("World | The Guardian" → "The Guardian"); otherwise the site's own
+  /// name from its page (og:site_name, application-name, the title before " | ") when that names
+  /// the site or agrees with the feed; otherwise the domain, "ft.com" → "FT".
   static func named(_ found: Found, site: URL, known: String? = nil) async -> Found {
-    guard !site.absoluteString.contains("youtube.com"), isGeneric(found.feed.title) else { return found }
-    var name = known
-    if name == nil, let (data, _) = try? await fetch(site), let html = String(data: data, encoding: .utf8) {
-      name = siteName(html)
+    guard !site.absoluteString.contains("youtube.com") else { return found }
+    let site = articleSite(found) ?? site
+    guard let label = siteLabel(site) else { return found }
+    if let part = titleParts(found.feed.title).first(where: { names($0, label) }) { return rename(found, part) }
+    var page = known
+    if page == nil, let root = URL(string: "https://\(site.host() ?? "")"),
+      let (data, _) = try? await fetch(root), let html = String(data: data, encoding: .utf8) {
+      page = siteName(html)
     }
-    // No name on the page (or a bot check in front of it): the domain, "ft.com" → "FT".
-    guard let name = name ?? domainName(site), !name.isEmpty else { return found }
+    if let page, names(page, label) || (!isGeneric(found.feed.title) && page.lowercased() == found.feed.title.lowercased()) {
+      return rename(found, page)
+    }
+    return domainName(site).map { rename(found, $0) } ?? found
+  }
+
+  private static func rename(_ found: Found, _ name: String) -> Found {
+    guard name != found.feed.title else { return found }
     var renamed = found
     renamed.feed.title = name
     renamed.articles = found.articles.map { var article = $0; article.outlet = name; return article }
     return renamed
+  }
+
+  /// Where the articles live: a feed on feeds.…, feedburner or a CDN links to the publisher.
+  static func articleSite(_ found: Found) -> URL? {
+    let hosts = found.articles.compactMap { URL(string: $0.url)?.host() }
+    guard let host = Dictionary(grouping: hosts, by: { $0 }).max(by: { $0.value.count < $1.value.count })?.key else { return nil }
+    return URL(string: "https://\(host)")
+  }
+
+  /// "World | The Guardian", "NYT > Top Stories": each part, then the whole; "Le Monde.fr" →
+  /// "Le Monde".
+  static func titleParts(_ title: String) -> [String] {
+    var parts = [title]
+    for separator in [" | ", " - ", " – ", " — ", " · ", " :: ", " > ", ": "] {
+      parts = parts.flatMap { $0.components(separatedBy: separator) }
+    }
+    return (parts + [title]).map {
+      $0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: #"\.[a-z]{2,3}$"#, with: "", options: .regularExpression)
+    }.filter { !$0.isEmpty && !isGeneric($0) }
+  }
+
+  /// Whether a name is the site's: "The Guardian" for theguardian.com, "Financial Times" for
+  /// ft.com, "The New York Times" for nytimes.com.
+  static func names(_ name: String, _ label: String) -> Bool {
+    let plain = String(name.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(Character.init))
+    if plain == label || (label.count >= 4 && plain.contains(label)) || (plain.count >= 5 && label.contains(plain))
+      || (plain.count >= 3 && label.hasPrefix(plain)) { return true }
+    let words = name.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
+      .filter { !["the", "of", "and", "a"].contains($0) }
+    if words.contains(label) { return true }
+    let initials = String(words.compactMap(\.first))
+    return initials.count >= 2 && label.hasPrefix(initials)
+  }
+
+  /// The part of a host that names the site: "www.bbc.co.uk" → "bbc", "x.substack.com" → "x".
+  static func siteLabel(_ site: URL) -> String? {
+    guard let host = site.host()?.lowercased() else { return nil }
+    var parts = host.split(separator: ".").map(String.init).filter { !["www", "feeds", "rss", "m", "amp"].contains($0) }
+    guard parts.count >= 2 else { return nil }
+    parts.removeLast()
+    // Second-level country domains: co.uk, com.au, or.jp.
+    if parts.count >= 2, ["co", "com", "org", "net", "ac", "gov", "or", "ne"].contains(parts.last!) { parts.removeLast() }
+    // Hosted blogs are named by their subdomain.
+    if parts.count >= 2, ["substack", "medium", "wordpress", "blogspot", "tumblr", "ghost", "github", "bearblog"].contains(parts.last!) {
+      return parts[parts.count - 2]
+    }
+    return parts.last
   }
 
   /// Titles that name a section or the feed itself rather than the publication.
@@ -267,12 +332,9 @@ nonisolated enum CustomFeedReader {
     return words.contains { lower.contains($0) } || ["home", "news", "articles", "blog", "posts", "stories"].contains(lower)
   }
 
-  /// "ft.com" → "FT", "kottke.org" → "Kottke", "www.theverge.com" → "Theverge".
+  /// "ft.com" → "FT", "kottke.org" → "Kottke", "www.bbc.co.uk" → "BBC", "x.substack.com" → "X".
   static func domainName(_ site: URL) -> String? {
-    guard let host = site.host() else { return nil }
-    let parts = host.split(separator: ".").filter { !["www", "feeds", "rss", "m"].contains($0) }
-    guard parts.count >= 2 else { return nil }
-    let label = String(parts[parts.count - 2])
+    guard let label = siteLabel(site) else { return nil }
     return label.count <= 3 ? label.uppercased() : label.prefix(1).uppercased() + label.dropFirst()
   }
 

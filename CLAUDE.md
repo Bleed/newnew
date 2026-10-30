@@ -63,10 +63,13 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
 - Measured in the Simulator: 95+ default feeds answer in ~6 s. Podcasts are off by default
   (each chosen on its own); without them a full refresh is a few MB.
 - `FeedParser` (in Outlets.swift) is shared with own feeds (`CustomFeedReader`).
-- Own feeds: when a feed's title is generic ("International homepage", "RSS", "Top stories"),
-  the site's name is used (og:site_name, application-name, or the non-generic part of the page
-  title), never a bot-check page's; failing that the domain ("ft.com" → "FT"). Feeds added
-  before this are renamed once when the outlet list refreshes.
+- Own feeds are named after the site their articles link to (`CustomFeedReader.named`): the
+  feed's title, or its part, when it names that site ("World | The Guardian" → "The Guardian",
+  "NYT > Top Stories" → "NYT", initials count: "Financial Times" for ft.com); else the site's
+  page name (og:site_name, application-name, the page title's part, never a bot-check page's)
+  when it names the site or agrees with the feed's title ("Hacker News"); else the domain,
+  capitalised ("ft.com" → "FT", "bbc.co.uk" → "BBC", "x.substack.com" → "X"). Existing feeds
+  are checked once per launch when the outlet list refreshes.
 - Podcasts: Listen (card, in brief, the story page's episodes) opens the episode in Apple
   Podcasts when the app is there: `PodcastLinks` finds the show by name in the iTunes Search
   API and the episode by its audio file's name (redirects stripped) or title, then opens
