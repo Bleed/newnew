@@ -160,11 +160,14 @@ enum BlockFont {
   enum Cut {
     case rect(CGFloat, CGFloat, CGFloat, CGFloat)
     case polygon([CGPoint])
+    /// Slits, kept `slit` thick however the glyph is stretched.
+    case across(CGFloat, CGFloat, CGFloat)
+    case down(CGFloat, CGFloat, CGFloat)
   }
 
   static let slit: CGFloat = 0.5
-  static func across(_ y: CGFloat, _ x0: CGFloat, _ x1: CGFloat) -> Cut { .rect(x0, y - slit / 2, x1, y + slit / 2) }
-  static func down(_ x: CGFloat, _ y0: CGFloat, _ y1: CGFloat) -> Cut { .rect(x - slit / 2, y0, x + slit / 2, y1) }
+  static func across(_ y: CGFloat, _ x0: CGFloat, _ x1: CGFloat) -> Cut { .across(y, x0, x1) }
+  static func down(_ x: CGFloat, _ y0: CGFloat, _ y1: CGFloat) -> Cut { .down(x, y0, y1) }
   static func poly(_ points: (CGFloat, CGFloat)...) -> Cut { .polygon(points.map { CGPoint(x: $0.0, y: $0.1) }) }
   /// Corner notches cut at 45°, `size` along each edge, drawn past the corner.
   static func topLeft(_ size: CGFloat) -> Cut { poly((-1, -1), (size + 1, -1), (-1, size + 1)) }
@@ -216,40 +219,47 @@ enum BlockFont {
   /// A cut edge on the cell's edge runs past it.
   private static func past(_ v: CGFloat) -> CGFloat { v <= 0 ? -1 : v >= 10 ? 11 : v }
 
-  /// One glyph, `unit` points per cell unit, at `x`.
-  static func path(_ character: Character, x: CGFloat, unit: CGFloat) -> Path {
+  /// One glyph, `unit` points per cell unit, at `x`, stretched `stretchX` across and
+  /// `stretchY` down; its slits stay `slit` units thick either way.
+  static func path(_ character: Character, x: CGFloat, unit: CGFloat, stretchX: CGFloat = 1, stretchY: CGFloat = 1) -> Path {
     guard character != " " else { return Path() }
     let w = width(character), scale = w / 10
+    let across = slit / stretchY, down = slit / stretchX
     var cuts = Path()
+    func rect(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) {
+      cuts.addRect(CGRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0))
+    }
     for cut in glyphs[character] ?? [] {
       switch cut {
-      case .rect(let x0, let y0, let x1, let y1):
-        let a = past(x0) * scale, b = past(x1) * scale
-        cuts.addRect(CGRect(x: a, y: past(y0), width: b - a, height: past(y1) - past(y0)))
+      case .rect(let x0, let y0, let x1, let y1): rect(past(x0) * scale, past(y0), past(x1) * scale, past(y1))
+      case .across(let y, let x0, let x1): rect(past(x0) * scale, y - across / 2, past(x1) * scale, y + across / 2)
+      case .down(let x, let y0, let y1): rect(x * scale - down / 2, past(y0), x * scale + down / 2, past(y1))
       case .polygon(let points): cuts.addLines(points.map { CGPoint(x: $0.x * scale, y: $0.y) }); cuts.closeSubpath()
       }
     }
     let block = Path(CGRect(x: 0, y: 0, width: w, height: 10))
     return block.subtracting(cuts)
-      .applying(CGAffineTransform(scaleX: unit, y: unit).concatenating(CGAffineTransform(translationX: x, y: 0)))
+      .applying(CGAffineTransform(scaleX: unit * stretchX, y: unit * stretchY).concatenating(CGAffineTransform(translationX: x, y: 0)))
   }
 }
 
-/// Text in the block face, filling the full block: as wide as it's given and always as tall as
-/// "00 NEW" would be there (up to `maxHeight`), so the block keeps its size whatever it says;
-/// longer words are drawn narrower, shorter ones wider. It arrives like the
+/// Text in the block face, filling the full block: as wide as it's given and always a third
+/// taller than "00 NEW" would be there (up to `maxHeight`), so the block keeps its size
+/// whatever it says; glyphs are drawn taller, longer words narrower, shorter ones wider, the
+/// slits always the same thickness. It arrives like the
 /// dot face: a departures board, cells 0.025 s apart left to right, each rolling through
 /// random blocks (a new one every 0.06 s) before it settles; a new text arrives the same way.
 struct BlockText: View {
   let text: String
-  var maxHeight: CGFloat = 120
+  var maxHeight: CGFloat = 170
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var start: Date?
   @State private var launched = false
 
   var glyphs: [Character] { Array(DotFont.boardText(text).filter { $0 == " " || BlockFont.glyphs[$0] != nil }) }
-  /// The block's proportions, in cell units: those of "00 NEW".
+  /// The block's proportions, in cell units: "00 NEW", a third taller.
   static let reference = BlockFont.width(Array("00 NEW"))
+  static let tall: CGFloat = 4 / 3
 
   var duration: Double {
     let last = max(glyphs.count - 1, 0)
@@ -268,7 +278,7 @@ struct BlockText: View {
         Canvas { ctx, size in draw(&ctx, size: size, glyphs: glyphs, elapsed: launched || reduceMotion ? nil : -1) }
       }
     }
-    .aspectRatio(Self.reference / 10, contentMode: .fit)
+    .aspectRatio(Self.reference / (10 * Self.tall), contentMode: .fit)
     .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .leading)
     .afterLaunch {
       guard !launched else { return }
@@ -289,7 +299,9 @@ struct BlockText: View {
 
   /// `elapsed` nil: settled; negative: before the entrance, nothing shown.
   func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?) {
-    let unit = size.height / 10
+    let unit = size.height / (10 * Self.tall)
+    let natural = BlockFont.width(glyphs) * unit
+    let stretchX = natural > 0 ? size.width / natural : 1
     var x: CGFloat = 0
     var path = Path()
     for (index, character) in glyphs.enumerated() {
@@ -309,15 +321,12 @@ struct BlockText: View {
       // A rolling cell keeps its own width, so the word doesn't shift as it settles.
       if let shown {
         let cell = BlockFont.width(character), drawn = BlockFont.width(shown)
-        var glyph = BlockFont.path(shown, x: 0, unit: unit)
+        var glyph = BlockFont.path(shown, x: 0, unit: unit, stretchX: stretchX, stretchY: Self.tall)
         if drawn != cell { glyph = glyph.applying(CGAffineTransform(scaleX: cell / drawn, y: 1)) }
         path.addPath(glyph.applying(CGAffineTransform(translationX: x, y: 0)))
       }
-      x += (BlockFont.width(character) + BlockFont.gap) * unit
+      x += (BlockFont.width(character) + BlockFont.gap) * unit * stretchX
     }
-    // Stretched or condensed across, to fill the block's width at its height.
-    let width = BlockFont.width(glyphs) * unit
-    if width > 0 { path = path.applying(CGAffineTransform(scaleX: size.width / width, y: 1)) }
     ctx.fill(path, with: .foreground)
   }
 }
