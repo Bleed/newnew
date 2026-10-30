@@ -270,8 +270,13 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Icon: "new" over "new" in the dot face, reversed (near-white dots on black), from
   `Scripts/render-app-icon.swift`.
 - Near-white page (#FAFAFA), grey tiles (#F1F1F1), black in dark mode; type carries contrast.
-- The page top is Atelier's one-sentence top (`OneSentenceTop`): date line, a big mono figure,
-  a detail line, and a rotating last line with a tap target.
+- Today's top is a small departures board (`NewsTop`, Figma: Explorations · header, C): one quiet
+  tile with three dot-face rows, unlit dots at 7 %: the date (muted), the figure (every article
+  on the page) and what's new ("18 NEW IN 17 STORIES"). Rows arrive as a departures board 0.12 s
+  apart and changed values roll; the tile stops growing at xxxLarge text so rows fit. Under it,
+  `MessageLine` (mono 14) rotates the tap-through messages every 7 s (TOP, CATCHUP, read
+  hidden, hidden by topics). The one-sentence top (`OneSentenceTop`) is still used by the read
+  summary at the end of a swipe run.
 - News headlines are Times New Roman (`Swiss.headline`), everywhere a headline appears; all
   other text stays SF.
 - SF Mono for figures, only Light or Regular, never heavier.

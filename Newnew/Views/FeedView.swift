@@ -807,7 +807,8 @@ struct NewsTop: View {
   var showMutes: () -> Void
   var showRead: () -> Void = {}
   @State private var width: CGFloat = 360
-  @ScaledMetric(relativeTo: .body) var size: CGFloat = 17
+  /// The message line's size (it sits under the board, smaller than the old sentence top).
+  @ScaledMetric(relativeTo: .body) var size: CGFloat = 14
 
   /// How many characters of the top headline fit on two lines beside (TOP), the clock,
   /// "nn MIN" and the arrow. SF Mono is 0.6 em wide; the rest takes about 7 em, and a couple of
@@ -892,11 +893,59 @@ struct NewsTop: View {
     return minutes < 60 ? "\(minutes) MIN" : "\(minutes / 60) H"
   }
 
+  /// "31 NEW IN 13 STORIES", the detail line in words for the board.
+  var detailText: String {
+    if articles.isEmpty {
+      if readHiddenCount > 0 { return "\(readHiddenCount) \(readHiddenCount == 1 ? "STORY" : "STORIES") READ" }
+      return "THE NEWS, ON THIS IPHONE"
+    }
+    if fresh.isEmpty { return "IN \(visible.count) \(visible.count == 1 ? "STORY" : "STORIES") · NOTHING NEW" }
+    let stories = Set(fresh.compactMap { $0.cluster?.id }).count
+    return "\(fresh.count) NEW IN \(stories) \(stories == 1 ? "STORY" : "STORIES")"
+  }
+
+  /// "THU 29 OCT 22:40"
+  static func dateText(_ date: Date) -> String {
+    let weekday = date.formatted(.dateTime.weekday(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
+    let month = date.formatted(.dateTime.month(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
+    let time = date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+    return "\(weekday) \(date.formatted(.dateTime.day())) \(month) \(time)"
+  }
+
   var body: some View {
-    // Larger than Atelier's phone top (15 / 38), so the lines run across the page.
-    OneSentenceTop(figure: figure, detail: detail, messages: messages, size: 17, figureSize: 44)
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    VStack(alignment: .leading, spacing: 12) {
+      // A small departures board (Figma: Explorations · header, C): the day, the figure and
+      // what's new, all in the dot face on one tile, unlit dots showing. Each row arrives as a
+      // departures board, 0.12 s after the one above; changed values roll (the dot-face rules).
+      TimelineView(.everyMinute) { context in
+        VStack(alignment: .leading, spacing: 8) {
+          DotText(Self.dateText(context.date), pitch: 1.8, unlit: 0.07, motion: .roll)
+            .foregroundStyle(Swiss.muted)
+          ViewThatFits(in: .horizontal) {
+            DotText(figure, pitch: 3, unlit: 0.07, motion: .roll, decodeDelay: 0.12)
+            DotText(figure, pitch: 2.2, unlit: 0.07, motion: .roll, decodeDelay: 0.12)
+            DotText(figure, pitch: 1.6, unlit: 0.07, motion: .roll, decodeDelay: 0.12)
+          }
+          .foregroundStyle(Swiss.ink)
+          ViewThatFits(in: .horizontal) {
+            DotText(detailText, pitch: 1.8, unlit: 0.07, motion: .roll, decodeDelay: 0.24)
+            DotText(detailText, pitch: 1.4, unlit: 0.07, motion: .roll, decodeDelay: 0.24)
+          }
+          .foregroundStyle(Swiss.ink)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tile(.plain)
+        // The dots grow with the text size up to the largest standard size; past that a board
+        // row would run off the screen (the message line under it keeps growing).
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(figure.lowercased()). \(detailText.lowercased())")
+      }
+      MessageLine(messages: messages, size: size)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
   }
 }
 
