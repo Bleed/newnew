@@ -314,6 +314,19 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   per view, so views inserted later skip it; keep the views and change their text instead.
   `DotFont.boardText` makes headlines drawable (accents, curly quotes, dashes). The one-sentence top (`OneSentenceTop`) is still used by the read
   summary at the end of a swipe run.
+- Zen mode (Figma page Zen mode; Settings › Today, `TodayMode`, key "todayMode"): Today opens
+  as an edition instead of the feed (`EditionView`). `Edition` makes one at 07:00 and 18:00
+  (`Edition.slot`), once the feed has been read: the most covered stories since the previous
+  edition (an hour's overlap), ranked by how many outlets have them, at least two, at most
+  three per section, muted topics, charts and media-only stories out, capped at
+  `editionSize` (5/10/15, default 10). A story you've read comes back only with three or more
+  new articles since ("Back"). It's kept in UserDefaults ("edition.current") with your place,
+  so it doesn't change while you read. Cover ("Ten stories, then you're done.", the first four
+  listed), one story at a time (`EditionReader`: progress dots, a "3 OF 10" dot chip, the story
+  card, Next story / Read, swipe; each counts as read when you move on), then `EditionEnd`
+  ("You're caught up." and when the next edition comes). "Show everything instead" shows the
+  feed for this visit. "Edition ready" schedules local notifications at both times; breaking
+  alerts are off while Today opens as an edition (`Alerts.breakingOn`).
 - Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Blocks
   (the default, below), Dots (the board above), LCD (Figma: Explorations · LCD, P: the same board, its cells drawn as
   14-segment glyphs by `LCDFont` through `\.boardFace`, unlit segments faint, same timing) or

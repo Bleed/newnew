@@ -77,6 +77,7 @@ struct TopicsSheet: View {
 
           FeedWindowSettings().padding(.top, 10)
 
+          TodayModeSettings().padding(.top, 10)
           LookSettings().padding(.top, 10)
           ReadStoriesSettings().padding(.top, 10)
 

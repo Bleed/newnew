@@ -192,6 +192,11 @@ struct FeedView: View {
   @State private var path: [StoryCluster] = []
   @AppStorage("feedFilter") var filterRaw = FeedFilter.all.raw
   @Query(sort: \SemanticTopic.createdAt) var topics: [SemanticTopic]
+  /// Settings › Today: the feed, or an edition (zen mode, `EditionView`).
+  @AppStorage(TodayMode.key) var todayModeRaw = TodayMode.everything.rawValue
+  /// "Show everything instead", for this visit only.
+  @State private var showsEverything = false
+  var inEdition: Bool { todayModeRaw == TodayMode.edition.rawValue && !showsEverything }
   /// Held while the page is open, so the count doesn't drop to zero as you read.
   @State private var since: Date?
 
@@ -247,6 +252,13 @@ struct FeedView: View {
     let settledReadTotal = sections.settledReadTotal
 
     NavigationStack(path: $path) {
+      Group {
+      // Zen mode: the edition in place of the feed, unless you asked for everything this visit.
+      if inEdition {
+        EditionView(clusters: clusters, open: { path.append($0) }) {
+          withAnimation(.snappy) { showsEverything = true }
+        }
+      } else {
       ScrollViewReader { _ in
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
@@ -378,6 +390,8 @@ struct FeedView: View {
           }
         }
       }
+      }
+      }
       .swissCanvas()
       .navigationTitle("Today")
       .navigationBarTitleDisplayMode(.inline)
@@ -463,6 +477,7 @@ struct FeedView: View {
       switch phase {
       case .background:
         lastLookedAt = Date.now.timeIntervalSince1970
+        showsEverything = false
       case .active:
         since = Date(timeIntervalSince1970: lastLookedAt)
         recomputeSections()
