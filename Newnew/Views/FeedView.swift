@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 
 /// What happens to a story once you've read it (settings pane): it leaves Today, or it stays in
-/// place, greyed out and sunk below what's new.
+/// place, greyed out.
 enum ReadStories: String, CaseIterable, Identifiable {
   case disappear, stay
 
@@ -569,7 +569,7 @@ struct FeedView: View {
   private func recomputeSections() {
     let shown = held.map { ids in clusters.filter { ids.contains($0.id) && !$0.isDeleted } } ?? clusters
     withAnimation(.snappy(duration: 0.22)) {
-      sections = FeedSections(clusters: shown, filter: filter, hideRead: hidingRead, window: newsWindow)
+      sections = FeedSections(clusters: shown, filter: filter, hideRead: hidingRead, keepsReadInPlace: !readStoriesDisappear, window: newsWindow)
     }
   }
 
@@ -1216,9 +1216,16 @@ struct ReadyPill: View {
   private var window: UIWindow?
 
   func update(_ count: Int?, show: @escaping () -> Void = {}) {
-    if count != nil { install() }
     self.show = show
-    withAnimation(.spring(duration: 0.5, bounce: 0.25)) { self.count = count }
+    let animate = { withAnimation(.spring(duration: 0.55, bounce: 0.3)) { self.count = count } }
+    // A new window draws its first frame with whatever is set: let it draw empty, so the pill
+    // comes in from the top the first time too.
+    if count != nil, window == nil {
+      install()
+      DispatchQueue.main.async(execute: animate)
+    } else {
+      animate()
+    }
   }
 
   func tap() { show() }
@@ -1247,7 +1254,8 @@ struct ReadyOverlay: View {
         ReadyPill(count: count) { prompt.tap() }
           .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { prompt.pillFrame = $0 }
           .padding(.top, 6)
-          .transition(.move(edge: .top).combined(with: .opacity))
+          // Pushed down from above the screen's top edge, and back up when it goes.
+          .transition(.offset(y: -160))
       }
       Spacer(minLength: 0)
     }
@@ -1288,7 +1296,9 @@ struct FeedSections {
 
   init() {}
 
-  init(clusters: [StoryCluster], filter: FeedFilter, hideRead: Bool = true, window: NewsWindow = .h24) {
+  /// `keepsReadInPlace`: read stories stay where they were (Settings › Read stories › Stay),
+  /// instead of sinking down the page, out of sight.
+  init(clusters: [StoryCluster], filter: FeedFilter, hideRead: Bool = true, keepsReadInPlace: Bool = false, window: NewsWindow = .h24) {
     var pillars: [UUID: Pillar] = [:]
     let now = Date.now
     let cutoff = now.addingTimeInterval(-window.interval)
@@ -1332,7 +1342,7 @@ struct FeedSections {
 
 
     let outlets = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Set($0.articles.map(\.outlet)).count) })
-    let importance = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Self.importance($0, outlets: outlets[$0.id] ?? 0, now: now)) })
+    let importance = Dictionary(uniqueKeysWithValues: visible.map { ($0.id, Self.importance($0, outlets: outlets[$0.id] ?? 0, now: now, sinksRead: !keepsReadInPlace)) })
     let byImportance = { (a: StoryCluster, b: StoryCluster) in importance[a.id, default: 0] > importance[b.id, default: 0] }
     let newestFirst = { (a: StoryCluster, b: StoryCluster) in a.updatedAt > b.updatedAt }
 
@@ -1379,22 +1389,18 @@ struct FeedSections {
 
   /// How high a story goes: how widely it's covered, how fast coverage is growing right now,
   /// and how fresh it is. Coverage counts with diminishing returns (the 18th outlet adds less
-  /// than the 3rd); the story fades with a 6-hour half-life from its newest article; a story
-  /// you've read, with nothing new since, sinks.
+  /// than the 3rd); the story fades with a 6-hour half-life from its newest article; with
+  /// `sinksRead`, a story you've read, with nothing new since, sinks.
   ///
   /// So a story 12 outlets broke an hour ago beats one 18 outlets covered yesterday, and five
   /// outlets in the last hour beat ten spread over the day.
-  static func importance(_ cluster: StoryCluster, outlets: Int, now: Date) -> Double {
+  static func importance(_ cluster: StoryCluster, outlets: Int, now: Date, sinksRead: Bool = true) -> Double {
     let recent = Set(cluster.articles.filter { now.timeIntervalSince($0.publishedAt) < 2 * 3600 }.map(\.outlet)).count
     let coverage = log(1 + Double(outlets)) + 0.6 * log(1 + Double(recent))
     let hours = max(now.timeIntervalSince(cluster.updatedAt), 0) / 3600
     let freshness = pow(0.5, hours / 6)
-    let settled: Bool
-    if case .settledRead = ReadLedger.status(for: cluster) {
-      settled = true
-    } else {
-      settled = false
-    }
+    var settled = false
+    if sinksRead, case .settledRead = ReadLedger.status(for: cluster) { settled = true }
     return coverage * (0.25 + 0.75 * freshness) * (settled ? 0.4 : 1)
   }
 }

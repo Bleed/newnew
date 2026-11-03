@@ -265,7 +265,7 @@ struct ReadStoriesSettings: View {
         VStack(alignment: .leading, spacing: 3) {
           Text("After you've read a story").font(.body.weight(.medium))
           Text(readStoriesRaw == ReadStories.stay.rawValue
-            ? "It stays where it is, greyed out, and sinks below what's new. New coverage brings it back up."
+            ? "It stays where it is, greyed out, until new coverage makes it new again."
             : "It leaves Today until there's new coverage. The Read pill shows them again.")
             .font(.footnote)
             .tileSecondary()
