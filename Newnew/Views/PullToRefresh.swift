@@ -1,105 +1,43 @@
 import SwiftUI
 import UIKit
 
-/// Pull to refresh in the dot language (Figma: newnew › Pull to refresh), in place of the system
-/// spinner: a small dot board, around "new" over "new" as on the icon, in the middle of a blank
-/// band that opens at the top of the page. As you pull, its
-/// faint dots fill in from the left. Let go past `threshold` and it loops like an old departures
-/// board while the feed loads: the first "new" rolls in, then the second, then the first rolls
-/// out, then the second, and again. It always ends with both words in, then folds away, also
-/// when the feed was quicker. The same board shows when the app reads the feed by itself
-/// (`isSyncing`: on opening, on coming back).
+/// Pull to refresh with nothing of its own on screen: pull past `threshold` and let go, and the
+/// feeds are read; the block NEWNEW in Today's top rolls while they are (`NewsTop`), as it does
+/// for every sync. A light tap when the pull is far enough.
 struct PullToRefresh: ViewModifier {
   var action: @MainActor () async -> Void
-  /// A sync started elsewhere: show the board for it too.
-  var isSyncing: Bool
-  /// Whether the board is up, for the page to make room for it.
-  @Binding var isShowing: Bool
   @State private var pull: CGFloat = 0
-  @State private var board = BoardState()
-  @Environment(\.accessibilityReduceMotion) var reduceMotion
+  @State private var running = false
 
   static let threshold: CGFloat = 72
-  /// The blank band the board sits in while loading.
-  static let gap: CGFloat = 96
-  static let lift: CGFloat = 20
-
-  /// What the running loop changes, in an object so the changes reach the screen.
-  @MainActor @Observable final class BoardState {
-    var isShowing = false
-    var loop = WordLoop()
-    var waitingForSync = false
-  }
 
   func body(content: Content) -> some View {
     content
-      .safeAreaInset(edge: .top, spacing: 0) {
-        // While loading, the page opens a blank band at its top with the board in its middle.
-        if board.isShowing {
-          MiniDotBoard(fill: 1, first: board.loop.first, second: board.loop.second)
-            // A little above the middle of the band, closer to the top bar.
-            .offset(y: -Self.lift)
-            .frame(maxWidth: .infinity)
-            .frame(height: Self.gap)
-            .background(Swiss.canvas)
-            .transition(.opacity)
-        }
-      }
-      .overlay(alignment: .top) {
-        // While pulling, it fills in, centred in the gap the pull opens.
-        if !board.isShowing, pull > 2 {
-          MiniDotBoard(fill: min(pull / Self.threshold, 1), first: false, second: false)
-            .frame(maxWidth: .infinity)
-            .frame(height: min(pull, Self.gap))
-            .clipped()
-            .allowsHitTesting(false)
-        }
-      }
       .onScrollGeometryChange(for: CGFloat.self) { geometry in
         -(geometry.contentOffset.y + geometry.contentInsets.top)
       } action: { _, overscroll in
         pull = max(0, overscroll)
       }
       .onScrollPhaseChange { old, new in
-        if old == .interacting, new != .interacting, pull >= Self.threshold, !board.isShowing {
-          run { await action() }
-        }
+        if old == .interacting, new != .interacting, pull >= Self.threshold { run() }
       }
       .sensoryFeedback(.impact(weight: .light), trigger: pull >= Self.threshold) { _, full in full }
-      .onChange(of: board.isShowing) { _, showing in
-        withAnimation(.snappy(duration: 0.3)) { isShowing = showing }
-      }
-      .onChange(of: isSyncing, initial: true) { _, syncing in
-        board.waitingForSync = syncing
-        guard syncing, !board.isShowing else { return }
-        let board = board
-        run { while board.waitingForSync { try? await Task.sleep(for: .milliseconds(100)) } }
-      }
-      .accessibilityAction(named: "Refresh") { run { await action() } }
+      .accessibilityAction(named: "Refresh") { run() }
   }
 
-  /// Shows the board and loops the words while `work` runs; ends on both words in, then folds.
-  func run(_ work: @escaping @MainActor () async -> Void) {
-    let board = board
-    withAnimation(.snappy(duration: 0.2)) { board.isShowing = true }
-    let job = Task { await work() }
+  func run() {
+    guard !running else { return }
+    running = true
     Task {
-      var done = false
-      Task { await job.value; done = true }
-      await board.loop.run(reduceMotion: reduceMotion) { done }
-      try? await Task.sleep(for: .seconds(0.15))
-      withAnimation(.easeOut(duration: 0.25)) { board.isShowing = false }
-      board.loop.first = false
-      board.loop.second = false
+      await action()
+      running = false
     }
   }
 }
 
 extension View {
-  func dotRefreshable(
-    isSyncing: Bool, isShowing: Binding<Bool> = .constant(false), _ action: @escaping @MainActor () async -> Void
-  ) -> some View {
-    modifier(PullToRefresh(action: action, isSyncing: isSyncing, isShowing: isShowing))
+  func pullToRefresh(_ action: @escaping @MainActor () async -> Void) -> some View {
+    modifier(PullToRefresh(action: action))
   }
 }
 
@@ -109,7 +47,7 @@ struct MiniDotBoard: View {
   var fill: CGFloat
   var first: Bool
   var second: Bool
-  /// 4 in the pull-to-refresh band; onboarding draws it larger (and small, still, as a masthead).
+  /// Onboarding and the edition draw it at their own sizes.
   var pitch: CGFloat = 4
   static let cols = StackedWords.cols + 2
   static let rows = StackedWords.rows + 2

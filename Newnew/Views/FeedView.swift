@@ -230,12 +230,10 @@ struct FeedView: View {
   }
 
   static let headerTop: CGFloat = 24
-  static let headerBelowBand: CGFloat = 42
   /// Where Today is scrolled, to start a filter at its top.
   @State private var scrollPosition = ScrollPosition()
   /// Where the bar pins, counted from the top of the page.
   var pinOffset: CGFloat { topHeight + 12 }
-  @State private var boardShowing = false
   @State private var barPinned = false
   /// The top's height with its padding: the filter bar pins once the page has scrolled this far
   /// (plus the stack's 12 pt spacing). Measured, so it holds on every iPhone and text size.
@@ -328,7 +326,7 @@ struct FeedView: View {
               withAnimation(.snappy(duration: 0.2)) { hideRead = false }
             }
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.top, boardShowing ? Self.headerBelowBand : Self.headerTop)
+            .padding(.top, Self.headerTop)
             .padding(.bottom, 18)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
 
@@ -413,7 +411,7 @@ struct FeedView: View {
           .padding(.bottom, 32)
         }
         // Pinned once the page has scrolled past the top. Offset plus the top inset is the
-        // distance from rest, with or without the loading band. Reported as a Bool, so the page
+        // distance from rest. Reported as a Bool, so the page
         // only redraws when the bar pins or unpins, not on every frame of a scroll.
         .onScrollGeometryChange(for: Bool.self) { geometry in
           topHeight > 0 && geometry.contentOffset.y + geometry.contentInsets.top >= topHeight + 12 - 1
@@ -445,8 +443,8 @@ struct FeedView: View {
       .navigationBarTitleDisplayMode(.inline)
       // No fade at the top: the pinned filter bar covers what scrolls under it.
       .scrollEdgeEffectHidden(true, for: .top)
-      // The band only for a pull; a sync the app starts itself plays in Today's top.
-      .dotRefreshable(isSyncing: false, isShowing: $boardShowing) {
+      // Every sync, pulled or not, plays in Today's top.
+      .pullToRefresh {
         pulled = true
         if held != nil { showUpdate() }
         await pipeline.sync()
@@ -460,16 +458,6 @@ struct FeedView: View {
           }
         } else {
           syncEnded()
-        }
-      }
-      // The loading band opens over the page's top. Near the top, the page settles at its start
-      // under the band (and again when it folds), so the band never covers the top's first line;
-      // further down the page it stays where the reader is.
-      .onChange(of: boardShowing) {
-        guard !barPinned else { return }
-        Task { @MainActor in
-          await Task.yield()
-          withAnimation(.snappy(duration: 0.3)) { scrollPosition.scrollTo(edge: .top) }
         }
       }
       // Nothing shows behind the clock and the round buttons: page colour from the top of the
