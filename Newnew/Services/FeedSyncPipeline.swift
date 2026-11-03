@@ -2,16 +2,16 @@ import Foundation
 import NaturalLanguage
 import SwiftData
 
-/// Reads the chosen outlets' feeds (`FeedFetcher`, on this iPhone), stores new articles, embeds them, regroups the stories and applies the
-/// mute topics. Model changes stay on the main actor; the heavy parts (embedding, clustering)
-/// run off it.
+/// Reads the chosen outlets' feeds (`FeedFetcher`, on this iPhone) and hands them to
+/// `SyncWorker`, which stores, embeds, regroups and applies the topics on its own context off the
+/// main actor. What's left here is what the screen reads: whether a sync runs, where it is, and
+/// what it brought. The reader's own changes (read, briefs, topics) are saved here.
 @MainActor @Observable final class FeedSyncPipeline {
   let context: ModelContext
-  private let engine = OnDeviceVectorEngine.shared
   private(set) var isSyncing = false
   /// When the running (or last) sync began: what it brought in was fetched after this.
   private(set) var syncStarted: Date?
-  /// Where a sync is, for the loading board.
+  /// Where a sync is, for the loader.
   private(set) var phase: SyncPhase = .idle
   /// When the last sync finished; kept across launches.
   private(set) var lastSync: Date? {
@@ -19,16 +19,14 @@ import SwiftData
     set { UserDefaults.standard.set(newValue, forKey: "lastSyncAt") }
   }
   private(set) var lastError: String?
-  /// The mean article vector, taken away before comparing (see `Vec.centred`).
-  private var corpusMean: [Float]?
-  private var dimension = 0
-  private var kind: OnDeviceVectorEngine.Kind = .none
+  /// New articles per story from the last sync (muted stories left out).
+  private(set) var lastNew: [UUID: Int] = [:]
   private var didSanitizeOnLaunch = false
 
   /// Articles older than this are let go.
-  static let retention: TimeInterval = 72 * 3600
+  nonisolated static let retention: TimeInterval = 72 * 3600
   /// Charts come weekly; they stay two weeks.
-  static let chartRetention: TimeInterval = 14 * 24 * 3600
+  nonisolated static let chartRetention: TimeInterval = 14 * 24 * 3600
   static let refreshInterval: TimeInterval = 15 * 60
 
   /// Where newnew's own files are published (`NEWNEW_FEED_URL` in project.yml): its folder holds
@@ -49,23 +47,23 @@ import SwiftData
     self.context = context
   }
 
+  @ObservationIgnored private lazy var worker = SyncWorker(container: context.container)
+
   // MARK: Sync
 
-  /// Stories with at least one article that isn't muted.
-  var storyCount: Int {
-    ((try? context.fetch(FetchDescriptor<StoryCluster>())) ?? []).filter { !$0.isMuted && !$0.articles.isEmpty }.count
+  /// Whether anything is stored to show (a cheap count, for the first-install loader).
+  var hasStories: Bool {
+    ((try? context.fetchCount(FetchDescriptor<StoryCluster>())) ?? 0) > 0
   }
 
   func syncIfNeeded() async {
     // Nothing stored (a store started over) reads the feeds whenever the last sync was.
-    if let lastSync, Date.now.timeIntervalSince(lastSync) < Self.refreshInterval, storyCount > 0 {
+    if let lastSync, Date.now.timeIntervalSince(lastSync) < Self.refreshInterval, hasStories {
       // No sync due: regroup the stored stories once per launch, so a new grouping rule reaches
       // them. A sync regroups anyway, so launches that sync skip this extra pass.
       if !didSanitizeOnLaunch {
         didSanitizeOnLaunch = true
-        await recluster()
-        applyTopics()
-        try? context.save()
+        await regroup()
       }
       return
     }
@@ -76,38 +74,26 @@ import SwiftData
   func sync() async {
     guard !isSyncing else { return }
     isSyncing = true
-    syncStarted = .now
+    let started = Date.now
+    syncStarted = started
     phase = .downloading
     defer { isSyncing = false }
     do {
       // "phone-1": read from the feeds on this iPhone (builds up to 32 downloaded a feed newnew
       // published; those articles go once).
       let source = Self.feedURL == nil ? "sample" : "phone-1"
-      let articles = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
-      // The sample's links all go to example.com; none of them belong next to real news.
-      let hasSample = source != "sample" && articles.contains { $0.url.hasPrefix("https://example.com/") }
-      if storedSource != source || hasSample || articles.isEmpty {
-        // One by one: the bulk delete fails silently on the article–story relationship.
-        for cluster in (try? context.fetch(FetchDescriptor<StoryCluster>())) ?? [] { context.delete(cluster) }
-        for article in articles { context.delete(article) }
-        try context.save()
-        storedSource = source
-      }
-      var incoming = try await loadArticles()
+      if try await worker.clear(unless: source, stored: storedSource) { storedSource = source }
+      var incoming = try await loadArticles(worker)
       // The reader's own feeds too.
       for custom in OutletStore.shared.customFeeds { incoming += await CustomFeedReader.articles(custom) }
       phase = .reading(outlets: Set(incoming.map(\.outlet)).count)
-      let added = upsert(incoming)
-      prune()
-      tagRegions(added)
-      await embedMissing()
-      phase = .grouping
-      await recluster()
-      applyTopics()
-      try context.save()
+      let result = try await worker.ingest(incoming, since: started) { phase in
+        await MainActor.run { self.phase = phase }
+      }
+      lastNew = result.new
       lastSync = .now
       lastError = nil
-      phase = .done(stories: storyCount)
+      phase = .done(stories: result.stories)
     } catch {
       lastError = error.localizedDescription
       phase = .failed
@@ -116,7 +102,7 @@ import SwiftData
 
   /// The chosen outlets' articles, read from their feeds; the bundled sample without a
   /// `feedURL`.
-  func loadArticles() async throws -> [FeedArticleDTO] {
+  private func loadArticles(_ worker: SyncWorker) async throws -> [FeedArticleDTO] {
     guard Self.feedURL != nil else {
       let decoder = JSONDecoder()
       decoder.dateDecodingStrategy = .iso8601
@@ -125,8 +111,7 @@ import SwiftData
     let feeds = OutletStore.shared.chosenFeeds
     guard !feeds.isEmpty else { return [] }
     // HD video thumbnails already checked.
-    let stored = (try? context.fetch(FetchDescriptor<ArticleItem>(predicate: #Predicate { $0.videoID != nil }))) ?? []
-    let pictures = Dictionary(stored.compactMap { a in a.imageURL.map { (a.url, $0) } }, uniquingKeysWith: { a, _ in a })
+    let pictures = await worker.pictures()
     phase = .fetching(done: 0, total: feeds.count)
     let articles = await FeedFetcher.articles(feeds, pictures: pictures) { done, total in
       await MainActor.run { self.phase = .fetching(done: done, total: total) }
@@ -149,32 +134,9 @@ import SwiftData
     return feed.articles
   }
 
-  /// Inserts the articles not stored yet and returns them; updates the ones that changed (a
-  /// picture found later, a corrected headline), and reads changed text again.
-  @discardableResult
-  func upsert(_ incoming: [FeedArticleDTO]) -> [ArticleItem] {
-    let stored = Dictionary(((try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []).map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
-    let now = Date.now
-    var added: [ArticleItem] = []
-    for dto in incoming {
-      if let article = stored[dto.url] {
-        article.update(from: dto)
-        continue
-      }
-      let article = ArticleItem(dto, fetchedAt: now)
-      context.insert(article)
-      added.append(article)
-    }
-    return added
-  }
-
-  /// Tags the new articles' regions (a word list). Only new ones: tagging all of them each sync
-  /// held the main actor up for too long. A word-list fix applies as articles come in.
-  func tagRegions(_ articles: [ArticleItem]) {
-    for article in articles {
-      article.regionsRaw = RegionTagger.regions(title: article.title, snippet: article.snippet)
-        .map(\.rawValue).sorted().joined(separator: ",")
-    }
+  /// Regroups what's stored, off the main actor.
+  private func regroup() async {
+    _ = try? await worker.regroup()
   }
 
   /// After the reader changes their outlets: articles from outlets no longer read go now, and
@@ -185,9 +147,7 @@ import SwiftData
       context.delete(article)
     }
     try? context.save()
-    await recluster()
-    applyTopics()
-    try? context.save()
+    await regroup()
     if added { await sync() }
   }
 
@@ -199,106 +159,7 @@ import SwiftData
     try? context.save()
   }
 
-  func prune() {
-    let cutoff = Date.now.addingTimeInterval(-Self.retention)
-    let chartCutoff = Date.now.addingTimeInterval(-Self.chartRetention)
-    let episodeCutoff = Date.now.addingTimeInterval(-FeedFetcher.podcastMaxAge)
-    try? context.delete(
-      model: ArticleItem.self,
-      where: #Predicate {
-        $0.publishedAt < chartCutoff || ($0.publishedAt < cutoff && !$0.isChart && $0.audioURL == nil)
-          || ($0.publishedAt < episodeCutoff && $0.audioURL != nil)
-      })
-  }
-
-  // MARK: Vectors
-
-  func embedMissing() async {
-    await engine.prepare()
-    kind = await engine.kind
-    dimension = await engine.dimension
-    guard dimension > 0 else { return }
-    let bytes = dimension * MemoryLayout<Float>.size
-
-    let articles = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
-    let missing = articles.filter { $0.embedding?.count != bytes }
-    // In batches, so the loading board can count articles as they're read.
-    for start in stride(from: 0, to: missing.count, by: 40) {
-      phase = .embedding(done: start, total: missing.count)
-      let batch = Array(missing[start..<min(start + 40, missing.count)])
-      let vectors = await engine.embed(batch.map(\.text))
-      for (article, vector) in zip(batch, vectors) { article.embedding = vector.map(Vec.data) }
-    }
-    corpusMean = Vec.mean(articles.compactMap { Vec.vector($0.embedding) }.filter { $0.count == dimension })
-
-    let topics = (try? context.fetch(FetchDescriptor<SemanticTopic>())) ?? []
-    for topic in topics where topic.exampleEmbeddings?.count != topic.exampleHeadlines.count * bytes {
-      await embedExamples(topic)
-    }
-  }
-
-  private func embedExamples(_ topic: SemanticTopic) async {
-    let vectors = await engine.embed(topic.exampleHeadlines.map { $0.hasSuffix(".") ? $0 : $0 + "." })
-    let flat = vectors.compactMap { $0 }.flatMap { $0 }
-    topic.exampleEmbeddings = flat.isEmpty ? nil : Vec.data(flat)
-  }
-
-  private func centredVector(_ data: Data?) -> [Float]? {
-    guard let vector = Vec.vector(data), vector.count == dimension else { return nil }
-    return Vec.centred(vector, mean: corpusMean)
-  }
-
   // MARK: Stories
-
-  /// Regroups every article and keeps each story's identity (and its cached brief) where most
-  /// of its articles stay together. Also runs `StoryClusterSanitizer` so articles that only share
-  /// a country/demonym (e.g. "Japan" / "Japanese") are never merged into the same story.
-  func recluster() async {
-    let articles = (try? context.fetch(FetchDescriptor<ArticleItem>(sortBy: [SortDescriptor(\.publishedAt)]))) ?? []
-    guard !articles.isEmpty else { return }
-
-    if corpusMean == nil {
-      let rawVectors = articles.compactMap { Vec.vector($0.embedding) }
-      if let firstLen = rawVectors.first?.count, firstLen > 0 {
-        dimension = firstLen
-        corpusMean = Vec.mean(rawVectors.filter { $0.count == firstLen })
-      }
-    }
-
-    let inputs = articles.map {
-      StoryClusterer.Input(text: $0.text, outlet: $0.outlet, publishedAt: $0.publishedAt, vector: centredVector($0.embedding))
-    }
-    let meta = articles.map {
-      StoryClusterSanitizer.ItemMeta(title: $0.title, snippet: $0.snippet, outlet: $0.outlet)
-    }
-
-    let groups = await Task.detached(priority: .userInitiated) {
-      let rawGroups = StoryClusterer.groups(inputs)
-      return StoryClusterSanitizer.sanitize(groups: rawGroups, meta: meta)
-    }.value
-
-    var kept = Set<UUID>()
-    for group in groups.sorted(by: { $0.count > $1.count }) {
-      let items = group.map { articles[$0] }
-      var votes: [UUID: (cluster: StoryCluster, count: Int)] = [:]
-      for cluster in items.compactMap(\.cluster) where !kept.contains(cluster.id) {
-        votes[cluster.id, default: (cluster, 0)].count += 1
-      }
-      let cluster: StoryCluster
-      if let existing = votes.values.max(by: { $0.count < $1.count })?.cluster {
-        cluster = existing
-      } else {
-        cluster = StoryCluster(updatedAt: .now)
-        context.insert(cluster)
-      }
-      kept.insert(cluster.id)
-      for item in items where item.cluster?.id != cluster.id { item.cluster = cluster }
-      cluster.updatedAt = items.map(\.publishedAt).max() ?? cluster.updatedAt
-    }
-    for cluster in (try? context.fetch(FetchDescriptor<StoryCluster>())) ?? [] where !kept.contains(cluster.id) {
-      context.delete(cluster)
-    }
-  }
 
   func markRead(_ cluster: StoryCluster) {
     cluster.readAt = .now
@@ -313,32 +174,17 @@ import SwiftData
 
   // MARK: Topics
 
-  /// Example headline vs story ("Headline. Snippet") on centred vectors. Measured on a real
-  /// feed (1,063 articles): with the contextual model, true matches for "space" reach 0.60, but
-  /// a supervolcano and the Dead Sea sit at 0.51–0.53 and a weather story at 0.49; the older
-  /// sentence model ranks a cricket story first for "AI". So meaning alone only counts when it
-  /// is very close, and only with the contextual model; otherwise a topic word must appear too.
-  var meaningAloneThreshold: Float? { kind == .contextual ? 0.55 : nil }
-  /// Meaning needed alongside one topic word. Among articles that say "satellite", "moon" or
-  /// "space", real space stories score ≥ 0.40 (contextual) and an oil spill seen in "satellite
-  /// images" 0.36; the sentence model separates them less well (0.32 for the spill).
-  var meaningWithWordThreshold: Float { kind == .contextual ? 0.38 : 0.40 }
-
   /// `step` hears where it is, for the sheet to show.
   func addTopic(_ phrase: String, kind topicKind: TopicKind, step: (TopicStep) -> Void = { _ in }) async {
     let phrase = phrase.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !phrase.isEmpty else { return }
     step(.examples)
     let examples = await IntelligenceService.topicExamples(phrase)
-    let topic = SemanticTopic(phrase: phrase, kind: topicKind, exampleHeadlines: examples.headlines, keywords: examples.keywords)
-    step(.reading)
-    await embedExamples(topic)
-    step(.matching)
-    // Matching holds the main actor for a moment: let the sheet show the step first.
-    try? await Task.sleep(for: .milliseconds(60))
-    context.insert(topic)
-    applyTopics()
+    context.insert(SemanticTopic(phrase: phrase, kind: topicKind, exampleHeadlines: examples.headlines, keywords: examples.keywords))
     try? context.save()
+    step(.reading)
+    // The worker reads the examples and matches the stories.
+    await retopic()
   }
 
   /// "Follow / mute stories like this": the story's own coverage is the example, its shared
@@ -352,125 +198,25 @@ import SwiftData
       phrase: "Like “\(lead.title)”", kind: topicKind, exampleHeadlines: cluster.sortedArticles.prefix(4).map(\.title),
       keywords: Array(shared.prefix(4)))
     context.insert(topic)
-    await embedExamples(topic)
-    applyTopics()
     try? context.save()
+    await retopic()
   }
 
   func remove(_ topic: SemanticTopic) {
     context.delete(topic)
-    applyTopics()
     try? context.save()
+    Task { await retopic() }
   }
 
-  /// A story matches a topic when at least a third of its articles do, so one stray article
-  /// doesn't hide or raise a big story. Muting wins over following.
-  func applyTopics() {
-    let topics = (try? context.fetch(FetchDescriptor<SemanticTopic>(sortBy: [SortDescriptor(\.createdAt)]))) ?? []
-    let corpus = (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? []
-    let prepared = topics.map { topic in
-      (topic, Vec.vectors(topic.exampleEmbeddings, dimension: dimension).map { Vec.centred($0, mean: corpusMean) }, Self.topicWords(topic, corpus: corpus))
-    }
-    for cluster in (try? context.fetch(FetchDescriptor<StoryCluster>())) ?? [] {
-      let articles = cluster.articles
-      func first(_ topicKind: TopicKind) -> String? {
-        prepared.first { topic, examples, words in
-          guard topic.kind == topicKind else { return false }
-          let hits = articles.filter { matches($0, words: words, examples) }.count
-          return hits > 0 && Double(hits) / Double(articles.count) >= 0.34
-        }?.0.phrase
-      }
-      let mutedBy = first(.mute)
-      let followedBy = mutedBy == nil ? first(.follow) : nil
-      if cluster.mutedBy != mutedBy { cluster.mutedBy = mutedBy }
-      if cluster.followedBy != followedBy { cluster.followedBy = followedBy }
-    }
-  }
-
-  /// Words too broad to tell a topic apart: "tech" brought datacentre, drone and market stories
-  /// into "Apple". They count only when the person typed them in the topic itself.
-  static let broadWords: Set<String> = [
-    "tech", "technology", "technologies", "news", "update", "updates", "latest", "business", "market",
-    "markets", "company", "companies", "industry", "economy", "politics", "world", "science",
-    "health", "sport", "sports", "government", "innovation", "digital", "device", "devices", "app",
-    "apps", "software", "hardware", "smartphone", "smartphones", "phone", "phones", "gadget",
-    "gadgets", "product", "products", "launch", "release", "stocks", "shares", "investors", "ai",
-  ]
-
-  /// The topic's words, in two kinds. What the person typed decides: all of its words (less
-  /// "news" and the like) must appear, so "electric cars" isn't any story that says "electric".
-  /// The on-device model's keywords are close to random ("jordan" for Space, "denver" for
-  /// electric cars), so one counts only as a name the feed itself ties to the typed words.
-  struct TopicWords {
-    var typed: [String]
-    var names: Set<String>
-  }
-
-  static func topicWords(_ topic: SemanticTopic, corpus: [ArticleItem]) -> TopicWords {
-    // "Stories like this": nothing typed; the names its coverage shared are the words.
-    if topic.phrase.hasPrefix("Like “") { return TopicWords(typed: [], names: Set(topic.keywords)) }
-    let phrase = topic.phrase.lowercased()
-    let own = phrase.split { !$0.isLetter && !$0.isNumber }.map(String.init)
-    let kept = own.filter { $0.count > 1 && !broadWords.contains($0) }
-    let typed = kept.isEmpty ? [phrase] : kept
-    let suggested = Set(topic.keywords.filter { !broadWords.contains($0) && !typed.contains($0) })
-    return TopicWords(typed: typed, names: suggested.filter { isName($0, in: corpus, with: typed) })
-  }
-
-  /// Whole word, case-insensitive, with or without a plural s ("car" finds "cars").
-  static func contains(_ text: String, _ word: String) -> Bool {
-    let stem = word.count > 3 && word.hasSuffix("s") ? String(word.dropLast()) : word
-    return text.range(
-      of: "\\b\(NSRegularExpression.escapedPattern(for: stem))s?\\b", options: [.regularExpression, .caseInsensitive]) != nil
-  }
-
-  /// A keyword that is a name tied to the topic: the feed writes it with a capital letter
-  /// mid-sentence ("iPhone", "NASA", "Tim Cook") at least two times in three (snippets only;
-  /// many outlets capitalise every headline word), and articles that use it also use the
-  /// typed words (two of them, or a quarter).
-  static func isName(_ word: String, in corpus: [ArticleItem], with typed: [String]) -> Bool {
-    guard let pattern = try? NSRegularExpression(
-      pattern: "(?<![.!?:]\\s)(?<!^)\\b\(NSRegularExpression.escapedPattern(for: word))\\b", options: [.caseInsensitive])
-    else { return false }
-    var capital = 0, total = 0, using = 0, together = 0
-    for article in corpus where contains(article.text, word) {
-      using += 1
-      if typed.allSatisfy({ contains(article.text, $0) }) { together += 1 }
-      let text = article.snippet as NSString
-      for match in pattern.matches(in: article.snippet, range: NSRange(location: 0, length: text.length)) {
-        total += 1
-        if text.substring(with: match.range).contains(where: \.isUppercase) { capital += 1 }
-      }
-    }
-    return total > 0 && capital * 3 >= total * 2 && (together >= 2 || (together >= 1 && together * 4 >= using))
-  }
-
-  private func matches(_ article: ArticleItem, words: TopicWords, _ examples: [[Float]]) -> Bool {
-    let typedAnywhere = !words.typed.isEmpty && words.typed.allSatisfy { Self.contains(article.text, $0) }
-    let typedInHeadline = typedAnywhere && words.typed.contains { Self.contains(article.title, $0) }
-    let nameInHeadline = words.names.contains { Self.contains(article.title, $0) }
-    let nameAnywhere = nameInHeadline || words.names.contains { Self.contains(article.snippet, $0) }
-    guard let vector = centredVector(article.embedding) else {
-      // No vectors on this iPhone: the words in the headline.
-      return typedInHeadline || nameInHeadline
-    }
-    let score = examples.map { Vec.cosine(vector, $0) }.max() ?? 0
-    // What the person typed, in the headline, is enough. A name from the model in the headline
-    // must also be roughly on topic; meaning varies with the model's made-up examples ("Apple"
-    // stories scored 0.13–0.29 against them), so only roughly. Either one only in the snippet
-    // is often a passing mention ("Apple, Samsung and Google wallets"), so it must be close. Or,
-    // contextual model only, very close in meaning alone.
-    return typedInHeadline
-      || (nameInHeadline && score > meaningWithWordThreshold - 0.16)
-      || ((typedAnywhere || nameAnywhere) && score > meaningWithWordThreshold)
-      || meaningAloneThreshold.map { score > $0 } == true
+  private func retopic() async {
+    try? await worker.retopic()
   }
 }
 
 /// Validates every multi-article cluster returned by `StoryClusterer` and splits apart articles
 /// that were only grouped because they share a country/demonym (e.g. "Japan" / "Japanese") or
 /// transitive single-linkage chaining.
-enum StoryClusterSanitizer {
+nonisolated enum StoryClusterSanitizer {
   struct ItemMeta: Sendable {
     let title: String
     let snippet: String
@@ -638,7 +384,7 @@ enum TopicStep {
 }
 
 /// The steps of a sync, as the loading board shows them.
-enum SyncPhase: Equatable {
+nonisolated enum SyncPhase: Equatable, Sendable {
   case idle
   case downloading
   /// Feeds answered of those asked.

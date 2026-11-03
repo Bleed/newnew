@@ -3,7 +3,7 @@ import SwiftData
 
 /// One headline and snippet from one outlet. We never store or show the full article: the
 /// card links out to the publisher.
-@Model final class ArticleItem {
+@Model nonisolated final class ArticleItem {
   @Attribute(.unique) var url: String
   var title: String
   var snippet: String
@@ -76,7 +76,7 @@ import SwiftData
 }
 
 /// Articles from different outlets about the same event.
-@Model final class StoryCluster {
+@Model nonisolated final class StoryCluster {
   @Attribute(.unique) var id: UUID
   var createdAt: Date
   /// The newest article's time.
@@ -90,6 +90,11 @@ import SwiftData
   var followedBy: String?
   /// `ClusterPerspectiveBrief` as JSON, made on demand and kept.
   var cachedPerspectiveBriefJSON: Data?
+  /// The lead is a chart (charts stay two weeks), set when the stories are regrouped, so the feed
+  /// can pass over old stories without opening their articles.
+  var leadIsChart = false
+  /// `pillar`, kept the same way ("" until the next regroup).
+  var pillarRaw = ""
 
   init(updatedAt: Date) {
     id = UUID()
@@ -128,6 +133,9 @@ import SwiftData
     return Set(counts.filter { $0.value >= needed }.keys).union([.world])
   }
 
+  /// The pillar as stored at the last regroup, else worked out from the articles.
+  var storedPillar: Pillar { Pillar(rawValue: pillarRaw) ?? pillar }
+
   /// The pillar most of its articles are in; ties go to the lead's.
   var pillar: Pillar {
     let counts = Dictionary(articles.map { ($0.pillar, 1) }, uniquingKeysWith: +)
@@ -159,7 +167,7 @@ nonisolated enum TopicKind: String, Codable, CaseIterable {
 /// A topic you follow or mute, matched by idea rather than by word: it's kept as a few example
 /// headlines (written on device when you add it), and stories that read like them are raised
 /// or hidden.
-@Model final class SemanticTopic {
+@Model nonisolated final class SemanticTopic {
   var phrase: String
   /// `TopicKind`, as text.
   var kindRaw: String = TopicKind.mute.rawValue

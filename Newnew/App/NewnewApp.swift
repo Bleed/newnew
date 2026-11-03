@@ -37,7 +37,7 @@ struct NewnewApp: App {
     let pipeline = FeedSyncPipeline(context: container.mainContext)
     _pipeline = State(initialValue: pipeline)
     Self.pipeline = pipeline
-    let empty = OutletStore.shared.hasOnboarded && pipeline.storyCount == 0
+    let empty = OutletStore.shared.hasOnboarded && !pipeline.hasStories
     _showsLaunch = State(initialValue: empty)
     LaunchState.shared.isShowing = empty
   }

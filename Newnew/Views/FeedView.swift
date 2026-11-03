@@ -210,10 +210,7 @@ struct FeedView: View {
   /// stories it had, so nothing moves under you; when it's done Today's top and the ready pill
   /// ask (`ready`), and Show lets the new ones in. A pull shows them at once: you asked.
   @State private var held: Set<UUID>?
-  /// When the page began holding: everything fetched since waits behind Show, over one sync or
-  /// several.
-  @State private var heldSince: Date?
-  /// New articles waiting behind Show.
+  /// New articles waiting behind Show, over one sync or several.
   @State private var ready: Int?
   @State private var pulled = false
 
@@ -463,7 +460,6 @@ struct FeedView: View {
         if syncing {
           if held == nil, !pulled, !inEdition, !clusters.isEmpty {
             held = Set(clusters.map(\.id))
-            heldSince = pipeline.syncStarted ?? .now
           }
         } else {
           syncEnded()
@@ -580,9 +576,9 @@ struct FeedView: View {
   /// A sync the app started has finished: with something new to show, ask; otherwise carry on.
   private func syncEnded() {
     guard held != nil else { return }
-    let since = heldSince ?? pipeline.syncStarted ?? .now
-    let all = FeedSections(clusters: clusters, filter: .all, hideRead: hidingRead, window: newsWindow)
-    let new = all.visible.flatMap(\.articles).filter { $0.fetchedAt >= since }.count
+    // Counted by the sync worker, so the main actor doesn't walk every article. A second sync
+    // while the prompt is up adds to it.
+    let new = (ready ?? 0) + pipeline.lastNew.values.reduce(0, +)
     if new > 0 {
       withAnimation(.spring(duration: 0.5, bounce: 0.25)) { ready = new }
     } else {
@@ -595,7 +591,6 @@ struct FeedView: View {
     ReadyPrompt.shared.update(nil)
     withAnimation(.snappy(duration: 0.25)) { ready = nil }
     held = nil
-    heldSince = nil
     recomputeSections()
     Task { @MainActor in
       await Task.yield()
@@ -1299,14 +1294,14 @@ struct FeedSections {
     let cutoff = now.addingTimeInterval(-window.interval)
 
     for cluster in clusters {
-      let isChartCluster = cluster.lead?.isChart == true
-      if !isChartCluster && cluster.updatedAt < cutoff {
+      // Stored, not read from the lead: that opens the story's articles, and most stories are old.
+      if cluster.updatedAt < cutoff && !cluster.leadIsChart {
         continue
       }
 
       if cluster.isMuted { hiddenCount += 1; continue }
       guard !cluster.articles.isEmpty else { continue }
-      let pillar = cluster.pillar
+      let pillar = cluster.storedPillar
 
       let matchesFilter: Bool
       switch filter {
