@@ -229,7 +229,7 @@ struct FeedView: View {
     return filter
   }
 
-  static let headerTop: CGFloat = 24
+  static let headerTop: CGFloat = 12
   /// Where Today is scrolled, to start a filter at its top.
   @State private var scrollPosition = ScrollPosition()
   /// Where the bar pins, counted from the top of the page.
@@ -327,7 +327,7 @@ struct FeedView: View {
             }
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, Self.headerTop)
-            .padding(.bottom, 18)
+            .padding(.bottom, -2)
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
 
             // Stays at the top while the stories scroll under it.

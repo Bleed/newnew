@@ -22,10 +22,10 @@ struct FrontPageView<Top: View, Bar: View>: View {
       let twoColumnsWidth = columnWidth * 2 + Self.gap
 
       ScrollView {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 9) {
           top
             .frame(width: twoColumnsWidth, alignment: .leading)
-            .padding(.top, 12)
+            .padding(.top, 6)
 
           bar
 
