@@ -115,20 +115,15 @@ enum TodayMode: String, CaseIterable, Identifiable {
     save()
   }
 
-  func advance() {
-    guard var stored = current else { return }
-    stored.position += 1
+  /// The story the swipe has come to; past the last one, the edition is done.
+  func go(to position: Int) {
+    guard var stored = current, position != stored.position else { return }
+    stored.position = min(max(position, 0), stored.ids.count)
     if stored.position >= stored.ids.count {
       stored.finished = .now
       stored.reading = false
     }
     current = stored
-    save()
-  }
-
-  func back() {
-    guard let position = current?.position, position > 0 else { return }
-    current?.position = position - 1
     save()
   }
 

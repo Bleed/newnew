@@ -1,109 +1,274 @@
 import SwiftUI
 
-/// Today in zen mode (Figma: Zen mode): the edition's cover, then its stories one at a time,
-/// then "You're caught up" until the next edition. No feed, no counts, nothing to scroll.
+/// Today in zen mode (Figma: Zen · calm swipe, option E): a dark glow, a small NEWNEW in the
+/// corner, then the edition's stories one at a time in a vertical swipe, then "You're caught up"
+/// until the next edition. No list, no counts, no cards: the stories sit straight on the glow.
 struct EditionView: View {
   let clusters: [StoryCluster]
   var open: (StoryCluster) -> Void
   var showEverything: () -> Void
   @Environment(FeedSyncPipeline.self) var pipeline
   var edition = Edition.shared
+  /// Where the swipe is, in stories (2.4: between the third and the fourth): the glow follows.
+  @State private var progress: Double = 0
+  /// Where a finger is down, in global points: a soft light gathers there.
+  @State private var touch: CGPoint?
 
   var stories: [StoryCluster] {
     let byID = Dictionary(clusters.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     return (edition.current?.ids ?? []).compactMap { byID[$0] }
   }
 
+  enum Stage { case cover, reading, end }
+
   var body: some View {
     let stories = stories
-    Group {
-      if let current = edition.current, current.finished != nil || (!stories.isEmpty && current.position >= stories.count) {
-        EditionEnd(stories: stories, current: current, showEverything: showEverything)
-      } else if let current = edition.current, current.reading, !stories.isEmpty {
-        EditionReader(stories: stories, position: min(current.position, stories.count - 1), back: Set(current.back), open: open)
-      } else {
-        EditionCover(stories: stories, current: edition.current, showEverything: showEverything)
+    let stage: Stage = {
+      guard let current = edition.current else { return .cover }
+      if current.finished != nil || (!stories.isEmpty && current.position >= stories.count) { return .end }
+      return current.reading && !stories.isEmpty ? .reading : .cover
+    }()
+    ZStack {
+      ZenGlow(progress: progress, touch: touch, resting: stage == .end)
+        .ignoresSafeArea()
+      switch stage {
+      case .end:
+        if let current = edition.current { EditionEnd(stories: stories, current: current, showEverything: showEverything) }
+      case .reading:
+        EditionReader(stories: stories, start: min(edition.current?.position ?? 0, stories.count - 1),
+                      back: Set(edition.current?.back ?? []), open: open, progress: $progress)
+      case .cover:
+        EditionCover(stories: stories, current: edition.current)
       }
     }
-    .animation(.snappy(duration: 0.3), value: edition.current?.position)
-    .animation(.snappy(duration: 0.3), value: edition.current?.reading)
-    .onAppear { edition.refresh(from: clusters, syncing: pipeline.isSyncing) }
+    .overlay(alignment: .top) { header(stage, stories: stories) }
+    .simultaneousGesture(
+      DragGesture(minimumDistance: 0, coordinateSpace: .global)
+        .onChanged { touch = $0.location }
+        .onEnded { _ in touch = nil }
+    )
+    .animation(.smooth(duration: 0.5), value: stage)
+    .toolbar(.hidden, for: .navigationBar)
+    .preferredColorScheme(.dark)
+    .onAppear {
+      progress = Double(edition.current?.position ?? 0)
+      edition.refresh(from: clusters, syncing: pipeline.isSyncing)
+    }
     .onChange(of: pipeline.isSyncing) { edition.refresh(from: clusters, syncing: pipeline.isSyncing) }
     .onChange(of: clusters.count) { edition.refresh(from: clusters, syncing: pipeline.isSyncing) }
   }
+
+  /// The small NEWNEW in the corner (in a story, it leaves the edition for its cover), and
+  /// opposite it Exit Zen on the cover, where you are while reading.
+  func header(_ stage: Stage, stories: [StoryCluster]) -> some View {
+    HStack {
+      if stage == .reading {
+        Button { withAnimation(.smooth) { edition.pause() } } label: { ZenLogo() }
+          .accessibilityLabel("Leave the edition")
+      } else {
+        ZenLogo()
+      }
+      Spacer()
+      switch stage {
+      case .cover:
+        Button("Exit Zen", action: showEverything)
+          .font(.subheadline)
+          .foregroundStyle(.white.opacity(0.66))
+      case .reading:
+        let position = min(edition.current?.position ?? 0, stories.count - 1) + 1
+        Text("\(position) / \(stories.count)")
+          .font(.footnote)
+          .monospacedDigit()
+          .foregroundStyle(.white.opacity(0.85))
+          .padding(.horizontal, 10)
+          .padding(.vertical, 5)
+          .glassEffect(.regular, in: .capsule)
+          .accessibilityLabel("Story \(position) of \(stories.count)")
+          .contentTransition(.numericText())
+      case .end:
+        EmptyView()
+      }
+    }
+    .frame(height: 32)
+    .padding(.horizontal, Swiss.pageInset + 8)
+    .padding(.top, 8)
+  }
 }
 
-/// "Ten stories, then you're done." with the first four listed.
+/// Zen's colour (Figma: Zen · calm swipe): a night field lit at the rim, with teal, plum and coral
+/// bands that breathe on a 12 s loop, move up one band for every story swiped, and lean toward a
+/// finger, a soft light gathering under it. Caught up: half strength and still. Reduce Motion: no
+/// breathing and no light; the bands still follow the stories.
+struct ZenGlow: View {
+  var progress: Double = 0
+  var touch: CGPoint?
+  var resting = false
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var start = Date.now
+
+  static let night = Color(rgb: 0x08070D)
+  static let rim = Color(rgb: 0x6A5AD8)
+  static let bands = [Color(rgb: 0x2B8481), Color(rgb: 0x9E3C86), Color(rgb: 0xE3988C)]
+  static let breath: Double = 12
+
+  var body: some View {
+    GeometryReader { proxy in
+      let frame = proxy.frame(in: .global)
+      let finger = touch.map { CGPoint(x: ($0.x - frame.minX) / frame.width, y: ($0.y - frame.minY) / frame.height) }
+      TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || resting)) { context in
+        let t = reduceMotion ? 0 : context.date.timeIntervalSince(start)
+        MeshGradient(width: 4, height: 5, points: points(t, finger: reduceMotion ? nil : finger), colors: colors)
+      }
+      .overlay {
+        if let touch, !reduceMotion, !resting {
+          Circle()
+            .fill(RadialGradient(colors: [.white.opacity(0.22), .white.opacity(0)], center: .center, startRadius: 0, endRadius: 120))
+            .frame(width: 240, height: 240)
+            .position(x: touch.x - frame.minX, y: touch.y - frame.minY)
+            .blendMode(.plusLighter)
+            .transition(.opacity.animation(.easeOut(duration: 0.6)))
+        }
+      }
+      .animation(.easeOut(duration: 0.25), value: touch == nil)
+    }
+    .animation(.smooth(duration: 0.8), value: resting)
+    .accessibilityHidden(true)
+  }
+
+  /// A 4 × 5 grid: the outer points hold the rim, the six inside drift (a slow breath, each a
+  /// little out of step) and lean 8% toward the finger.
+  func points(_ t: Double, finger: CGPoint?) -> [SIMD2<Float>] {
+    var points: [SIMD2<Float>] = []
+    for row in 0..<5 {
+      for column in 0..<4 {
+        var x = Double(column) / 3, y = Double(row) / 4
+        if (1...2).contains(column), (1...3).contains(row) {
+          let phase = t / Self.breath * 2 * .pi + Double(row * 4 + column)
+          x += 0.05 * sin(phase)
+          y += 0.035 * cos(phase * 0.8)
+          if let finger {
+            x += (finger.x - x) * 0.08
+            y += (finger.y - y) * 0.08
+          }
+        }
+        points.append(SIMD2(Float(x), Float(y)))
+      }
+    }
+    return points
+  }
+
+  /// Rim on the edges (night in the corners), the bands inside: the row at the top has the colour
+  /// the row below had a story ago, so swiping on hands each colour up.
+  var colors: [Color] {
+    let strength = resting ? 0.5 : 1
+    var colors: [Color] = []
+    for row in 0..<5 {
+      for column in 0..<4 {
+        let corner = (row == 0 || row == 4) && (column == 0 || column == 3)
+        let edge = row == 0 || row == 4 || column == 0 || column == 3
+        var color: Color
+        if corner {
+          color = Self.night
+        } else if edge {
+          color = Self.rim.mix(with: Self.night, by: 0.15)
+        } else {
+          color = band(Double(row - 1) + progress)
+          // One side of each row a little deeper, alternating, so the bands aren't flat stripes.
+          if (row + column).isMultiple(of: 2) { color = color.mix(with: Self.night, by: 0.4) }
+        }
+        colors.append(color.mix(with: Self.night, by: 1 - strength))
+      }
+    }
+    return colors
+  }
+
+  func band(_ x: Double) -> Color {
+    let index = Int(floor(x)), fraction = x - floor(x)
+    let count = Self.bands.count
+    let a = Self.bands[((index % count) + count) % count], b = Self.bands[(((index + 1) % count) + count) % count]
+    return a.mix(with: b, by: fraction)
+  }
+}
+
+/// The small solid NEWNEW in Zen's corner: the block face, 20 pt tall.
+struct ZenLogo: View {
+  var height: CGFloat = 20
+
+  var body: some View {
+    let glyphs = Array("NEWNEW"), unit = height / (10 * BlockText.tall)
+    Canvas { ctx, _ in
+      var x: CGFloat = 0
+      for character in glyphs {
+        ctx.fill(BlockFont.path(character, x: x, unit: unit, stretchY: BlockText.tall), with: .color(.white))
+        x += (BlockFont.width(character) + BlockFont.gap) * unit
+      }
+    }
+    .frame(width: BlockFont.width(glyphs) * unit, height: height)
+    .accessibilityLabel("newnew")
+  }
+}
+
+/// The edition's cover: no list. When it is, and one sentence; swipe up (or tap) to begin.
 struct EditionCover: View {
   let stories: [StoryCluster]
   let current: Edition.Stored?
-  var showEverything: () -> Void
   var edition = Edition.shared
 
-  var outlets: Int { Set(stories.flatMap(\.outlets)).count }
-
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 14) {
-        MiniDotBoard(fill: 1, first: true, second: true, pitch: 2)
-          .padding(.top, 8)
-          .padding(.bottom, 6)
-          .accessibilityHidden(true)
-        if let current {
-          Eyebrow("\(Edition.name(current.slot)) · \(current.slot.formatted(.dateTime.weekday(.wide).day().month(.wide)))")
-          if stories.isEmpty {
-            OnboardingHeadline("Nothing widely covered yet.", size: 38)
-            OnboardingDeck("No story has been covered by enough of your outlets since the last edition. The next one is at \(Edition.next(current.slot).formatted(date: .omitted, time: .shortened)).")
-          } else {
-            OnboardingHeadline("\(Self.count(stories.count)) \(stories.count == 1 ? "story" : "stories"), then you're done.", size: 38)
-            OnboardingDeck("The most covered news since \(Edition.isMorning(current.slot) ? "last night" : "this morning"), from \(outlets) outlets. About \(max(1, stories.count * 70 / 60)) minutes.")
-            contents
-          }
+    VStack(alignment: .leading, spacing: 12) {
+      Spacer()
+      if let current {
+        Text("\(Edition.name(current.slot)) · \(current.slot.formatted(date: .omitted, time: .shortened))")
+          .font(.footnote)
+          .foregroundStyle(.white.opacity(0.66))
+        if stories.isEmpty {
+          headline("Nothing widely\ncovered yet.")
+          deck("No story has been covered by enough of your outlets since the last edition. The next one is at \(Edition.next(current.slot).formatted(date: .omitted, time: .shortened)).")
         } else {
-          OnboardingHeadline("Your first edition is being made.", size: 38)
-          OnboardingDeck("It's made from what your outlets cover most, once the news has been read.")
+          headline("\(Self.count(stories.count)) \(stories.count == 1 ? "story" : "stories"),\nthen rest.")
         }
-        if !stories.isEmpty {
-          Button(current?.started == nil ? "Begin reading" : "Go on reading") { edition.begin() }
-            .buttonStyle(.swissPrimary)
-            .padding(.top, 10)
-        }
-        Button("Show everything instead", action: showEverything)
-          .font(.subheadline.weight(.medium))
-          .foregroundStyle(Swiss.muted)
-          .padding(.top, 4)
+      } else {
+        headline("Your first edition\nis being made.")
+        deck("It's made from what your outlets cover most, once the news has been read.")
       }
-      .padding(.horizontal, Swiss.pageInset)
-      .padding(.bottom, 32)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      Spacer().frame(height: 72)
+      if !stories.isEmpty {
+        Button { begin() } label: {
+          VStack(spacing: 10) {
+            Text(current?.started == nil ? "Swipe up to begin" : "Swipe up to go on")
+              .font(.subheadline)
+              .foregroundStyle(.white.opacity(0.66))
+            Capsule().fill(.white.opacity(0.5)).frame(width: 36, height: 4)
+          }
+          .frame(maxWidth: .infinity)
+          .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.bottom, 12)
+      }
     }
+    .padding(.horizontal, Swiss.pageInset + 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(.rect)
+    .gesture(DragGesture(minimumDistance: 24).onEnded { value in
+      if value.translation.height < -40, !stories.isEmpty { begin() }
+    })
   }
 
-  var contents: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Eyebrow("In this edition")
-      ForEach(Array(stories.prefix(4).enumerated()), id: \.element.id) { index, story in
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-          Text("\(index + 1)")
-            .font(.footnote.weight(.medium))
-            .frame(width: 24, height: 24)
-            .background(Swiss.card, in: Circle())
-            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 7 }
-          VStack(alignment: .leading, spacing: 2) {
-            Text(story.lead?.title ?? "").font(Swiss.headline(18, relativeTo: .body)).foregroundStyle(Swiss.ink)
-              .fixedSize(horizontal: false, vertical: true)
-            Text(current?.back.contains(story.id) == true ? "Back · \(story.newSinceRead) new since you read it" : "\(story.outlets.count) sources")
-              .font(.footnote).foregroundStyle(Swiss.muted)
-          }
-        }
-      }
-      if stories.count > 4 {
-        Text("and \(Self.count(stories.count - 4).lowercased()) more").font(.footnote).foregroundStyle(Swiss.muted)
-      }
-    }
-    .padding(16)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .tile(.plain)
+  func begin() { withAnimation(.smooth(duration: 0.5)) { edition.begin() } }
+
+  func headline(_ text: String) -> some View {
+    Text(text)
+      .font(Swiss.headline(44, relativeTo: .largeTitle))
+      .foregroundStyle(.white)
+      .fixedSize(horizontal: false, vertical: true)
+  }
+
+  func deck(_ text: String) -> some View {
+    Text(text)
+      .font(.body)
+      .foregroundStyle(.white.opacity(0.66))
+      .fixedSize(horizontal: false, vertical: true)
   }
 
   /// "Ten", "Six".
@@ -116,101 +281,133 @@ struct EditionCover: View {
   }
 }
 
-/// One story at a time: progress, the story's card, Next story and Read.
+/// The stories, one at a time, in a vertical swipe that snaps each to the middle. No frames, no
+/// blur: the one in the middle at full strength, the one before and after faded above and below.
+/// Swiping past the last ends the edition. A tap opens the story page.
 struct EditionReader: View {
   let stories: [StoryCluster]
-  let position: Int
+  let start: Int
   let back: Set<UUID>
   var open: (StoryCluster) -> Void
+  @Binding var progress: Double
   @Environment(FeedSyncPipeline.self) var pipeline
   var edition = Edition.shared
-
-  var story: StoryCluster { stories[position] }
+  @State private var position: Int?
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      HStack(spacing: 10) {
-        HStack(spacing: 5) {
-          ForEach(0..<stories.count, id: \.self) { index in
-            Capsule().fill(Swiss.ink.opacity(index <= position ? 1 : 0.15)).frame(width: index == position ? 20 : 7, height: 7)
-          }
-        }
-        .accessibilityHidden(true)
-        Spacer()
-        DotChip("\(position + 1) OF \(stories.count)", label: "Story \(position + 1) of \(stories.count)")
-        Button("Leave the edition", systemImage: "xmark") { edition.pause() }
-          .buttonStyle(.roundIcon)
-      }
-      .padding(.top, 8)
-      .padding(.bottom, 14)
-      ScrollView {
-        VStack(alignment: .leading, spacing: 10) {
-          if back.contains(story.id) {
-            Text("Back · \(story.newSinceRead) new since you read it").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted)
-          }
-          Button { open(story) } label: { StoryCard(cluster: story) }
+    GeometryReader { proxy in
+      let page = (proxy.size.height * 0.62).rounded()
+      ScrollView(.vertical) {
+        LazyVStack(spacing: 0) {
+          ForEach(Array(stories.enumerated()), id: \.offset) { index, story in
+            Button { open(story) } label: {
+              ZenStory(story: story, back: back.contains(story.id))
+                .frame(height: page)
+            }
             .buttonStyle(.plain)
+            .id(index)
+            .scrollTransition(.interactive, axis: .vertical) { content, phase in
+              content.opacity(1 - 0.65 * min(abs(phase.value), 1))
+            }
+          }
+          // Past the last story: the end.
+          Color.clear.frame(height: page).id(stories.count)
         }
-        .id(story.id)
-        .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
+        .scrollTargetLayout()
       }
+      .contentMargins(.vertical, (proxy.size.height - page) / 2, for: .scrollContent)
+      .scrollTargetBehavior(.viewAligned(limitBehavior: .alwaysByOne))
+      .scrollPosition(id: $position, anchor: .center)
       .scrollIndicators(.hidden)
-      HStack(spacing: 10) {
-        Button(position + 1 < stories.count ? "Next story" : "Finish") { next() }
-          .buttonStyle(.swissPrimary)
-        Button("Read") { open(story) }
-          .buttonStyle(.swissSecondary)
+      .onScrollGeometryChange(for: Double.self) { geometry in
+        Double((geometry.contentOffset.y + geometry.contentInsets.top) / page)
+      } action: { _, value in
+        progress = max(0, value)
       }
-      .padding(.vertical, 12)
+      // Stories come and go softly at the top and the bottom.
+      .mask {
+        LinearGradient(stops: [
+          .init(color: .clear, location: 0), .init(color: .black, location: 0.16),
+          .init(color: .black, location: 0.84), .init(color: .clear, location: 1),
+        ], startPoint: .top, endPoint: .bottom)
+      }
+      .onChange(of: position) { old, new in moved(from: old, to: new) }
     }
-    .padding(.horizontal, Swiss.pageInset)
-    // Swipe left for the next story, right for the one before.
-    .gesture(DragGesture(minimumDistance: 30).onEnded { value in
-      if value.translation.width < -60 { next() } else if value.translation.width > 60 { withAnimation(.snappy) { edition.back() } }
-    })
-    .accessibilityAction(named: "Next story") { next() }
+    .onAppear { position = start }
+    .accessibilityAction(named: "Next story") { position = min((position ?? 0) + 1, stories.count) }
   }
 
-  func next() {
-    pipeline.markRead(story)
-    withAnimation(.snappy) { edition.advance() }
+  /// Moving on counts the story you leave as read.
+  func moved(from old: Int?, to new: Int?) {
+    guard let new else { return }
+    if let old, new > old, old < stories.count { pipeline.markRead(stories[old]) }
+    withAnimation(.smooth(duration: 0.5)) { edition.go(to: new) }
   }
 }
 
-/// "You're caught up." and when the next edition comes.
+/// One story on the glow: the picture, what and how widely covered, the headline in the serif.
+struct ZenStory: View {
+  let story: StoryCluster
+  let back: Bool
+
+  var body: some View {
+    if let lead = story.lead {
+      VStack(alignment: .leading, spacing: 12) {
+        HeroImage(
+          remote: lead.imageURL, article: lead.url, radius: 20, aspect: 16 / 10,
+          fits: lead.isChart, isVideo: lead.videoID != nil, topAligned: story.pillar.isPortrait
+        )
+        Text(back ? "Back · \(story.newSinceRead) new since you read it" : "\(story.pillar.title) · \(story.outlets.count) sources")
+          .font(.footnote)
+          .foregroundStyle(.white.opacity(0.62))
+        Text(lead.title)
+          .font(Swiss.headline(26, relativeTo: .title2))
+          .foregroundStyle(.white)
+          .lineLimit(4)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .padding(.horizontal, Swiss.pageInset + 8)
+      .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+      .contentShape(.rect)
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(lead.title)
+      .accessibilityHint("\(story.outlets.count) sources. Opens the story.")
+    }
+  }
+}
+
+/// "You're caught up." and when the next edition comes; the glow rests at half strength.
 struct EditionEnd: View {
   let stories: [StoryCluster]
   let current: Edition.Stored
   var showEverything: () -> Void
 
   var body: some View {
-    VStack(spacing: 18) {
+    VStack(alignment: .leading, spacing: 14) {
       Spacer()
-      MiniDotBoard(fill: 1, first: true, second: true, pitch: 7)
-        .accessibilityHidden(true)
-      OnboardingHeadline("You're caught up.", size: 38)
-        .multilineTextAlignment(.center)
+      Text("You're caught up.")
+        .font(Swiss.headline(44, relativeTo: .largeTitle))
+        .foregroundStyle(.white)
+        .fixedSize(horizontal: false, vertical: true)
       Text(summary)
         .font(.body)
-        .foregroundStyle(Swiss.muted)
-        .multilineTextAlignment(.center)
+        .foregroundStyle(.white.opacity(0.66))
         .fixedSize(horizontal: false, vertical: true)
       Spacer()
-      Button("Show everything instead", action: showEverything)
-        .font(.subheadline.weight(.medium))
-        .foregroundStyle(Swiss.muted)
+      Button("Exit Zen and browse everything", action: showEverything)
+        .font(.subheadline)
+        .foregroundStyle(.white.opacity(0.66))
+        .frame(maxWidth: .infinity)
         .padding(.bottom, 20)
     }
-    .padding(.horizontal, Swiss.pageInset)
-    .frame(maxWidth: .infinity)
+    .padding(.horizontal, Swiss.pageInset + 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   var summary: String {
-    let outlets = Set(stories.flatMap(\.outlets)).count
-    let minutes = current.started.map { max(1, Int((current.finished ?? .now).timeIntervalSince($0) / 60)) }
     let next = Edition.next(current.slot).formatted(date: .omitted, time: .shortened)
-    let read = minutes.map { ", read in \($0) \($0 == 1 ? "minute" : "minutes")" } ?? ""
-    return "\(EditionCover.count(stories.count)) \(stories.count == 1 ? "story" : "stories") from \(outlets) outlets\(read). The next edition is at \(next)."
+    let count = EditionCover.count(stories.count)
+    return "\(count) \(stories.count == 1 ? "story" : "stories") read. The \(Edition.isMorning(Edition.next(current.slot)) ? "morning" : "evening") edition comes at \(next)."
   }
 }
 
