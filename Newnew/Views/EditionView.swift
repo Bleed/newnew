@@ -117,7 +117,7 @@ struct ZenGlow: View {
       let finger = touch.map { CGPoint(x: ($0.x - frame.minX) / frame.width, y: ($0.y - frame.minY) / frame.height) }
       TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || resting)) { context in
         let t = reduceMotion ? 0 : context.date.timeIntervalSince(start)
-        MeshGradient(width: 4, height: 5, points: points(t, finger: reduceMotion ? nil : finger), colors: colors)
+        MeshGradient(width: Self.xs.count, height: Self.ys.count, points: points(t, finger: reduceMotion ? nil : finger), colors: colors)
       }
       .overlay {
         if let touch, !reduceMotion, !resting {
@@ -135,14 +135,18 @@ struct ZenGlow: View {
     .accessibilityHidden(true)
   }
 
-  /// A 4 × 5 grid: the outer points hold the rim, the six inside drift (a slow breath, each a
+  /// The grid's columns and rows: the inner ones close to the edges, so the rim stays a rim.
+  static let xs: [Double] = [0, 0.14, 0.86, 1]
+  static let ys: [Double] = [0, 0.09, 0.36, 0.64, 0.91, 1]
+
+  /// A 4 × 6 grid: the outer points hold the rim, the eight inside drift (a slow breath, each a
   /// little out of step) and lean 8% toward the finger.
   func points(_ t: Double, finger: CGPoint?) -> [SIMD2<Float>] {
     var points: [SIMD2<Float>] = []
-    for row in 0..<5 {
-      for column in 0..<4 {
-        var x = Double(column) / 3, y = Double(row) / 4
-        if (1...2).contains(column), (1...3).contains(row) {
+    for row in Self.ys.indices {
+      for column in Self.xs.indices {
+        var x = Self.xs[column], y = Self.ys[row]
+        if (1...2).contains(column), (1...4).contains(row) {
           let phase = t / Self.breath * 2 * .pi + Double(row * 4 + column)
           x += 0.05 * sin(phase)
           y += 0.035 * cos(phase * 0.8)
@@ -162,10 +166,11 @@ struct ZenGlow: View {
   var colors: [Color] {
     let strength = resting ? 0.5 : 1
     var colors: [Color] = []
-    for row in 0..<5 {
-      for column in 0..<4 {
-        let corner = (row == 0 || row == 4) && (column == 0 || column == 3)
-        let edge = row == 0 || row == 4 || column == 0 || column == 3
+    let last = Self.ys.count - 1
+    for row in Self.ys.indices {
+      for column in Self.xs.indices {
+        let corner = (row == 0 || row == last) && (column == 0 || column == 3)
+        let edge = row == 0 || row == last || column == 0 || column == 3
         var color: Color
         if corner {
           color = Self.night
@@ -173,8 +178,10 @@ struct ZenGlow: View {
           color = Self.rim.mix(with: Self.night, by: 0.15)
         } else {
           color = band(Double(row - 1) + progress)
-          // One side of each row a little deeper, alternating, so the bands aren't flat stripes.
-          if (row + column).isMultiple(of: 2) { color = color.mix(with: Self.night, by: 0.4) }
+          // Dark just inside the rim (only the edge is lit), and one side of each row a little
+          // deeper, alternating, so the bands aren't flat stripes.
+          if row == 1 || row == last - 1 { color = color.mix(with: Self.night, by: 0.55) }
+          if (row + column).isMultiple(of: 2) { color = color.mix(with: Self.night, by: 0.3) }
         }
         colors.append(color.mix(with: Self.night, by: 1 - strength))
       }
@@ -292,16 +299,28 @@ struct EditionReader: View {
   @Binding var progress: Double
   @Environment(FeedSyncPipeline.self) var pipeline
   var edition = Edition.shared
-  @State private var position: Int?
+  @State private var scroll = ScrollPosition(idType: Int.self)
+  var position: Int? { scroll.viewID(type: Int.self) }
+  /// Until the swipe has come back to where you were, its moves aren't yours.
+  @State private var restored = false
+
+  init(stories: [StoryCluster], start: Int, back: Set<UUID>, open: @escaping (StoryCluster) -> Void, progress: Binding<Double>) {
+    self.stories = stories
+    self.start = start
+    self.back = back
+    self.open = open
+    _progress = progress
+  }
 
   var body: some View {
     GeometryReader { proxy in
       let page = (proxy.size.height * 0.62).rounded()
       ScrollView(.vertical) {
-        LazyVStack(spacing: 0) {
+        // Not lazy: at most 15 stories, all laid out, so the swipe can open on the one you were at.
+        VStack(spacing: 0) {
           ForEach(Array(stories.enumerated()), id: \.offset) { index, story in
             Button { open(story) } label: {
-              ZenStory(story: story, back: back.contains(story.id))
+              ZenStory(story: story, back: back.contains(story.id) && story.newSinceRead > 0)
                 .frame(height: page)
             }
             .buttonStyle(.plain)
@@ -317,7 +336,7 @@ struct EditionReader: View {
       }
       .contentMargins(.vertical, (proxy.size.height - page) / 2, for: .scrollContent)
       .scrollTargetBehavior(.viewAligned(limitBehavior: .alwaysByOne))
-      .scrollPosition(id: $position, anchor: .center)
+      .scrollPosition($scroll, anchor: .center)
       .scrollIndicators(.hidden)
       .onScrollGeometryChange(for: Double.self) { geometry in
         Double((geometry.contentOffset.y + geometry.contentInsets.top) / page)
@@ -327,19 +346,33 @@ struct EditionReader: View {
       // Stories come and go softly at the top and the bottom.
       .mask {
         LinearGradient(stops: [
-          .init(color: .clear, location: 0), .init(color: .black, location: 0.16),
+          .init(color: .clear, location: 0.06), .init(color: .black, location: 0.26),
           .init(color: .black, location: 0.84), .init(color: .clear, location: 1),
         ], startPoint: .top, endPoint: .bottom)
       }
       .onChange(of: position) { old, new in moved(from: old, to: new) }
+      // Open on the story you were at, once the page has its size.
+      .onAppear {
+        scroll.scrollTo(id: start, anchor: .center)
+        if start == 0 { restored = true }
+      }
+      .task {
+        try? await Task.sleep(for: .milliseconds(60))
+        if position != start { scroll.scrollTo(id: start, anchor: .center) }
+      }
     }
-    .onAppear { position = start }
-    .accessibilityAction(named: "Next story") { position = min((position ?? 0) + 1, stories.count) }
+    .accessibilityAction(named: "Next story") {
+      withAnimation(.smooth) { scroll.scrollTo(id: min((position ?? start) + 1, stories.count), anchor: .center) }
+    }
   }
 
   /// Moving on counts the story you leave as read.
   func moved(from old: Int?, to new: Int?) {
     guard let new else { return }
+    guard restored else {
+      restored = new == start
+      return
+    }
     if let old, new > old, old < stories.count { pipeline.markRead(stories[old]) }
     withAnimation(.smooth(duration: 0.5)) { edition.go(to: new) }
   }
