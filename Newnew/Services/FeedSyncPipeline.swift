@@ -9,9 +9,11 @@ import SwiftData
   let context: ModelContext
   private let engine = OnDeviceVectorEngine.shared
   private(set) var isSyncing = false
+  /// When the running (or last) sync began: what it brought in was fetched after this.
+  private(set) var syncStarted: Date?
   /// Where a sync is, for the loading board.
   private(set) var phase: SyncPhase = .idle
-  /// When the last sync finished; kept across launches, for `hasALotToLoad`.
+  /// When the last sync finished; kept across launches.
   private(set) var lastSync: Date? {
     get { UserDefaults.standard.object(forKey: "lastSyncAt") as? Date }
     set { UserDefaults.standard.set(newValue, forKey: "lastSyncAt") }
@@ -73,6 +75,7 @@ import SwiftData
   func sync() async {
     guard !isSyncing else { return }
     isSyncing = true
+    syncStarted = .now
     phase = .downloading
     defer { isSyncing = false }
     do {
@@ -108,24 +111,6 @@ import SwiftData
       lastError = error.localizedDescription
       phase = .failed
     }
-  }
-
-  /// Away longer than this, opening the app is a big catch-up (hundreds of articles to read on
-  /// the device): the full-screen loader stays up with its
-  /// progress bar until it's done, instead of the small pull-down band.
-  static let bigCatchUp: TimeInterval = 3 * 3600
-
-  /// The loading board finishes on a done (or failed) phase; when it comes back for a catch-up
-  /// the last sync's "done" must not end it before the new sync starts.
-  func prepareForCatchUp() {
-    if !isSyncing { phase = .downloading }
-  }
-
-  /// Whether the next sync has a lot to do: nothing stored yet, or the last sync is older than
-  /// `bigCatchUp`.
-  var hasALotToLoad: Bool {
-    guard storyCount > 0, let lastSync else { return true }
-    return Date.now.timeIntervalSince(lastSync) > Self.bigCatchUp
   }
 
   /// The chosen outlets' articles, read from their feeds; the bundled sample without a
@@ -664,6 +649,14 @@ enum SyncPhase: Equatable {
   case grouping
   case done(stories: Int)
   case failed
+
+  /// Done, or given up on.
+  var isFinished: Bool {
+    switch self {
+    case .done, .failed: true
+    default: false
+    }
+  }
 
   /// 0…1, for the board's bottom row.
   var progress: Double {

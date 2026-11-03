@@ -9,13 +9,11 @@ struct NewnewApp: App {
   @UIApplicationDelegateAdaptor var delegate: AppDelegate
   let container: ModelContainer
   @State private var pipeline: FeedSyncPipeline
-  @State private var showsLaunch = !LoadingBoard.hasPlayed
+  /// The full-screen block loader: only with nothing stored to read yet. Every other sync runs in
+  /// Today's top while you read (`NewsTop`), and asks before showing what it found.
+  @State private var showsLaunch: Bool
   @State private var outlets = OutletStore.shared
   @Environment(\.scenePhase) var scenePhase
-  /// Whether the loading board stays up, with its progress bar, until the sync is done: with
-  /// nothing stored yet, or a big catch-up after hours away (`hasALotToLoad`). Otherwise it
-  /// plays once and the sync runs behind the pull-down band.
-  @State private var boardWaitsForFeed: Bool
 
   /// For work that starts outside the views: background refresh and pushes.
   static var pipeline: FeedSyncPipeline?
@@ -39,8 +37,9 @@ struct NewnewApp: App {
     let pipeline = FeedSyncPipeline(context: container.mainContext)
     _pipeline = State(initialValue: pipeline)
     Self.pipeline = pipeline
-    _boardWaitsForFeed = State(initialValue: pipeline.hasALotToLoad)
-    LaunchState.shared.isShowing = !LoadingBoard.hasPlayed
+    let empty = OutletStore.shared.hasOnboarded && pipeline.storyCount == 0
+    _showsLaunch = State(initialValue: empty)
+    LaunchState.shared.isShowing = empty
   }
 
   var body: some Scene {
@@ -52,15 +51,15 @@ struct NewnewApp: App {
           OnboardingView { withAnimation(.easeOut(duration: 0.3)) {} }
             .transition(.opacity)
         }
-        if showsLaunch { LoadingBoard(isShowing: $showsLaunch, waitsForFeed: boardWaitsForFeed) }
+        if showsLaunch {
+          BlockLoader {
+            withAnimation(.easeOut(duration: 0.3)) { showsLaunch = false } completion: { LaunchState.shared.isShowing = false }
+          }
+          .transition(.opacity)
+        }
       }
       .environment(pipeline)
       .task {
-        // With stories to show and little to load, the sync waits for the launch board to be
-        // gone, so its work on the main actor can't freeze the roll.
-        if !boardWaitsForFeed {
-          while LaunchState.shared.isShowing { try? await Task.sleep(for: .milliseconds(100)) }
-        }
         await outlets.refreshCatalog()
         await syncInForeground()
         await Alerts.updateSubscriptions()
@@ -71,13 +70,7 @@ struct NewnewApp: App {
       switch phase {
       case .active:
         IntelligenceService.refreshAvailability()
-        // Back after hours away: the full-screen loader again, with its progress bar.
-        if !showsLaunch, !pipeline.isSyncing, pipeline.hasALotToLoad {
-          pipeline.prepareForCatchUp()
-          boardWaitsForFeed = true
-          LaunchState.shared.isShowing = true
-          showsLaunch = true
-        }
+        // Back after hours away too: the sync runs in Today's top, under what you were reading.
         Task { await syncInForeground() }
       case .background:
         Alerts.scheduleRefresh()

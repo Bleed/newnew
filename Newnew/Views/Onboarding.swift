@@ -311,33 +311,14 @@ struct LookChoice: View {
   }
 }
 
-/// The hand-over: the board large and centred, rolling "new" over "new" while the first sync
-/// runs, with one calm sentence; then Today.
+/// The hand-over: the block loader (Figma: Block loader, 1 · First install) while the first
+/// sync runs; then Today.
 struct FirstEdition: View {
   let outlets: Int
   var finish: () -> Void
-  @Environment(FeedSyncPipeline.self) var pipeline
-  @State private var started = Date.now
 
   var body: some View {
-    VStack(spacing: 18) {
-      Spacer()
-      // Rolls until the sync is done and the board has been seen for a moment.
-      RollingBoard(pitch: 7, loops: true) { !pipeline.isSyncing && Date.now.timeIntervalSince(started) > 2 }
-      OnboardingHeadline("Your first edition is being made.", size: 32)
-        .multilineTextAlignment(.center)
-      Text("newnew is reading \(outlets) outlets on this iPhone. It takes about a minute, the first time.")
-        .font(.body)
-        .foregroundStyle(Swiss.muted)
-        .multilineTextAlignment(.center)
-        .fixedSize(horizontal: false, vertical: true)
-      Spacer()
-    }
-    .frame(maxWidth: .infinity)
-    .task {
-      while pipeline.isSyncing || Date.now.timeIntervalSince(started) < 2.5 { try? await Task.sleep(for: .milliseconds(200)) }
-      finish()
-    }
+    BlockLoader(finish: finish)
   }
 }
 

@@ -250,6 +250,9 @@ enum BlockFont {
 struct BlockText: View {
   let text: String
   var maxHeight: CGFloat = 170
+  /// The loader (Figma: Block loader, 1 · Roll): each letter rolls through others and lands,
+  /// left to right, again and again, while the news loads.
+  var rolls = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var start: Date?
   @State private var launched = false
@@ -282,7 +285,14 @@ struct BlockText: View {
   var body: some View {
     let glyphs = glyphs
     Group {
-      if let start {
+      if rolls && !reduceMotion {
+        TimelineView(.animation) { context in
+          Canvas { ctx, size in
+            let cycle = duration + 0.8
+            draw(&ctx, size: size, glyphs: glyphs, elapsed: context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle), looping: true)
+          }
+        }
+      } else if let start {
         TimelineView(.animation) { context in
           Canvas { ctx, size in draw(&ctx, size: size, glyphs: glyphs, elapsed: context.date.timeIntervalSince(start)) }
         }
@@ -311,8 +321,9 @@ struct BlockText: View {
     .accessibilityLabel(text.lowercased())
   }
 
-  /// `elapsed` nil: settled; negative: before the entrance, nothing shown.
-  func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?) {
+  /// `elapsed` nil: settled; negative: before the entrance, nothing shown. `looping`: a letter
+  /// whose turn hasn't come shows as itself, not blank.
+  func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?, looping: Bool = false) {
     let unit = size.height / (10 * Self.tall)
     let natural = BlockFont.width(glyphs) * unit
     let stretchX = natural > 0 ? size.width / natural : 1
@@ -322,7 +333,7 @@ struct BlockText: View {
       var shown: Character? = character
       if let elapsed, character != " " {
         let t = elapsed - Double(index) * DotText.decodeStagger
-        if t < 0 { shown = nil } else {
+        if t < 0 { shown = looping ? character : nil } else {
           let round = Int(t / DotText.decodeStepTime)
           if round < steps(index) {
             let pool = character.isNumber ? BlockFont.digits : BlockFont.letters
@@ -662,5 +673,59 @@ struct LookSettings: View {
       .tile(.plain, radius: 16)
     }
     .onChange(of: raw) { _, new in UserDefaults.standard.set(new, forKey: TopLook.key) }
+  }
+}
+
+// MARK: Loader
+
+/// The only full-screen load (Figma: Block loader, 1 · First install): when there's nothing to
+/// read yet. The block NEWNEW shuffling, with what it's doing in mono under it; a tap or the
+/// sync's end lets it go. Every other sync runs in Today's top (`NewsTop`), not over the page.
+struct BlockLoader: View {
+  /// Called once the feed is in and the count has landed.
+  var finish: () -> Void = {}
+  @Environment(FeedSyncPipeline.self) private var pipeline
+  @State private var started = Date.now
+  @State private var landed = false
+
+  var lines: (String, String) {
+    switch pipeline.phase {
+    case .fetching(let done, let total): ("READING \(total) FEEDS", "\(done) OF \(total)")
+    case .reading(let outlets): ("READING \(outlets) OUTLETS", "")
+    case .embedding(let done, let total): ("READING \(total) ARTICLES", "\(done) OF \(total)")
+    case .grouping: ("GROUPING THE STORIES", "")
+    case .done: ("", "")
+    case .failed: ("NO CONNECTION", "TRYING AGAIN SOON")
+    default: ("READING THE NEWS", "")
+    }
+  }
+
+  var body: some View {
+    let (line, detail) = lines
+    VStack(alignment: .leading, spacing: 18) {
+      BlockText(text: "NEWNEW", rolls: !landed)
+        .foregroundStyle(Swiss.ink)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(line.isEmpty ? " " : line).foregroundStyle(Swiss.ink)
+        Text(detail.isEmpty ? " " : detail).foregroundStyle(Swiss.muted)
+      }
+      .font(Swiss.figure(15))
+      .contentTransition(.numericText())
+      .animation(.snappy(duration: 0.2), value: line + detail)
+    }
+    .padding(.horizontal, Swiss.pageInset)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Swiss.canvas)
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("newnew, \(line.lowercased()) \(detail.lowercased())")
+    .task {
+      // Up for a moment at least, so it reads as the app's name, not a flash.
+      while pipeline.isSyncing || !pipeline.phase.isFinished || Date.now.timeIntervalSince(started) < 2 {
+        try? await Task.sleep(for: .milliseconds(150))
+      }
+      landed = true
+      try? await Task.sleep(for: .seconds(0.5))
+      finish()
+    }
   }
 }

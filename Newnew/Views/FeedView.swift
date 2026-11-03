@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import UIKit
 
 /// What happens to a story once you've read it (settings pane): it leaves Today, or it stays in
 /// place, greyed out and sunk below what's new.
@@ -205,6 +206,16 @@ struct FeedView: View {
 
   /// Cached feed sections so scrolling or geometry changes never re-sort 400+ SwiftData clusters.
   @State private var sections = FeedSections()
+  /// While the app reads the feeds by itself (on opening, on coming back), the page keeps to the
+  /// stories it had, so nothing moves under you; when it's done Today's top and the ready pill
+  /// ask (`ready`), and Show lets the new ones in. A pull shows them at once: you asked.
+  @State private var held: Set<UUID>?
+  /// When the page began holding: everything fetched since waits behind Show, over one sync or
+  /// several.
+  @State private var heldSince: Date?
+  /// New articles waiting behind Show.
+  @State private var ready: Int?
+  @State private var pulled = false
 
   var newsWindow: NewsWindow {
     NewsWindow(rawValue: newsWindowHours) ?? .h24
@@ -271,7 +282,9 @@ struct FeedView: View {
             catchupCount: 0,
             hiddenCount: hiddenCount,
             lastSync: pipeline.lastSync,
-            readHiddenCount: readHiddenCount
+            readHiddenCount: readHiddenCount,
+            loading: pipeline.isSyncing,
+            ready: ready
           ) {
             overlayStory = $0
           } openCatchup: {
@@ -302,7 +315,9 @@ struct FeedView: View {
               catchupCount: min(wide.count, 8),
               hiddenCount: hiddenCount,
               lastSync: pipeline.lastSync,
-              readHiddenCount: readHiddenCount
+              readHiddenCount: readHiddenCount,
+              loading: pipeline.isSyncing,
+              ready: ready
             ) {
               path.append($0)
             } openCatchup: {
@@ -430,7 +445,23 @@ struct FeedView: View {
       .navigationBarTitleDisplayMode(.inline)
       // No fade at the top: the pinned filter bar covers what scrolls under it.
       .scrollEdgeEffectHidden(true, for: .top)
-      .dotRefreshable(isSyncing: pipeline.isSyncing, isShowing: $boardShowing) { await pipeline.sync() }
+      // The band only for a pull; a sync the app starts itself plays in Today's top.
+      .dotRefreshable(isSyncing: false, isShowing: $boardShowing) {
+        pulled = true
+        if held != nil { showUpdate() }
+        await pipeline.sync()
+        pulled = false
+      }
+      .onChange(of: pipeline.isSyncing) { _, syncing in
+        if syncing {
+          if held == nil, !pulled, !inEdition, !clusters.isEmpty {
+            held = Set(clusters.map(\.id))
+            heldSince = pipeline.syncStarted ?? .now
+          }
+        } else {
+          syncEnded()
+        }
+      }
       // The loading band opens over the page's top. Near the top, the page settles at its start
       // under the band (and again when it folds), so the band never covers the top's first line;
       // further down the page it stays where the reader is.
@@ -499,6 +530,17 @@ struct FeedView: View {
       }
     }
     .tint(Swiss.ink)
+    // The ready pill floats over whatever you're on (a story, the browser, Catchup), in a window
+    // of its own; Show brings you back to Today with the new stories in.
+    .onChange(of: ready) { _, count in
+      ReadyPrompt.shared.update(count) {
+        path = []
+        overlayStory = nil
+        showingCatchup = false
+        topicsKind = nil
+        showUpdate()
+      }
+    }
     .onAppear {
       if since == nil { since = Date(timeIntervalSince1970: lastLookedAt) }
       recomputeSections()
@@ -541,8 +583,35 @@ struct FeedView: View {
   }
 
   private func recomputeSections() {
+    let shown = held.map { ids in clusters.filter { ids.contains($0.id) && !$0.isDeleted } } ?? clusters
     withAnimation(.snappy(duration: 0.22)) {
-      sections = FeedSections(clusters: clusters, filter: filter, hideRead: hidingRead, window: newsWindow)
+      sections = FeedSections(clusters: shown, filter: filter, hideRead: hidingRead, window: newsWindow)
+    }
+  }
+
+  /// A sync the app started has finished: with something new to show, ask; otherwise carry on.
+  private func syncEnded() {
+    guard held != nil else { return }
+    let since = heldSince ?? pipeline.syncStarted ?? .now
+    let all = FeedSections(clusters: clusters, filter: .all, hideRead: hidingRead, window: newsWindow)
+    let new = all.visible.flatMap(\.articles).filter { $0.fetchedAt >= since }.count
+    if new > 0 {
+      withAnimation(.spring(duration: 0.5, bounce: 0.25)) { ready = new }
+    } else {
+      showUpdate()
+    }
+  }
+
+  /// Show: the new stories in, and the page at its top.
+  private func showUpdate() {
+    ReadyPrompt.shared.update(nil)
+    withAnimation(.snappy(duration: 0.25)) { ready = nil }
+    held = nil
+    heldSince = nil
+    recomputeSections()
+    Task { @MainActor in
+      await Task.yield()
+      withAnimation(.snappy(duration: 0.3)) { scrollPosition.scrollTo(edge: .top) }
     }
   }
 
@@ -921,6 +990,10 @@ struct NewsTop: View {
   /// When the feeds were last read, for the block top's "updated" line.
   var lastSync: Date?
   var readHiddenCount: Int = 0
+  /// A sync is running: the block rolls (Figma: Block loader, 1 · Roll).
+  var loading = false
+  /// New articles waiting behind the ready pill: the block just says NEWNEW.
+  var ready: Int?
   var open: (StoryCluster) -> Void
   var openCatchup: () -> Void = {}
   var showMutes: () -> Void
@@ -991,6 +1064,8 @@ struct NewsTop: View {
 
   /// The block look's headline: what's new, else how things stand.
   var blockFigure: String {
+    if loading { return "NEWNEW" }
+    if ready != nil { return "NEWNEW" }
     if articles.isEmpty {
       if readHiddenCount > 0 { return "DONE NEWNEW" }
       return pipeline.isSyncing ? "GET NEWNEW" : "ZZZ NEWNEW"
@@ -1040,7 +1115,19 @@ struct NewsTop: View {
     age(date).replacingOccurrences(of: " MIN", with: "M").replacingOccurrences(of: " ", with: "")
   }
 
+  /// While loading, what it's doing: READING (31) OF 75 FEEDS.
+  var loadingTokens: [BlockToken] {
+    switch pipeline.phase {
+    case .fetching(let done, let total): [.word("READING"), .outline("\(done)"), .word("OF"), .word("\(total)"), .word("FEEDS")]
+    case .embedding(let done, let total): [.word("READING"), .outline("\(done)"), .word("OF"), .word("\(total)"), .word("ARTICLES")]
+    case .grouping: [.word("GROUPING"), .word("THE"), .word("STORIES")]
+    default: [.word("READING"), .word("THE"), .word("NEWS")]
+    }
+  }
+
   var countTokens: [BlockToken] {
+    if loading { return loadingTokens }
+    if ready != nil { return [.word("NEW"), .word("STORIES"), .word("ARE"), .word("READY")] }
     if articles.isEmpty { return detailText.split(separator: " ").map { .word(String($0)) } }
     let stories = fresh.isEmpty ? visible.count : Set(fresh.compactMap { $0.cluster?.id }).count
     return [.word(fresh.isEmpty ? "ALL" : "IN"), .outline("\(stories)"), .word(stories == 1 ? "STORY" : "STORIES"), .stack, .filled("\(articles.count)")]
@@ -1052,7 +1139,7 @@ struct NewsTop: View {
         VStack(alignment: .leading, spacing: 10) {
           // In reading order: the day, the block, what it counts, then the message.
           BlockRebusLine(tokens: dateTokens(context.date), size: rebusSize)
-          BlockText(text: blockFigure)
+          BlockText(text: blockFigure, rolls: loading)
             .foregroundStyle(Swiss.ink)
           BlockRebusLine(tokens: countTokens, size: rebusSize, delay: 0.3)
         }
@@ -1110,6 +1197,86 @@ struct NewsTop: View {
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
+  }
+}
+
+/// The ready prompt: a green pill floating down from the top when a sync the app started has
+/// found something; Show lets it in.
+struct ReadyPill: View {
+  let count: Int
+  var show: () -> Void
+
+  var body: some View {
+    Button(action: show) {
+      Text("View \(count) \(count == 1 ? "update" : "updates")")
+        .font(.subheadline)
+        .foregroundStyle(Color.black)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 11)
+        .background(Swiss.signal, in: Capsule())
+        .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+        .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .sensoryFeedback(.success, trigger: count)
+  }
+}
+
+/// The ready pill's own window, above the app's (sheets, covers and the browser included), that
+/// lets every touch but the pill's through.
+@MainActor @Observable final class ReadyPrompt {
+  static let shared = ReadyPrompt()
+  private(set) var count: Int?
+  /// Where the pill is, in the window: only touches there stay in it.
+  var pillFrame: CGRect = .zero
+  private var show: () -> Void = {}
+  private var window: UIWindow?
+
+  func update(_ count: Int?, show: @escaping () -> Void = {}) {
+    if count != nil { install() }
+    self.show = show
+    withAnimation(.spring(duration: 0.5, bounce: 0.25)) { self.count = count }
+  }
+
+  func tap() { show() }
+
+  private func install() {
+    guard window == nil,
+      let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first(where: { $0.activationState == .foregroundActive })
+        ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+    else { return }
+    let window = PassThroughWindow(windowScene: scene)
+    window.windowLevel = .statusBar - 1
+    let host = UIHostingController(rootView: ReadyOverlay())
+    host.view.backgroundColor = .clear
+    window.rootViewController = host
+    window.isHidden = false
+    self.window = window
+  }
+}
+
+struct ReadyOverlay: View {
+  var prompt = ReadyPrompt.shared
+
+  var body: some View {
+    VStack {
+      if let count = prompt.count {
+        ReadyPill(count: count) { prompt.tap() }
+          .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { prompt.pillFrame = $0 }
+          .padding(.top, 6)
+          .transition(.move(edge: .top).combined(with: .opacity))
+      }
+      Spacer(minLength: 0)
+    }
+    .frame(maxWidth: .infinity)
+  }
+}
+
+/// Touches anywhere but on the pill go on to the app below.
+final class PassThroughWindow: UIWindow {
+  override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+    let onPill = MainActor.assumeIsolated { ReadyPrompt.shared.count != nil && ReadyPrompt.shared.pillFrame.insetBy(dx: -6, dy: -6).contains(point) }
+    return onPill ? super.hitTest(point, with: event) : nil
   }
 }
 
