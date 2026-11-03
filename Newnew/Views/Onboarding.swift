@@ -1,10 +1,11 @@
 import SwiftData
 import SwiftUI
 
-/// First launch (Figma: Onboarding · editorial, sketch B): calm and classic. The loading board
-/// is the masthead, "new" over "new" rolling in; then one serif headline and a grey line per
-/// step, and the app's own tiles, pills and switches. Welcome, outlets, your own feeds, topics,
-/// how Today begins, staying up to date, then the first edition while the first sync runs.
+/// First launch (Figma: Onboarding · redesign · block masthead): calm and classic. The icon is
+/// the masthead on Welcome, block NEW over NEW rolling in; the steps after it have only their
+/// progress marks, one serif headline and a grey line, and the app's own tiles, pills and
+/// switches. Welcome, outlets, your own feeds, topics, staying up to date, then the first
+/// edition (the block loader) while the first sync runs.
 /// Legally the point is that the reader picks the sources; newnew shows headlines and short
 /// extracts and links out.
 struct OnboardingView: View {
@@ -13,16 +14,15 @@ struct OnboardingView: View {
   @State private var step = Step.welcome
   @State private var selection = OutletStore.shared.selection
 
-  enum Step: Int, CaseIterable { case welcome, outlets, own, topics, look, updates, firstEdition }
+  enum Step: Int, CaseIterable { case welcome, outlets, own, topics, updates, firstEdition }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       if step != .welcome && step != .firstEdition {
-        // Masthead: the board small and still, the progress dots opposite.
+        // No masthead in the steps: only the progress marks, on the right.
         HStack {
-          MiniDotBoard(fill: 1, first: true, second: true, pitch: 2)
           Spacer()
-          ProgressDots(step: step.rawValue - 1, count: 5)
+          ProgressDots(step: step.rawValue - 1, count: 4)
         }
         .padding(.top, 20)
         .padding(.bottom, 24)
@@ -33,7 +33,6 @@ struct OnboardingView: View {
         case .outlets: outlets
         case .own: own
         case .topics: OnboardingTopics(next: next)
-        case .look: look
         case .updates: updates
         case .firstEdition: FirstEdition(outlets: OutletStore.shared.selection.count, finish: finish)
         }
@@ -57,7 +56,7 @@ struct OnboardingView: View {
 
   var welcome: some View {
     VStack(alignment: .leading, spacing: 14) {
-      RollingBoard(pitch: 6)
+      BlockMark(width: 168)
         .padding(.top, 56)
         .padding(.bottom, 20)
       Eyebrow("Welcome to newnew")
@@ -119,15 +118,6 @@ struct OnboardingView: View {
     }
   }
 
-  var look: some View {
-    VStack(alignment: .leading, spacing: 14) {
-      OnboardingHeadline("Choose how Today begins.")
-      OnboardingDeck("The top of Today shows what's new since you last looked. Change it in Settings › Look.")
-      LookChoice()
-      Spacer(minLength: 20)
-      Button("Continue", action: next).buttonStyle(.swissPrimary).padding(.bottom, 12)
-    }
-  }
 
   var updates: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -174,22 +164,21 @@ struct OnboardingDeck: View {
   }
 }
 
-/// The loading board, rolling "new" over "new" in like the launch board, once (or, with
-/// `loops`, until `until` says it's done, always ending with both words in).
-struct RollingBoard: View {
-  var pitch: CGFloat
-  var loops = false
-  var until: @MainActor () -> Bool = { true }
-  @State private var loop = WordLoop()
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+/// The icon as a masthead: block NEW over NEW in ink, the gap between the lines the same as
+/// between the letters. Each line rolls in and settles, as the block does on Today.
+struct BlockMark: View {
+  var width: CGFloat
 
   var body: some View {
-    MiniDotBoard(fill: 1, first: loop.first, second: loop.second, pitch: pitch)
-      .task {
-        try? await Task.sleep(for: .seconds(0.3))
-        await loop.run(reduceMotion: reduceMotion) { !loops || until() }
-      }
-      .accessibilityLabel("newnew")
+    let gap = width * BlockFont.gap / BlockFont.width(Array("NEW"))
+    VStack(alignment: .leading, spacing: gap) {
+      BlockText(text: "NEW", natural: true)
+      BlockText(text: "NEW", natural: true)
+    }
+    .frame(width: width, alignment: .leading)
+    .foregroundStyle(Swiss.ink)
+    .accessibilityElement()
+    .accessibilityLabel("newnew")
   }
 }
 
@@ -253,60 +242,6 @@ struct OnboardingTopics: View {
     Task {
       await pipeline.addTopic(name, kind: .follow)
       withAnimation(.snappy) { _ = adding.remove(name) }
-    }
-  }
-}
-
-/// How Today begins: Blocks, Dots or LCD, each a tile with its own top in small, the chosen one
-/// white and outlined (Settings › Look).
-struct LookChoice: View {
-  @AppStorage(TopLook.key) private var raw = TopLook.blocks.rawValue
-
-  var body: some View {
-    VStack(spacing: 12) {
-      ForEach(TopLook.allCases) { look in
-        let on = raw == look.rawValue
-        Button {
-          withAnimation(.snappy(duration: 0.2)) { raw = look.rawValue }
-        } label: {
-          VStack(alignment: .leading, spacing: 12) {
-            HStack {
-              VStack(alignment: .leading, spacing: 2) {
-                Text(look.label).font(.body)
-                Text(Self.line(look)).font(.footnote).foregroundStyle(Swiss.muted)
-              }
-              Spacer()
-              CheckMark(isOn: on)
-            }
-            preview(look)
-              .foregroundStyle(Swiss.ink)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .accessibilityHidden(true)
-          }
-          .padding(16)
-          .background(on ? Swiss.card : Swiss.tile, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-          .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Swiss.ink, lineWidth: on ? 1.6 : 0))
-          .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
-      }
-    }
-  }
-
-  static func line(_ look: TopLook) -> String {
-    switch look {
-    case .blocks: "Bold, the default"
-    case .dots: "A small departures board"
-    case .lcd: "A liquid-crystal display"
-    }
-  }
-
-  @ViewBuilder func preview(_ look: TopLook) -> some View {
-    switch look {
-    case .blocks: BlockText(text: "21 NEW", maxHeight: 44).frame(width: 220, alignment: .leading)
-    case .dots: DotText("21 NEW", pitch: 2.4, unlit: 0.07, motion: .none, scales: false)
-    case .lcd: DotText("21 NEW", pitch: 2.4, unlit: 0.07, motion: .none, scales: false).environment(\.boardFace, .lcd)
     }
   }
 }

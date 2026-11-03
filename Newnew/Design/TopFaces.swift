@@ -254,6 +254,9 @@ struct BlockText: View {
   /// to word (`loadingWords`) like a split-flap board, each letter stepping through the
   /// alphabet in order to its own, left to right, while the news loads.
   var rolls = false
+  /// At the letters' own proportions, as on the icon, instead of the header's: as tall as the
+  /// width given makes them.
+  var natural = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var start: Date?
   @State private var rollStart = Date.now
@@ -268,6 +271,9 @@ struct BlockText: View {
   static let maxPhoneColumnWidth: CGFloat = 370
 
   private var blockHeight: CGFloat {
+    if natural {
+      return containerWidth * 10 * Self.tall / max(BlockFont.width(glyphs), 1)
+    }
     if containerWidth <= Self.maxPhoneColumnWidth {
       // iPhone: exact original aspect ratio
       return min(max(containerWidth, 200) / Self.aspect, maxHeight)
