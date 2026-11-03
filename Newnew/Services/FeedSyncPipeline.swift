@@ -57,7 +57,8 @@ import SwiftData
   }
 
   func syncIfNeeded() async {
-    if let lastSync, Date.now.timeIntervalSince(lastSync) < Self.refreshInterval {
+    // Nothing stored (a store started over) reads the feeds whenever the last sync was.
+    if let lastSync, Date.now.timeIntervalSince(lastSync) < Self.refreshInterval, storyCount > 0 {
       // No sync due: regroup the stored stories once per launch, so a new grouping rule reaches
       // them. A sync regroups anyway, so launches that sync skip this extra pass.
       if !didSanitizeOnLaunch {
