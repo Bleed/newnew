@@ -250,11 +250,13 @@ enum BlockFont {
 struct BlockText: View {
   let text: String
   var maxHeight: CGFloat = 170
-  /// The loader (Figma: Block loader, 1 · Roll): each letter rolls through others and lands,
-  /// left to right, again and again, while the news loads.
+  /// The loader (Figma: Block loader, 1 · Roll): in place of `text`, the block rolls from word
+  /// to word (`loadingWords`) like a split-flap board, each letter stepping through the
+  /// alphabet in order to its own, left to right, while the news loads.
   var rolls = false
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var start: Date?
+  @State private var rollStart = Date.now
   @State private var launched = false
   @State private var containerWidth: CGFloat = 350
 
@@ -282,14 +284,37 @@ struct BlockText: View {
   }
   func steps(_ index: Int) -> Int { 4 + Int(Double(index) * 0.4) }
 
+  /// The loader's words, in turn.
+  static let loadingWords = ["UPDATEUPDATE", "FETCHINGFETCHING", "NEWNEW"].map { Array($0) }
+  static let flapLetters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
+  static let flapStagger = 0.06
+  static let flapStepTime = 0.06
+  static let flapHold = 1.1
+  /// Flaps a letter turns before it lands: more along the word, so they land one by one.
+  static func flaps(_ index: Int) -> Int { 10 + index / 2 }
+  static func flapRoll(_ word: [Character]) -> Double {
+    Double(word.count - 1) * flapStagger + Double(flaps(word.count - 1)) * flapStepTime
+  }
+
+  /// Which word the loader is on `t` seconds into its loop, and how far into that word's roll.
+  static func loadingFrame(_ t: Double) -> (word: [Character], elapsed: Double) {
+    let spans = loadingWords.map { flapRoll($0) + flapHold }
+    var t = t.truncatingRemainder(dividingBy: spans.reduce(0, +))
+    for (word, span) in zip(loadingWords, spans) {
+      if t < span { return (word, t) }
+      t -= span
+    }
+    return (loadingWords[0], 0)
+  }
+
   var body: some View {
     let glyphs = glyphs
     Group {
       if rolls && !reduceMotion {
         TimelineView(.animation) { context in
           Canvas { ctx, size in
-            let cycle = duration + 0.8
-            draw(&ctx, size: size, glyphs: glyphs, elapsed: context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: cycle), looping: true)
+            let frame = Self.loadingFrame(context.date.timeIntervalSince(rollStart))
+            draw(&ctx, size: size, glyphs: frame.word, elapsed: frame.elapsed, flap: true)
           }
         }
       } else if let start {
@@ -312,6 +337,9 @@ struct BlockText: View {
     .onChange(of: text) {
       if !reduceMotion { start = .now }
     }
+    .onChange(of: rolls, initial: true) { _, on in
+      if on { rollStart = .now }
+    }
     .task(id: start) {
       guard start != nil else { return }
       try? await Task.sleep(for: .seconds(duration))
@@ -321,9 +349,9 @@ struct BlockText: View {
     .accessibilityLabel(text.lowercased())
   }
 
-  /// `elapsed` nil: settled; negative: before the entrance, nothing shown. `looping`: a letter
-  /// whose turn hasn't come shows as itself, not blank.
-  func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?, looping: Bool = false) {
+  /// `elapsed` nil: settled; negative: before the entrance, nothing shown. `flap`: the loader's
+  /// split-flap roll, each letter stepping through the alphabet in order to its own.
+  func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?, flap: Bool = false) {
     let unit = size.height / (10 * Self.tall)
     let natural = BlockFont.width(glyphs) * unit
     let stretchX = natural > 0 ? size.width / natural : 1
@@ -331,9 +359,13 @@ struct BlockText: View {
     var path = Path()
     for (index, character) in glyphs.enumerated() {
       var shown: Character? = character
-      if let elapsed, character != " " {
+      if flap, let elapsed, character != " ", let target = Self.flapLetters.firstIndex(of: character) {
+        let n = Self.flapLetters.count, total = Self.flaps(index)
+        let round = max(0, Int((elapsed - Double(index) * Self.flapStagger) / Self.flapStepTime))
+        shown = Self.flapLetters[((target - max(total - round, 0)) % n + n) % n]
+      } else if let elapsed, character != " " {
         let t = elapsed - Double(index) * DotText.decodeStagger
-        if t < 0 { shown = looping ? character : nil } else {
+        if t < 0 { shown = nil } else {
           let round = Int(t / DotText.decodeStepTime)
           if round < steps(index) {
             let pool = character.isNumber ? BlockFont.digits : BlockFont.letters
