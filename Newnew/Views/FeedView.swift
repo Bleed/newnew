@@ -230,6 +230,8 @@ struct FeedView: View {
   }
 
   static let headerTop: CGFloat = 12
+  /// How far below the pinned filter bar its blur fades out.
+  static let pinnedFade: CGFloat = 36
   /// Where Today is scrolled, to start a filter at its top.
   @State private var scrollPosition = ScrollPosition()
   /// Where the bar pins, counted from the top of the page.
@@ -397,12 +399,21 @@ struct FeedView: View {
                 topics: followedTopics
               )
               .padding(.vertical, 10)
+              // Pinned: the stories blur behind the pills as they do under a story page's
+              // toolbar, fading out a little below them.
               .background(alignment: .bottom) {
                 if barPinned {
-                  Swiss.canvas
-                    .frame(height: 400)
-                    .padding(.horizontal, -Swiss.pageInset)
-                    .allowsHitTesting(false)
+                  ZStack {
+                    Rectangle().fill(.ultraThinMaterial)
+                    Swiss.canvas.opacity(0.2)
+                  }
+                  .mask {
+                    LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.86), .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom)
+                  }
+                  .frame(height: 400 + Self.pinnedFade)
+                  .padding(.bottom, -Self.pinnedFade)
+                  .padding(.horizontal, -Swiss.pageInset)
+                  .allowsHitTesting(false)
                 }
               }
             }
@@ -441,8 +452,6 @@ struct FeedView: View {
       .swissCanvas()
       .navigationTitle("Today")
       .navigationBarTitleDisplayMode(.inline)
-      // No fade at the top: the pinned filter bar covers what scrolls under it.
-      .scrollEdgeEffectHidden(true, for: .top)
       // Every sync, pulled or not, plays in Today's top.
       .pullToRefresh {
         pulled = true
@@ -459,15 +468,6 @@ struct FeedView: View {
         } else {
           syncEnded()
         }
-      }
-      // Nothing shows behind the clock and the round buttons: page colour from the top of the
-      // screen to the bottom of the toolbar, whatever the scroll position (the pinned bar
-      // covers the rest).
-      .overlay(alignment: .top) {
-        Color.clear
-          .frame(height: 0)
-          .background(alignment: .bottom) { Swiss.canvas.ignoresSafeArea(edges: .top) }
-          .allowsHitTesting(false)
       }
       .navigationDestination(for: StoryCluster.self) { initialCluster in
         StoryPagerView(
