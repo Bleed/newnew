@@ -196,6 +196,9 @@ struct FeedView: View {
   @AppStorage(TodayMode.key) var todayModeRaw = TodayMode.everything.rawValue
   /// "Show everything instead", for this visit only.
   @State private var showsEverything = false
+  /// iPad: Today as a front page (`FrontPageView`); a story opens over it.
+  @Environment(\.horizontalSizeClass) private var sizeClass
+  @State private var overlayStory: StoryCluster?
   var inEdition: Bool { todayModeRaw == TodayMode.edition.rawValue && !showsEverything }
   /// Held while the page is open, so the count doesn't drop to zero as you read.
   @State private var since: Date?
@@ -257,6 +260,36 @@ struct FeedView: View {
       if inEdition {
         EditionView(clusters: clusters, open: { path.append($0) }) {
           withAnimation(.snappy) { showsEverything = true }
+        }
+      } else if sizeClass == .regular {
+        // iPad: a front page; stories open over it in an overlay.
+        FrontPageView(wide: wide, brief: brief, open: { overlayStory = $0 }) {
+          NewsTop(
+            since: since ?? .distantPast,
+            visible: visible,
+            top: wide.first,
+            catchupCount: 0,
+            hiddenCount: hiddenCount,
+            lastSync: pipeline.lastSync,
+            readHiddenCount: readHiddenCount
+          ) {
+            overlayStory = $0
+          } openCatchup: {
+            showingCatchup = true
+          } showMutes: {
+            topicsKind = .mute
+          } showRead: {
+            withAnimation(.snappy(duration: 0.2)) { hideRead = false }
+          }
+          .fixedSize(horizontal: false, vertical: true)
+        } bar: {
+          FilterBar(
+            selection: Binding(get: { filter }, set: { choose($0) }),
+            hideRead: $hideRead,
+            readCount: readStoriesDisappear ? settledReadTotal : 0,
+            showsReadToggle: readStoriesDisappear,
+            topics: followedTopics
+          )
         }
       } else {
       ScrollViewReader { _ in
@@ -424,11 +457,13 @@ struct FeedView: View {
         )
       }
       .toolbar {
-        ToolbarItem(placement: .topBarLeading) {
-          Button("Catchup", systemImage: "rectangle.portrait.on.rectangle.portrait.angled") {
-            showingCatchup = true
+        if sizeClass != .regular {
+          ToolbarItem(placement: .topBarLeading) {
+            Button("Catchup", systemImage: "rectangle.portrait.on.rectangle.portrait.angled") {
+              showingCatchup = true
+            }
+            .disabled(wide.isEmpty)
           }
-          .disabled(wide.isEmpty)
         }
         // Nothing in the middle: the page's own top is the title.
         ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
@@ -438,9 +473,28 @@ struct FeedView: View {
         }
       }
       .sheet(item: $topicsKind) { TopicsSheet(kind: $0) }
+      // Wide editorial overlay on iPad: uses ~90% of the screen width (up to 1120pt) so the
+      // two-column broadsheet layout has generous room.
+      .sheet(item: $overlayStory) { story in
+        let screen = DotText.screenSize
+        NavigationStack {
+          StoryPagerView(initialCluster: story, orderedClusters: wide + brief)
+        }
+        .frame(
+          idealWidth: min(max(screen.width * 0.90, 760), 1120),
+          maxWidth: 1120,
+          idealHeight: min(max(screen.height * 0.90, 640), 880),
+          maxHeight: 900
+        )
+        .presentationSizing(.fitted)
+      }
       .fullScreenCover(isPresented: $showingCatchup) {
         CatchupReelView(stories: Array(wide.prefix(8))) { chosenCluster in
-          path.append(chosenCluster)
+          if sizeClass == .regular {
+            overlayStory = chosenCluster
+          } else {
+            path.append(chosenCluster)
+          }
         }
       }
     }
@@ -701,6 +755,7 @@ private struct ScoreRow: View {
 struct StoryPagerView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Environment(\.dismiss) private var dismiss
+  @Environment(\.horizontalSizeClass) private var sizeClass
   @State private var stories: [StoryCluster]
   @State private var currentIndex: Int
   @State private var transitionOffset: CGFloat = 0
@@ -731,6 +786,19 @@ struct StoryPagerView: View {
   private var endIndex: Int { stories.count }
   private var atEnd: Bool { currentIndex >= endIndex }
 
+  private func step(by delta: Int) {
+    let target = currentIndex + delta
+    guard target >= 0, target <= endIndex else { return }
+    withAnimation(.snappy(duration: 0.24)) {
+      currentIndex = target
+    }
+    if target < endIndex {
+      viewedIDs.insert(stories[target].id)
+      pipeline.markRead(stories[target])
+      ReadLedger.record(stories[target])
+    }
+  }
+
   var body: some View {
     Group {
       if atEnd {
@@ -750,6 +818,28 @@ struct StoryPagerView: View {
       .offset(x: transitionOffset + liveDragOffset)
       .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
         if width > 0 { pageWidth = width }
+      }
+      .toolbar {
+        if sizeClass == .regular {
+          ToolbarItem(placement: .topBarLeading) {
+            HStack(spacing: 6) {
+              Button("Close", systemImage: "xmark") {
+                dismiss()
+              }
+              Button("Previous story", systemImage: "chevron.left") {
+                step(by: -1)
+              }
+              .disabled(currentIndex <= 0)
+              .keyboardShortcut(.leftArrow, modifiers: [])
+
+              Button("Next story", systemImage: "chevron.right") {
+                step(by: 1)
+              }
+              .disabled(currentIndex >= endIndex)
+              .keyboardShortcut(.rightArrow, modifiers: [])
+            }
+          }
+        }
       }
       .simultaneousGesture(
         DragGesture(minimumDistance: 28, coordinateSpace: .local)
@@ -822,6 +912,7 @@ struct StoryPagerView: View {
 /// The last line takes turns with the Catchup reel, the read stories hidden and how many
 /// stories your mutes hide. The top story's headline gets all the room the line has.
 struct NewsTop: View {
+  @Environment(FeedSyncPipeline.self) private var pipeline
   let since: Date
   let visible: [StoryCluster]
   let top: StoryCluster?
@@ -900,9 +991,11 @@ struct NewsTop: View {
 
   /// The block look's headline: what's new, else how things stand.
   var blockFigure: String {
-    if articles.isEmpty { return readHiddenCount > 0 ? "ALL READ" : "READING" }
-    // "NULL NEW" when nothing arrived since you last looked.
-    return fresh.isEmpty ? "NULL NEW" : "\(fresh.count) NEW"
+    if articles.isEmpty {
+      if readHiddenCount > 0 { return "DONE NEWNEW" }
+      return pipeline.isSyncing ? "GET NEWNEW" : "ZZZ NEWNEW"
+    }
+    return fresh.isEmpty ? "NEWNEW" : "\(fresh.count) NEWNEW"
   }
 
   /// Settings › Look › Blocks (Figma: Explorations · LCD, AE): what's new in the block face across

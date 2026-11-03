@@ -244,22 +244,34 @@ enum BlockFont {
 }
 
 /// Text in the block face, filling the full block: as wide as it's given and always a third
-/// taller than "00 NEW" would be there (up to `maxHeight`), so the block keeps its size
-/// whatever it says; glyphs are drawn taller, longer words narrower, shorter ones wider, the
-/// slits always the same thickness. It arrives like the
-/// dot face: a departures board, cells 0.025 s apart left to right, each rolling through
-/// random blocks (a new one every 0.06 s) before it settles; a new text arrives the same way.
+/// taller than "00 NEW" would be on a standard phone column (up to `maxHeight`), so on iPhone
+/// it keeps its exact aspect ratio, while on wider iPad columns it is 50% taller and stretches
+/// horizontally across the full available two-column width.
 struct BlockText: View {
   let text: String
   var maxHeight: CGFloat = 170
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var start: Date?
   @State private var launched = false
+  @State private var containerWidth: CGFloat = 350
 
   var glyphs: [Character] { Array(DotFont.boardText(text).filter { $0 == " " || BlockFont.glyphs[$0] != nil }) }
   /// The block's proportions, in cell units: "00 NEW", a third taller.
   static let reference = BlockFont.width(Array("00 NEW"))
   static let tall: CGFloat = 4 / 3
+  static let aspect = reference / (10 * tall)
+  static let maxPhoneColumnWidth: CGFloat = 370
+
+  private var blockHeight: CGFloat {
+    if containerWidth <= Self.maxPhoneColumnWidth {
+      // iPhone: exact original aspect ratio
+      return min(max(containerWidth, 200) / Self.aspect, maxHeight)
+    } else {
+      // iPad / wide two-column header: 50% taller than phone reference, stretching full width
+      let phoneBase = Self.maxPhoneColumnWidth / Self.aspect
+      return min(phoneBase * 1.5, maxHeight)
+    }
+  }
 
   var duration: Double {
     let last = max(glyphs.count - 1, 0)
@@ -278,8 +290,10 @@ struct BlockText: View {
         Canvas { ctx, size in draw(&ctx, size: size, glyphs: glyphs, elapsed: launched || reduceMotion ? nil : -1) }
       }
     }
-    .aspectRatio(Self.reference / (10 * Self.tall), contentMode: .fit)
-    .frame(maxWidth: .infinity, maxHeight: maxHeight, alignment: .leading)
+    .frame(maxWidth: .infinity, minHeight: blockHeight, maxHeight: blockHeight, alignment: .leading)
+    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
+      if width > 0 { containerWidth = width }
+    }
     .afterLaunch {
       guard !launched else { return }
       launched = true

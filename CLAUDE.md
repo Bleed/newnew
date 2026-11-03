@@ -314,6 +314,21 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   per view, so views inserted later skip it; keep the views and change their text instead.
   `DotFont.boardText` makes headlines drawable (accents, curly quotes, dashes). The one-sentence top (`OneSentenceTop`) is still used by the read
   summary at the end of a swipe run.
+- iPad (universal app; iPad in every orientation, iPhone portrait only): with a regular width
+  Today is a front page (`FrontPageView`, Figma: iPad & Duo › Front page with stories in an
+  overlay): the top across two columns, the filter bar, then waterfall columns (three in
+  landscape, two in portrait; each story goes to the shortest column by an estimated height,
+  each column a `LazyVStack`), In brief at the top of the last. A story opens over the page in
+  an overlay (about 90 % of the screen, up to 1120 × 900) holding `StoryPagerView`, which on
+  iPad has Close, previous and next buttons and the arrow keys; the Catchup button is hidden
+  and a reel story opens in the overlay. The story page is two columns on wide windows (54 %:
+  lead, updates, coverage spectrum; 46 %: media, the brief, the coverage list, each scrolling
+  on its own); a lens tapped in the spectrum filters the list, hovering an angle highlights its
+  outlet, and a publisher's page opens full width in the same window.
+- The Apple Intelligence brief decodes HTML entities first, retries a declined story with the
+  permissive guardrails (structured, then plain text with a forgiving parser) before the
+  headlines-only preview, and always has each outlet's angle (its headline when the model
+  gives none).
 - Zen mode (Figma page Zen mode; Settings › Today, `TodayMode`, key "todayMode"): Today opens
   as an edition instead of the feed (`EditionView`). `Edition` makes one at 07:00 and 18:00
   (`Edition.slot`), once the feed has been read: the most covered stories since the previous
@@ -330,10 +345,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Blocks
   (the default, below), Dots (the board above), LCD (Figma: Explorations · LCD, P: the same board, its cells drawn as
   14-segment glyphs by `LCDFont` through `\.boardFace`, unlit segments faint, same timing) or
-  Blocks (Figma V, with the rebus of AE: what's new, "32 NEW" ("NULL NEW" when nothing arrived
-  since you last looked; ALL READ, READING without articles), in `BlockText`, always the
-  same full block (a third taller than "00 NEW" across the width; longer words condensed,
-  shorter ones widened, slits kept one thickness), no tile; around it one-size SF Mono rebus lines, `BlockRebusLine`: FRI [30] (OCT)
+  Blocks (Figma V, with the rebus of AE: what's new, "32 NEWNEW" ("NEWNEW" when nothing arrived
+  since you last looked; without articles DONE NEWNEW when all is read, GET NEWNEW while
+  syncing, ZZZ NEWNEW otherwise), in `BlockText`, always the same full block (a third taller
+  than "00 NEW" across a phone column, 50 % taller again across a wide iPad column; longer
+  words condensed, shorter ones widened, slits kept one thickness), no tile; around it one-size SF Mono rebus lines, `BlockRebusLine`: FRI [30] (OCT)
   clock 20:24 above, IN (26) STORIES stack [39] under it, then `BlockMessageRow`: the speaking
   head, the message's words (numbers in filled pills, cut to two lines), the age in a corner
   bracket, the arrow pill; messages take turns every 7 s: the top story; the newest episode or

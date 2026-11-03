@@ -52,42 +52,28 @@ enum IntelligenceService {
   /// reviewers make of a release (verdict), or the look and why it matters (trend). The three
   /// share one shape: a summary, two lists, each outlet's angle, and for trends the takeaways.
   static func brief(for sources: [Source], mode: BriefMode = .perspective) async throws -> ClusterPerspectiveBrief {
+    let cleanedSources = sources.map {
+      Source(outlet: $0.outlet, title: cleanHTML($0.title), snippet: cleanHTML($0.snippet))
+    }
     refreshAvailability()
     #if canImport(FoundationModels)
       if isAvailable {
         do {
           let session = LanguageModelSession(instructions: instructions(mode))
-          let prompt = briefPrompt(sources, mode: mode)
-          var brief: ClusterPerspectiveBrief
-          switch mode {
-          case .perspective:
-            let r = try await session.respond(to: prompt, generating: GeneratedBrief.self).content
-            brief = ClusterPerspectiveBrief(
-              summary: r.summary, sharedFacts: r.sharedFacts, differences: r.differences,
-              angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
-              sourceCount: sources.count, isGenerated: true, createdAt: .now)
-          case .verdict:
-            let r = try await session.respond(to: prompt, generating: GeneratedVerdict.self).content
-            brief = ClusterPerspectiveBrief(
-              summary: r.verdict, sharedFacts: r.praised, differences: r.criticised,
-              angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
-              sourceCount: sources.count, isGenerated: true, createdAt: .now)
-          case .trend:
-            let r = try await session.respond(to: prompt, generating: GeneratedTrend.self).content
-            brief = ClusterPerspectiveBrief(
-              summary: r.shift, sharedFacts: r.names, differences: r.context,
-              angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
-              sourceCount: sources.count, isGenerated: true, createdAt: .now)
-            brief.takeaways = r.takeaways
-          }
-          brief.mode = mode
-          return brief
+          let generated = try await structuredBrief(session: session, sources: cleanedSources, mode: mode)
+          return ensureComplete(generated, sources: cleanedSources, mode: mode)
         } catch {
-          // The default guardrails refuse a lot of hard news (war, riots, attacks). Comparing
-          // headlines someone else wrote is what the permissive setting is for; it only answers
-          // in text. Any other failure gets the same second try.
-          if let brief = try? await plainTextBrief(sources, mode: mode) { return brief }
-          var preview = previewBrief(sources, mode: mode)
+          // 1st fallback: Try structured generation with permissive content transformations
+          let permissiveModel = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+          let permissiveSession = LanguageModelSession(model: permissiveModel, instructions: instructions(mode))
+          if let structured = try? await structuredBrief(session: permissiveSession, sources: cleanedSources, mode: mode) {
+            return ensureComplete(structured, sources: cleanedSources, mode: mode)
+          }
+          // 2nd fallback: Permissive plain-text generation with flexible markdown/section parser
+          if let brief = try? await plainTextBrief(cleanedSources, mode: mode) {
+            return ensureComplete(brief, sources: cleanedSources, mode: mode)
+          }
+          var preview = previewBrief(cleanedSources, mode: mode)
           preview.note = isDeclined(error)
             ? "Apple Intelligence declined to compare this story; it avoids some subjects, such as violence. Here is each outlet's headline instead."
             : "Apple Intelligence couldn't compare this story just now. Here is each outlet's headline instead."
@@ -95,10 +81,42 @@ enum IntelligenceService {
         }
       }
     #endif
-    return previewBrief(sources, mode: mode)
+    return previewBrief(cleanedSources, mode: mode)
   }
 
   #if canImport(FoundationModels)
+    private static func structuredBrief(
+      session: LanguageModelSession,
+      sources: [Source],
+      mode: BriefMode
+    ) async throws -> ClusterPerspectiveBrief {
+      let prompt = briefPrompt(sources, mode: mode)
+      var brief: ClusterPerspectiveBrief
+      switch mode {
+      case .perspective:
+        let r = try await session.respond(to: prompt, generating: GeneratedBrief.self).content
+        brief = ClusterPerspectiveBrief(
+          summary: r.summary, sharedFacts: r.sharedFacts, differences: r.differences,
+          angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
+          sourceCount: sources.count, isGenerated: true, createdAt: .now)
+      case .verdict:
+        let r = try await session.respond(to: prompt, generating: GeneratedVerdict.self).content
+        brief = ClusterPerspectiveBrief(
+          summary: r.verdict, sharedFacts: r.praised, differences: r.criticised,
+          angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
+          sourceCount: sources.count, isGenerated: true, createdAt: .now)
+      case .trend:
+        let r = try await session.respond(to: prompt, generating: GeneratedTrend.self).content
+        brief = ClusterPerspectiveBrief(
+          summary: r.shift, sharedFacts: r.names, differences: r.context,
+          angles: r.angles.map { .init(outlet: $0.outlet, focus: $0.focus) },
+          sourceCount: sources.count, isGenerated: true, createdAt: .now)
+        brief.takeaways = r.takeaways
+      }
+      brief.mode = mode
+      return brief
+    }
+
     static func isDeclined(_ error: Error) -> Bool {
       if let error = error as? LanguageModelSession.GenerationError {
         switch error {
@@ -119,64 +137,165 @@ enum IntelligenceService {
       case .perspective:
         format = """
           SUMMARY: one or two sentences on what happened, using facts most outlets agree on
-          AGREE: a fact several outlets report (2 to 4 lines)
-          DIFFER: how one outlet's coverage differs, naming it once (1 to 3 lines)
+          AGREE: a fact several outlets report (write 2 to 4 separate AGREE: lines)
+          DIFFER: how one outlet's headline or framing differs, naming the outlet (write 1 to 3 separate DIFFER: lines)
           """
       case .verdict:
         format = """
           SUMMARY: the overall verdict, in one or two sentences
-          AGREE: something reviewers praise (1 to 4 lines)
-          DIFFER: something reviewers criticise (0 to 3 lines)
+          AGREE: something reviewers praise (write 1 to 4 separate AGREE: lines)
+          DIFFER: something reviewers criticise (write 0 to 3 separate DIFFER: lines)
           """
       case .trend:
         format = """
           SUMMARY: the key shift in style or taste, in one or two sentences
-          AGREE: a designer, brand, piece or place it features (1 to 5 lines)
-          DIFFER: why people are talking about it (1 to 2 lines)
-          TAKE: something a reader could try or take from it (1 to 3 lines)
+          AGREE: a designer, brand, piece or place it features (write 1 to 5 separate AGREE: lines)
+          DIFFER: why people are talking about it (write 1 to 2 separate DIFFER: lines)
+          TAKE: something a reader could try or take from it (write 1 to 3 separate TAKE: lines)
           """
       }
       let prompt = briefPrompt(sources, mode: mode) + """
 
 
-        Answer in exactly this format, one item per line, nothing else:
+        Answer in plain text using these exact line prefixes (do not use markdown bolding):
         \(format)
-        ANGLE: outlet name | what it focuses on, under 10 words (one line per outlet)
+        ANGLE: outlet name | what it focuses on, under 10 words (one ANGLE: line per outlet)
         """
       let text = try await session.respond(to: prompt).content
-      var summary = "", agree: [String] = [], differ: [String] = [], take: [String] = []
+
+      enum SectionKey { case none, summary, agree, differ, take, angle }
+      var currentSection: SectionKey = .none
+
+      var summary = ""
+      var agree: [String] = []
+      var differ: [String] = []
+      var take: [String] = []
       var angles: [ClusterPerspectiveBrief.Angle] = []
-      for line in text.split(whereSeparator: \.isNewline) {
-        let line = line.trimmingCharacters(in: .whitespaces)
-        func value(_ key: String) -> String? {
-          line.uppercased().hasPrefix(key) ? line.dropFirst(key.count).trimmingCharacters(in: .whitespaces) : nil
+
+      func tidy(_ raw: String) -> String {
+        let parts = raw.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        return parts.count == 2 ? "\(parts[0]): \(parts[1])" : raw
+      }
+
+      func parseAngle(_ raw: String) -> ClusterPerspectiveBrief.Angle? {
+        for sep in ["|", ":", "–", " - "] {
+          let parts = raw.components(separatedBy: sep).map { $0.trimmingCharacters(in: .whitespaces) }
+          if parts.count >= 2, !parts[0].isEmpty {
+            let focus = parts.dropFirst().joined(separator: ": ").trimmingCharacters(in: .whitespaces)
+            if !focus.isEmpty {
+              return .init(outlet: parts[0], focus: focus)
+            }
+          }
         }
-        // The model sometimes carries the ANGLE format over ("Outlet | text"): keep it readable.
-        func tidy(_ text: String) -> String {
-          let parts = text.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-          return parts.count == 2 ? "\(parts[0]): \(parts[1])" : text
+        return nil
+      }
+
+      for rawLine in text.split(whereSeparator: \.isNewline) {
+        // Strip markdown asterisks, leading bullets (-, *, •), and numbering
+        var line = rawLine.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespaces)
+        while let first = line.first, ["-", "*", "•"].contains(first) {
+          line = String(line.dropFirst()).trimmingCharacters(in: .whitespaces)
         }
-        if let v = value("SUMMARY:") { summary = v }
-        else if let v = value("AGREE:"), !v.isEmpty { agree.append(tidy(v)) }
-        else if let v = value("DIFFER:"), !v.isEmpty { differ.append(tidy(v)) }
-        else if let v = value("TAKE:"), !v.isEmpty { take.append(tidy(v)) }
-        else if let v = value("ANGLE:") {
-          let parts = v.split(separator: "|", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-          if parts.count == 2 { angles.append(.init(outlet: parts[0], focus: parts[1])) }
+        guard !line.isEmpty else { continue }
+
+        let upper = line.uppercased()
+        func extractAfter(_ prefix: String) -> String? {
+          guard upper.hasPrefix(prefix) else { return nil }
+          return String(line.dropFirst(prefix.count)).trimmingCharacters(in: .whitespaces)
+        }
+
+        if let v = extractAfter("SUMMARY:") {
+          currentSection = .summary
+          if !v.isEmpty { summary = summary.isEmpty ? v : "\(summary) \(v)" }
+        } else if let v = extractAfter("AGREE:") ?? extractAfter("THEY AGREE:") ?? extractAfter("SHARED FACTS:") {
+          currentSection = .agree
+          if !v.isEmpty { agree.append(tidy(v)) }
+        } else if let v = extractAfter("DIFFER:") ?? extractAfter("THEY DIFFER:") ?? extractAfter("DIFFERENCES:") {
+          currentSection = .differ
+          if !v.isEmpty { differ.append(tidy(v)) }
+        } else if let v = extractAfter("TAKE:") ?? extractAfter("TAKEAWAY:") ?? extractAfter("TAKEAWAYS:") {
+          currentSection = .take
+          if !v.isEmpty { take.append(tidy(v)) }
+        } else if let v = extractAfter("ANGLE:") ?? extractAfter("ANGLES:") ?? extractAfter("EACH OUTLET'S ANGLE:") {
+          currentSection = .angle
+          if !v.isEmpty, let parsed = parseAngle(v) {
+            angles.append(parsed)
+          }
+        } else {
+          // Continuation line under the current section header
+          switch currentSection {
+          case .summary:
+            summary = summary.isEmpty ? line : "\(summary) \(line)"
+          case .agree:
+            agree.append(tidy(line))
+          case .differ:
+            differ.append(tidy(line))
+          case .take:
+            take.append(tidy(line))
+          case .angle:
+            if let parsed = parseAngle(line) { angles.append(parsed) }
+          case .none:
+            break
+          }
         }
       }
+
       guard !summary.isEmpty else { return nil }
       return ClusterPerspectiveBrief(
-        summary: summary, sharedFacts: Array(agree.prefix(5)), differences: Array(differ.prefix(3)),
-        angles: angles, sourceCount: sources.count, isGenerated: true, createdAt: .now, mode: mode,
-        takeaways: take.isEmpty ? nil : Array(take.prefix(3)))
+        summary: summary,
+        sharedFacts: Array(agree.prefix(5)),
+        differences: Array(differ.prefix(3)),
+        angles: angles,
+        sourceCount: sources.count,
+        isGenerated: true,
+        createdAt: .now,
+        mode: mode,
+        takeaways: take.isEmpty ? nil : Array(take.prefix(3))
+      )
     }
   #endif
 
+  /// Ensures that even when outlets run near-identical wire copy (or when the fallback text
+  /// parser is used), the brief never renders with missing outlet angles.
+  private static func ensureComplete(
+    _ brief: ClusterPerspectiveBrief,
+    sources: [Source],
+    mode: BriefMode
+  ) -> ClusterPerspectiveBrief {
+    var result = brief
+    if result.angles.isEmpty {
+      var seen = Set<String>()
+      let unique = sources.filter { seen.insert($0.outlet).inserted }
+      result.angles = unique.prefix(6).map { .init(outlet: $0.outlet, focus: $0.title) }
+    }
+    return result
+  }
+
+  /// Decodes common HTML entities (`&rsquo;`, `&#039;`, `&amp;`, `&quot;`, etc.) so neither the UI
+  /// nor the on-device language model sees raw HTML codes.
+  nonisolated static func cleanHTML(_ text: String) -> String {
+    guard text.contains("&") else { return text }
+    var out = text
+    let entities: [(String, String)] = [
+      ("&rsquo;", "’"), ("&lsquo;", "‘"), ("&#8217;", "’"), ("&#8216;", "‘"),
+      ("&#039;", "'"), ("&#39;", "'"), ("&apos;", "'"),
+      ("&ldquo;", "“"), ("&rdquo;", "”"), ("&#8220;", "“"), ("&#8221;", "”"),
+      ("&quot;", "\""), ("&#34;", "\""),
+      ("&ndash;", "–"), ("&mdash;", "—"), ("&#8211;", "–"), ("&#8212;", "—"),
+      ("&nbsp;", " "), ("&#160;", " "), ("&hellip;", "…"), ("&amp;", "&")
+    ]
+    for (entity, replacement) in entities {
+      out = out.replacingOccurrences(of: entity, with: replacement)
+    }
+    return out
+  }
+
   static let briefInstructions = """
     You compare how news outlets cover one event. You only see each outlet's headline and \
-    snippet, never the full article. Be neutral and brief. Don't invent facts, quotes or \
-    numbers that aren't in the text. Don't take sides.
+    snippet, never the full article. Be neutral and brief. Always include 2 to 4 shared facts \
+    that outlets agree on, 1 to 3 differences in wording, framing or details between outlets \
+    (even when outlets use similar wire copy, note differences in headline emphasis), and \
+    each outlet's angle. Don't invent facts, quotes or numbers that aren't in the text.
     """
 
   static func instructions(_ mode: BriefMode) -> String {
@@ -258,7 +377,7 @@ enum IntelligenceService {
     var summary: String
     @Guide(description: "Facts several outlets report, each under 15 words.", .count(2...4))
     var sharedFacts: [String]
-    @Guide(description: "How the coverage differs: emphasis, framing, or details only some outlets mention. Each is one sentence that names the outlet once, as its subject, like \"Fjord Herald focuses on the cost.\" Under 20 words.", .count(1...3))
+    @Guide(description: "How the coverage differs: emphasis, headline framing, or details only some outlets mention. Each is one sentence that names the outlet once, as its subject, like \"Fjord Herald focuses on the cost.\" Under 20 words.", .count(1...3))
     var differences: [String]
     @Guide(description: "Each outlet's angle on the story, one entry per outlet.")
     var angles: [GeneratedAngle]
