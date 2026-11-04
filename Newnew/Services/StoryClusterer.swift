@@ -39,6 +39,8 @@ nonisolated enum StoryClusterer {
     var publishedAt: Date
     /// Centred, normalised; nil if the article couldn't be embedded.
     var vector: [Float]?
+    /// `terms(text)`, when already worked out (it's the slow part: kept on the article).
+    var terms: [String]? = nil
   }
 
   /// Indices of `inputs`, grouped; every input is in exactly one group.
@@ -52,25 +54,64 @@ nonisolated enum StoryClusterer {
 
     // Average linkage over the pairs that have any similarity at all (most have none).
     var members = (0..<n).map { [$0] }
-    var alive = Set(0..<n)
     var sums: [Int: [Int: Float]] = [:]
     for (pair, s) in similarity {
       sums[pair.a, default: [:]][pair.b] = s
       sums[pair.b, default: [:]][pair.a] = s
     }
-    while true {
-      var best: (score: Float, a: Int, b: Int) = (threshold, -1, -1)
-      for a in alive {
-        for (b, sum) in sums[a] ?? [:] where a < b {
-          let average = sum / Float(members[a].count * members[b].count)
-          if average >= best.score { best = (average, a, b) }
+    // Articles only ever join others they're linked to, so each linked set is merged on its own:
+    // the same groups, without scanning every pair of the day for each merge.
+    var component = [Int](repeating: -1, count: n)
+    var components: [[Int]] = []
+    for start in 0..<n where component[start] < 0 {
+      var stack = [start], list: [Int] = []
+      component[start] = components.count
+      while let node = stack.popLast() {
+        list.append(node)
+        for next in (sums[node] ?? [:]).keys where component[next] < 0 {
+          component[next] = components.count
+          stack.append(next)
         }
       }
-      guard best.a >= 0 else { break }
-      let (a, b) = (best.a, best.b)
+      components.append(list)
+    }
+    var out: [[Int]] = []
+    for list in components {
+      guard list.count > 1 else {
+        out.append(list)
+        continue
+      }
+      var alive = Set(list)
+      merge(&alive, &members, &sums, threshold: threshold)
+      out += alive.map { members[$0] }
+    }
+    return out.sorted { $0.min()! < $1.min()! }
+  }
+
+  /// Average linkage within one linked set: the closest pair of groups merges while it's close
+  /// enough. Each group remembers its closest neighbour, so a merge only looks again at the
+  /// groups it touched.
+  private static func merge(_ alive: inout Set<Int>, _ members: inout [[Int]], _ sums: inout [Int: [Int: Float]], threshold: Float) {
+    func average(_ x: Int, _ y: Int, _ sum: Float) -> Float { sum / Float(members[x].count * members[y].count) }
+    func closest(_ x: Int) -> (score: Float, other: Int) {
+      var best: (score: Float, other: Int) = (-1, -1)
+      for (y, sum) in sums[x] ?? [:] {
+        let score = average(x, y, sum)
+        if score > best.score { best = (score, y) }
+      }
+      return best
+    }
+    var nearest: [Int: (score: Float, other: Int)] = [:]
+    for x in alive { nearest[x] = closest(x) }
+    while true {
+      var pick: (score: Float, a: Int) = (threshold, -1)
+      for x in alive { if let near = nearest[x], near.other >= 0, near.score >= pick.score { pick = (near.score, x) } }
+      guard pick.a >= 0, let b = nearest[pick.a]?.other else { break }
+      let a = pick.a
       members[a] += members[b]
       members[b] = []
       alive.remove(b)
+      nearest[b] = nil
       for (other, sum) in sums[b] ?? [:] where other != a {
         sums[a, default: [:]][other, default: 0] += sum
         sums[other, default: [:]][a, default: 0] += sum
@@ -78,8 +119,16 @@ nonisolated enum StoryClusterer {
       }
       sums[a]?[b] = nil
       sums[b] = nil
+      nearest[a] = closest(a)
+      for (other, sum) in sums[a] ?? [:] {
+        if let near = nearest[other], near.other != a && near.other != b {
+          let score = average(other, a, sum)
+          if score > near.score { nearest[other] = (score, a) }
+        } else {
+          nearest[other] = closest(other)
+        }
+      }
     }
-    return alive.sorted().map { members[$0] }
   }
 
   struct Pair: Hashable { var a: Int, b: Int }
@@ -89,7 +138,7 @@ nonisolated enum StoryClusterer {
     _ inputs: [Input], sameOutletWeight: Float = sameOutletWeight, minSharedWords: Int = minSharedWords,
     rareShare: Float = rareShare
   ) -> [Pair: Float] {
-    let documents = inputs.map { terms($0.text) }
+    let documents = inputs.map { $0.terms ?? terms($0.text) }
     // The plain words of each article ("#dutch design week" is dutch, design, week), and how
     // many telling ones each pair shares.
     let words = documents.map { document in
@@ -113,36 +162,24 @@ nonisolated enum StoryClusterer {
       let length = sqrt(weights.values.reduce(0) { $0 + $1 * $1 })
       return length > 0 ? weights.mapValues { $0 / length } : weights
     }
-    var postings: [String: [Int]] = [:]
-    for (index, document) in weights.enumerated() { for term in document.keys { postings[term, default: []].append(index) } }
-
-    var lexical: [Pair: Float] = [:]
-    for (term, list) in postings where list.count > 1 {
-      for x in 0..<list.count {
-        for y in (x + 1)..<list.count {
-          let (a, b) = (list[x], list[y])
-          lexical[Pair(a: a, b: b), default: 0] += weights[a][term]! * weights[b][term]!
-        }
-      }
-    }
-
     var result: [Pair: Float] = [:]
     let lexicalWeight = 1 - embeddingWeight
-    for a in 0..<inputs.count {
-      for b in (a + 1)..<inputs.count {
-        guard abs(inputs[a].publishedAt.timeIntervalSince(inputs[b].publishedAt)) <= window,
-          shared[Pair(a: a, b: b), default: 0] >= minSharedWords
-        else { continue }
-        let words = lexical[Pair(a: a, b: b)] ?? 0
-        let score: Float
-        if let va = inputs[a].vector, let vb = inputs[b].vector {
-          score = lexicalWeight * words + embeddingWeight * Vec.cosine(va, vb)
-        } else {
-          score = words
-        }
-        let weighted = inputs[a].outlet == inputs[b].outlet ? score * sameOutletWeight : score
-        if weighted > 0.01 { result[Pair(a: a, b: b)] = weighted }
+    // Only the pairs that share enough telling words (every other pair is never compared).
+    for (pair, count) in shared where count >= minSharedWords {
+      let (a, b) = (pair.a, pair.b)
+      guard abs(inputs[a].publishedAt.timeIntervalSince(inputs[b].publishedAt)) <= window else { continue }
+      // Cosine of the TF-IDF vectors, over the smaller one's terms.
+      let (small, large) = weights[a].count <= weights[b].count ? (weights[a], weights[b]) : (weights[b], weights[a])
+      var words: Float = 0
+      for (term, weight) in small { if let other = large[term] { words += weight * other } }
+      let score: Float
+      if let va = inputs[a].vector, let vb = inputs[b].vector {
+        score = lexicalWeight * words + embeddingWeight * Vec.cosine(va, vb)
+      } else {
+        score = words
       }
+      let weighted = inputs[a].outlet == inputs[b].outlet ? score * sameOutletWeight : score
+      if weighted > 0.01 { result[pair] = weighted }
     }
     return result
   }

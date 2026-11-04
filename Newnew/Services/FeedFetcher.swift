@@ -27,7 +27,7 @@ nonisolated enum FeedFetcher {
   static let snippetLength = 150
   static let galleryLimit = 6
   static let maxBytes = 1_500_000
-  static let concurrency = 12
+  static let concurrency = 24
   static let userAgent = "newnew/1.0 (RSS reader on iPhone)"
 
   static let session: URLSession = {

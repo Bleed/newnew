@@ -29,6 +29,8 @@ import SwiftData
   var galleryURLs: [String] = []
   /// `Region` raw values, comma-separated (see `RegionTagger`).
   var regionsRaw: String = ""
+  /// `StoryClusterer.terms` of the text, one per line: worked out once, not on every regroup.
+  var termsRaw: String?
   var cluster: StoryCluster?
 
   init(_ dto: FeedArticleDTO, fetchedAt: Date) {
@@ -56,6 +58,7 @@ import SwiftData
       title = dto.title
       snippet = dto.snippet
       embedding = nil
+      termsRaw = nil
       regionsRaw = RegionTagger.regions(title: dto.title, snippet: dto.snippet).map(\.rawValue).sorted().joined(separator: ",")
     }
     if imageURL != dto.imageURL { imageURL = dto.imageURL }
@@ -71,6 +74,14 @@ import SwiftData
 
   var isMedia: Bool { videoID != nil || audioURL != nil }
   var videoURL: URL? { videoID.flatMap { URL(string: "https://www.youtube.com/watch?v=\($0)") } }
+
+  /// The clusterer's terms, worked out and kept the first time they're asked for.
+  var terms: [String] {
+    if let termsRaw { return termsRaw.isEmpty ? [] : termsRaw.components(separatedBy: "\n") }
+    let terms = StoryClusterer.terms(text)
+    termsRaw = terms.joined(separator: "\n")
+    return terms
+  }
 
   var regions: Set<Region> { Set(regionsRaw.split(separator: ",").compactMap { Region(rawValue: String($0)) }) }
 }

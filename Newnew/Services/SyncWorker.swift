@@ -137,12 +137,17 @@ actor SyncWorker {
     let cutoff = Date.now.addingTimeInterval(-FeedSyncPipeline.retention)
     let chartCutoff = Date.now.addingTimeInterval(-FeedSyncPipeline.chartRetention)
     let episodeCutoff = Date.now.addingTimeInterval(-FeedFetcher.podcastMaxAge)
-    try? modelContext.delete(
-      model: ArticleItem.self,
-      where: #Predicate {
-        $0.publishedAt < chartCutoff || ($0.publishedAt < cutoff && !$0.isChart && $0.audioURL == nil)
-          || ($0.publishedAt < episodeCutoff && $0.audioURL != nil)
-      })
+    // One by one: the bulk delete fails on the article–story relationship (and nothing went).
+    let old = FetchDescriptor<ArticleItem>(predicate: #Predicate {
+      $0.publishedAt < chartCutoff || ($0.publishedAt < cutoff && !$0.isChart && $0.audioURL == nil)
+        || ($0.publishedAt < episodeCutoff && $0.audioURL != nil)
+    })
+    for article in (try? modelContext.fetch(old)) ?? [] { modelContext.delete(article) }
+  }
+
+  /// Loads the vector model while the feeds download, so reading the articles can start at once.
+  func warmUp() async {
+    await prepare()
   }
 
   // MARK: Vectors
@@ -208,7 +213,8 @@ actor SyncWorker {
     }
 
     let inputs = articles.map {
-      StoryClusterer.Input(text: $0.text, outlet: $0.outlet, publishedAt: $0.publishedAt, vector: centredVector($0.embedding))
+      StoryClusterer.Input(
+        text: $0.text, outlet: $0.outlet, publishedAt: $0.publishedAt, vector: centredVector($0.embedding), terms: $0.terms)
     }
     let meta = articles.map {
       StoryClusterSanitizer.ItemMeta(title: $0.title, snippet: $0.snippet, outlet: $0.outlet)

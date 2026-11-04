@@ -1098,14 +1098,28 @@ struct NewsTop: View {
     age(date).replacingOccurrences(of: " MIN", with: "M").replacingOccurrences(of: " ", with: "")
   }
 
-  /// While loading, what it's doing: READING (31) OF 75 FEEDS.
+  /// While loading, the stage it's at, one phrase each (no running count): READING THE NEWS,
+  /// READING (38) NEW ARTICLES, GROUPING THE STORIES.
   var loadingTokens: [BlockToken] {
     switch pipeline.phase {
-    case .fetching(let done, let total): [.word("READING"), .outline("\(done)"), .word("OF"), .word("\(total)"), .word("FEEDS")]
-    case .embedding(let done, let total): [.word("READING"), .outline("\(done)"), .word("OF"), .word("\(total)"), .word("ARTICLES")]
+    case .embedding(_, let total) where total > 0:
+      [.word("READING"), .outline("\(total)"), .word("NEW"), .word(total == 1 ? "ARTICLE" : "ARTICLES")]
     case .grouping: [.word("GROUPING"), .word("THE"), .word("STORIES")]
     default: [.word("READING"), .word("THE"), .word("NEWS")]
     }
+  }
+
+  /// Which status the count line shows; a new one plays its entrance.
+  var statusKey: String {
+    if loading {
+      switch pipeline.phase {
+      case .embedding(_, let total) where total > 0: return "articles"
+      case .grouping: return "grouping"
+      default: return "news"
+      }
+    }
+    if ready != nil { return "ready" }
+    return articles.isEmpty ? "empty" : "count"
   }
 
   var countTokens: [BlockToken] {
@@ -1124,7 +1138,7 @@ struct NewsTop: View {
           BlockRebusLine(tokens: dateTokens(context.date), size: rebusSize)
           BlockText(text: blockFigure, rolls: loading)
             .foregroundStyle(Swiss.ink)
-          BlockRebusLine(tokens: countTokens, size: rebusSize, delay: 0.3)
+          BlockRebusLine(tokens: countTokens, size: rebusSize, delay: 0.3, replay: statusKey)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(blockFigure.lowercased()). \(countTokens.map(\.spoken).filter { !$0.isEmpty }.joined(separator: " ")) stories, \(figure.lowercased())")

@@ -85,6 +85,8 @@ import SwiftData
       // published; those articles go once).
       let source = Self.feedURL == nil ? "sample" : "phone-1"
       if try await worker.clear(unless: source, stored: storedSource) { storedSource = source }
+      // The model loads while the feeds come in.
+      Task { await worker.warmUp() }
       var incoming = try await loadArticles(worker)
       // The reader's own feeds too.
       for custom in OutletStore.shared.customFeeds { incoming += await CustomFeedReader.articles(custom) }
