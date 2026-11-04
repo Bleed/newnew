@@ -293,7 +293,7 @@ struct BlockText: View {
   func steps(_ index: Int) -> Int { 4 + Int(Double(index) * 0.4) }
 
   /// The loader's words, in turn.
-  static let loadingWords = ["UPDATEUPDATE", "NEWSNEWS"].map { Array($0) }
+  static let loadingWords = ["UPDATEUPDATE", "NEWNEW"].map { Array($0) }
   static let flapLetters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
   static let flapStagger = 0.06
   static let flapStepTime = 0.06
