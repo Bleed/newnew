@@ -260,6 +260,8 @@ struct BlockText: View {
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var start: Date?
   @State private var rollStart = Date.now
+  /// The loader's last word and when loading ended, while it rolls into `text`.
+  @State private var settle: (from: [Character], start: Date)?
   @State private var launched = false
   @State private var containerWidth: CGFloat = 350
 
@@ -291,7 +293,7 @@ struct BlockText: View {
   func steps(_ index: Int) -> Int { 4 + Int(Double(index) * 0.4) }
 
   /// The loader's words, in turn.
-  static let loadingWords = ["UPDATEUPDATE", "FETCHING", "NEWNEW"].map { Array($0) }
+  static let loadingWords = ["UPDATEUPDATE", "NEWSNEWS"].map { Array($0) }
   static let flapLetters = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
   static let flapStagger = 0.06
   static let flapStepTime = 0.06
@@ -302,16 +304,27 @@ struct BlockText: View {
     Double(word.count - 1) * flapStagger + Double(flaps(word.count - 1)) * flapStepTime
   }
 
-  /// Which word the loader is on `t` seconds into its loop, and how far into that word's roll.
-  static func loadingFrame(_ t: Double) -> (word: [Character], elapsed: Double) {
+  /// Which word the loader is on `t` seconds into its loop, the word before it (`first` at the
+  /// very start), and how far into the roll it is.
+  static func loadingFrame(_ t: Double, first: [Character]) -> (from: [Character], word: [Character], elapsed: Double) {
     let spans = loadingWords.map { flapRoll($0) + flapHold }
-    var t = t.truncatingRemainder(dividingBy: spans.reduce(0, +))
-    for (word, span) in zip(loadingWords, spans) {
-      if t < span { return (word, t) }
-      t -= span
+    let loop = spans.reduce(0, +)
+    var rest = t.truncatingRemainder(dividingBy: loop)
+    for (index, (word, span)) in zip(loadingWords, spans).enumerated() {
+      if rest < span {
+        let from = index > 0 ? loadingWords[index - 1] : t < loop ? first : loadingWords[loadingWords.count - 1]
+        return (from, word, rest)
+      }
+      rest -= span
     }
-    return (loadingWords[0], 0)
+    return (first, loadingWords[0], 0)
   }
+
+  /// How long the row takes to gain or lose its extra cells at the start of a roll.
+  static let resizeTime = 0.3
+
+  /// The settle into the real text when loading ends.
+  var settleTime: Double { Self.flapRoll(glyphs) + 0.1 }
 
   var body: some View {
     let glyphs = glyphs
@@ -319,8 +332,15 @@ struct BlockText: View {
       if rolls && !reduceMotion {
         TimelineView(.animation) { context in
           Canvas { ctx, size in
-            let frame = Self.loadingFrame(context.date.timeIntervalSince(rollStart))
-            draw(&ctx, size: size, glyphs: frame.word, elapsed: frame.elapsed, flap: true)
+            let frame = Self.loadingFrame(context.date.timeIntervalSince(rollStart), first: glyphs)
+            drawRoll(&ctx, size: size, from: frame.from, to: frame.word, elapsed: frame.elapsed)
+          }
+        }
+      } else if let settle, !reduceMotion {
+        // Loading over: the word it was on rolls into the text the same way.
+        TimelineView(.animation) { context in
+          Canvas { ctx, size in
+            drawRoll(&ctx, size: size, from: settle.from, to: glyphs, elapsed: context.date.timeIntervalSince(settle.start))
           }
         }
       } else if let start {
@@ -343,8 +363,18 @@ struct BlockText: View {
     .onChange(of: text) {
       if !reduceMotion { start = .now }
     }
-    .onChange(of: rolls, initial: true) { _, on in
-      if on { rollStart = .now }
+    .onChange(of: rolls, initial: true) { was, on in
+      if on {
+        rollStart = .now
+        settle = nil
+      } else if was {
+        settle = (Self.loadingFrame(Date.now.timeIntervalSince(rollStart), first: glyphs).word, .now)
+      }
+    }
+    .task(id: settle?.start) {
+      guard settle != nil else { return }
+      try? await Task.sleep(for: .seconds(settleTime))
+      settle = nil
     }
     .task(id: start) {
       guard start != nil else { return }
@@ -355,9 +385,52 @@ struct BlockText: View {
     .accessibilityLabel(text.lowercased())
   }
 
-  /// `elapsed` nil: settled; negative: before the entrance, nothing shown. `flap`: the loader's
-  /// split-flap roll, each letter stepping through the alphabet in order to its own.
-  func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?, flap: Bool = false) {
+  /// The loader's roll from one word to the next, as a decode: in the first moment the row steps
+  /// to the new word's length, a cell at a time (cells open or close at the right, already
+  /// scrambling), then every letter flaps through the alphabet and lands on its own, left to
+  /// right. No easing: the row fills the width at each step, so it rescales in quick jumps while
+  /// it decodes, never at the end.
+  func drawRoll(_ ctx: inout GraphicsContext, size: CGSize, from: [Character], to: [Character], elapsed: Double) {
+    let unit = size.height / (10 * Self.tall)
+    let n = from.count, m = to.count
+    let step = min(max(elapsed / Self.resizeTime, 0), 1)
+    let count = n + Int((Double(m - n) * step).rounded(m > n ? .down : .up))
+    guard count > 0 else { return }
+    let letters = Self.flapLetters, flips = letters.count
+    var cells: [(shown: Character, width: CGFloat)] = []
+    for k in 0..<count {
+      let round = max(0, Int((elapsed - Double(k) * Self.flapStagger) / Self.flapStepTime))
+      let landed = round >= Self.flaps(k)
+      let scramble = letters[(k &* 7 &+ round &* 11 &+ 3) % flips]
+      if k < m {
+        if let target = letters.firstIndex(of: to[k]) {
+          cells.append((letters[((target - max(Self.flaps(k) - round, 0)) % flips + flips) % flips], BlockFont.width(to[k])))
+        } else {
+          // A digit or a space scrambles as a letter until it lands.
+          cells.append((landed ? to[k] : scramble, BlockFont.width(landed ? to[k] : scramble)))
+        }
+      } else {
+        // On its way out: scrambling until the row lets it go.
+        cells.append((scramble, BlockFont.width(from[k])))
+      }
+    }
+    let natural = (cells.reduce(0) { $0 + $1.width } + BlockFont.gap * CGFloat(count - 1)) * unit
+    let stretchX = size.width / natural
+    var x: CGFloat = 0
+    var path = Path()
+    for cell in cells {
+      if cell.shown != " " {
+        let squeeze = cell.width / BlockFont.width(cell.shown)
+        let glyph = BlockFont.path(cell.shown, x: 0, unit: unit, stretchX: stretchX * squeeze, stretchY: Self.tall)
+        path.addPath(glyph.applying(CGAffineTransform(translationX: x, y: 0)))
+      }
+      x += (cell.width + BlockFont.gap) * unit * stretchX
+    }
+    ctx.fill(path, with: .foreground)
+  }
+
+  /// `elapsed` nil: settled; negative: before the entrance, nothing shown.
+  func draw(_ ctx: inout GraphicsContext, size: CGSize, glyphs: [Character], elapsed: Double?) {
     let unit = size.height / (10 * Self.tall)
     let natural = BlockFont.width(glyphs) * unit
     let stretchX = natural > 0 ? size.width / natural : 1
@@ -365,11 +438,7 @@ struct BlockText: View {
     var path = Path()
     for (index, character) in glyphs.enumerated() {
       var shown: Character? = character
-      if flap, let elapsed, character != " ", let target = Self.flapLetters.firstIndex(of: character) {
-        let n = Self.flapLetters.count, total = Self.flaps(index)
-        let round = max(0, Int((elapsed - Double(index) * Self.flapStagger) / Self.flapStepTime))
-        shown = Self.flapLetters[((target - max(total - round, 0)) % n + n) % n]
-      } else if let elapsed, character != " " {
+      if let elapsed, character != " " {
         let t = elapsed - Double(index) * DotText.decodeStagger
         if t < 0 { shown = nil } else {
           let round = Int(t / DotText.decodeStepTime)
