@@ -71,7 +71,9 @@ import SwiftData
     await sync()
   }
 
-  func sync() async {
+  /// `inStages`: with the app closed, where iOS may stop the run before it's done; what was read
+  /// is kept as it goes (`SyncWorker.ingest`).
+  func sync(inStages: Bool = false) async {
     guard !isSyncing else { return }
     isSyncing = true
     let started = Date.now
@@ -87,7 +89,7 @@ import SwiftData
       // The reader's own feeds too.
       for custom in OutletStore.shared.customFeeds { incoming += await CustomFeedReader.articles(custom) }
       phase = .reading(outlets: Set(incoming.map(\.outlet)).count)
-      let result = try await worker.ingest(incoming, since: started) { phase in
+      let result = try await worker.ingest(incoming, since: started, inStages: inStages) { phase in
         await MainActor.run { self.phase = phase }
       }
       lastNew = result.new

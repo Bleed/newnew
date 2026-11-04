@@ -168,23 +168,50 @@ import UserNotifications
 
   // MARK: Background refresh
 
+  /// Two kinds of wake, both iOS's to time: a refresh (about 30 s, often hours apart) and a
+  /// longer processing run (minutes, mostly while the iPhone is idle or charging), which has
+  /// time to read every feed and group them, so the news is ready when newnew is opened.
+  static let syncTaskID = "com.svein.newnew.sync"
+
   static func scheduleRefresh() {
-    guard BackgroundRefresh.current != .off || breakingOn || followingOn else {
+    if BackgroundRefresh.current != .off || breakingOn || followingOn {
+      let request = BGAppRefreshTaskRequest(identifier: refreshTaskID)
+      request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
+      try? BGTaskScheduler.shared.submit(request)
+    } else {
       BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: refreshTaskID)
-      return
     }
-    let request = BGAppRefreshTaskRequest(identifier: refreshTaskID)
-    request.earliestBeginDate = Date(timeIntervalSinceNow: 30 * 60)
-    try? BGTaskScheduler.shared.submit(request)
+    if BackgroundRefresh.current != .off {
+      let request = BGProcessingTaskRequest(identifier: syncTaskID)
+      request.requiresNetworkConnectivity = true
+      request.earliestBeginDate = Date(timeIntervalSinceNow: 60 * 60)
+      try? BGTaskScheduler.shared.submit(request)
+    } else {
+      BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: syncTaskID)
+    }
   }
 
   /// iOS woke the app: sync when the setting and the network allow (`BackgroundRefresh`),
-  /// then alert about what's new.
+  /// keeping what's read as it goes in case iOS stops it, then alert about what's new.
   static func backgroundRefresh(_ pipeline: FeedSyncPipeline) async {
     scheduleRefresh()
     guard await BackgroundRefresh.allowedNow() else { return }
-    await pipeline.sync()
+    await pipeline.sync(inStages: true)
     await notifyNewStories(pipeline, posting: true)
+  }
+
+  /// The processing run (registered at launch, on the main queue): the same sync; when iOS
+  /// needs the time back, the sync stops where it is and keeps what it has.
+  static func runProcessing(_ task: BGProcessingTask) {
+    guard let pipeline = NewnewApp.pipeline else {
+      task.setTaskCompleted(success: false)
+      return
+    }
+    let work = Task {
+      await backgroundRefresh(pipeline)
+      task.setTaskCompleted(success: pipeline.lastError == nil)
+    }
+    task.expirationHandler = { work.cancel() }
   }
 
   // MARK: Deciding what to alert about

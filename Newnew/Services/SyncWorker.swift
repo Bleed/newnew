@@ -53,12 +53,22 @@ actor SyncWorker {
     return Dictionary(stored.compactMap { a in a.imageURL.map { (a.url, $0) } }, uniquingKeysWith: { a, _ in a })
   }
 
-  /// Everything after the download: store, embed, regroup, topics, one save.
-  func ingest(_ incoming: [FeedArticleDTO], since: Date, phase: @escaping @Sendable (SyncPhase) async -> Void) async throws -> Result {
+  /// Everything after the download: store, embed, regroup, topics, one save. `inStages` (with
+  /// the app closed, where iOS can stop the run at any moment): the articles are saved as soon as
+  /// they're stored and the vectors as far as they got, so a run cut short still keeps what it
+  /// read; the next one (or the next open, `regroup`) finishes it.
+  func ingest(
+    _ incoming: [FeedArticleDTO], since: Date, inStages: Bool = false, phase: @escaping @Sendable (SyncPhase) async -> Void
+  ) async throws -> Result {
     let added = upsert(incoming)
     prune()
     tagRegions(added)
+    if inStages { try modelContext.save() }
     await embedMissing(phase: phase)
+    if Task.isCancelled {
+      try modelContext.save()
+      throw CancellationError()
+    }
     await phase(.grouping)
     await recluster()
     applyTopics()
@@ -66,9 +76,10 @@ actor SyncWorker {
     return result(since: since)
   }
 
-  /// Regroups and applies the topics to what's stored, then saves.
+  /// Regroups and applies the topics to what's stored, then saves. Articles a background run
+  /// stored but didn't get to embed are read first.
   func regroup() async throws -> Result {
-    await prepare()
+    await embedMissing { _ in }
     await recluster()
     applyTopics()
     try modelContext.save()
@@ -152,6 +163,8 @@ actor SyncWorker {
     let missing = articles.filter { $0.embedding?.count != bytes }
     // In batches, so the loader can count articles as they're read.
     for start in stride(from: 0, to: missing.count, by: 40) {
+      // Out of background time: keep the vectors read so far.
+      if Task.isCancelled { return }
       await phase(.embedding(done: start, total: missing.count))
       let batch = Array(missing[start..<min(start + 40, missing.count)])
       let vectors = await engine.embed(batch.map(\.text))

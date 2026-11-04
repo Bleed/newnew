@@ -52,10 +52,10 @@ targets:
       properties:
         NewnewFeedURL: $(NEWNEW_FEED_URL)
         NewnewCloudKitContainer: $(NEWNEW_CLOUDKIT_CONTAINER)
-        # Background refresh (local alerts) and pushes (breaking news) wake the app to sync;
-        # podcast episodes keep playing in the background.
-        UIBackgroundModes: [fetch, remote-notification, audio]
-        BGTaskSchedulerPermittedIdentifiers: [com.svein.newnew.refresh]
+        # Background refresh and processing (local alerts, fresh news) and pushes (breaking news)
+        # wake the app to sync; podcast episodes keep playing in the background.
+        UIBackgroundModes: [fetch, processing, remote-notification, audio]
+        BGTaskSchedulerPermittedIdentifiers: [com.svein.newnew.refresh, com.svein.newnew.sync]
         # ProMotion: scrolling at up to 120 Hz.
         CADisableMinimumFrameDurationOnPhone: true
         CFBundleShortVersionString: $(MARKETING_VERSION)

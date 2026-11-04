@@ -1,3 +1,4 @@
+import BackgroundTasks
 import CloudKit
 import SwiftData
 import SwiftUI
@@ -95,6 +96,10 @@ struct NewnewApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    // The longer background sync (the short refresh is the scene's `.backgroundTask`).
+    BGTaskScheduler.shared.register(forTaskWithIdentifier: Alerts.syncTaskID, using: .main) { task in
+      MainActor.assumeIsolated { Alerts.runProcessing(task as! BGProcessingTask) }
+    }
     return true
   }
 
@@ -103,7 +108,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     guard CKNotification(fromRemoteNotificationDictionary: userInfo) != nil, let pipeline = NewnewApp.pipeline else { return .noData }
     // The alert shows either way; reading the feeds waits for what the setting allows.
     guard await BackgroundRefresh.allowedNow() else { return .noData }
-    await pipeline.sync()
+    await pipeline.sync(inStages: true)
     return .newData
   }
 
