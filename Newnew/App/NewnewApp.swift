@@ -96,6 +96,9 @@ struct NewnewApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
   func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
     UNUserNotificationCenter.current().delegate = self
+    // Zen mode is gone: its "edition ready" reminders and settings go too.
+    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ["edition.7", "edition.18"])
+    for key in ["todayMode", "editionSize", "editionReady", "edition.current"] { UserDefaults.standard.removeObject(forKey: key) }
     // The longer background sync (the short refresh is the scene's `.backgroundTask`).
     BGTaskScheduler.shared.register(forTaskWithIdentifier: Alerts.syncTaskID, using: .main) { task in
       MainActor.assumeIsolated { Alerts.runProcessing(task as! BGProcessingTask) }

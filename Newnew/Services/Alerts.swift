@@ -22,10 +22,7 @@ import UserNotifications
   /// The settings in the Topics sheet.
   static let breakingKey = "alerts.breaking"
   static let followingKey = "alerts.following"
-  /// Off while Today opens as an edition (zen mode): its only notification is "edition ready".
-  static var breakingOn: Bool {
-    UserDefaults.standard.bool(forKey: breakingKey) && UserDefaults.standard.string(forKey: TodayMode.key) != TodayMode.edition.rawValue
-  }
+  static var breakingOn: Bool { UserDefaults.standard.bool(forKey: breakingKey) }
   static var followingOn: Bool { UserDefaults.standard.bool(forKey: followingKey) }
 
   /// Breaking: covered by at least this many outlets…
