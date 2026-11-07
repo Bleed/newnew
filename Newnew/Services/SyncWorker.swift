@@ -10,11 +10,25 @@ actor SyncWorker {
   private let queue = DispatchSerialQueue(label: "newnew.sync", qos: .utility)
   nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
   private let container: ModelContainer
-  private lazy var modelContext: ModelContext = {
-    let context = ModelContext(container)
-    context.autosaveEnabled = false
-    return context
-  }()
+  /// A fresh context for each run (`begin`), so it sees what the reader changed meanwhile (a
+  /// story read on the main context); a context kept for the whole session went on reading
+  /// stale values. Runs that overlap (the actor lets one in while another awaits) share it.
+  private var context: ModelContext?
+  private var runs = 0
+  private var modelContext: ModelContext { context! }
+
+  private func begin() {
+    if runs == 0 || context == nil {
+      let fresh = ModelContext(container)
+      fresh.autosaveEnabled = false
+      context = fresh
+    }
+    runs += 1
+  }
+
+  private func end() {
+    runs -= 1
+  }
   private let engine = OnDeviceVectorEngine.shared
   /// The mean article vector, taken away before comparing (see `Vec.centred`).
   private var corpusMean: [Float]?
@@ -36,6 +50,8 @@ actor SyncWorker {
   /// Clears the stored articles when where they come from changed (the sample's invented stories
   /// shouldn't mix with real ones), or when there are none.
   func clear(unless source: String, stored: String?) throws -> Bool {
+    begin()
+    defer { end() }
     let articles = (try? modelContext.fetch(FetchDescriptor<ArticleItem>())) ?? []
     // The sample's links all go to example.com; none of them belong next to real news.
     let hasSample = source != "sample" && articles.contains { $0.url.hasPrefix("https://example.com/") }
@@ -49,6 +65,8 @@ actor SyncWorker {
 
   /// HD video thumbnails already checked (link → picture).
   func pictures() -> [String: String] {
+    begin()
+    defer { end() }
     let stored = (try? modelContext.fetch(FetchDescriptor<ArticleItem>(predicate: #Predicate { $0.videoID != nil }))) ?? []
     return Dictionary(stored.compactMap { a in a.imageURL.map { (a.url, $0) } }, uniquingKeysWith: { a, _ in a })
   }
@@ -60,6 +78,8 @@ actor SyncWorker {
   func ingest(
     _ incoming: [FeedArticleDTO], since: Date, inStages: Bool = false, phase: @escaping @Sendable (SyncPhase) async -> Void
   ) async throws -> Result {
+    begin()
+    defer { end() }
     let added = upsert(incoming)
     prune()
     tagRegions(added)
@@ -79,6 +99,8 @@ actor SyncWorker {
   /// Regroups and applies the topics to what's stored, then saves. Articles a background run
   /// stored but didn't get to embed are read first.
   func regroup() async throws -> Result {
+    begin()
+    defer { end() }
     await embedMissing { _ in }
     await recluster()
     applyTopics()
@@ -88,6 +110,8 @@ actor SyncWorker {
 
   /// After a topic was added or removed (and saved): its examples read, the stories matched.
   func retopic() async throws {
+    begin()
+    defer { end() }
     await prepare()
     await embedTopics()
     applyTopics()
@@ -236,7 +260,17 @@ actor SyncWorker {
         modelContext.insert(cluster)
       }
       kept.insert(cluster.id)
+      // When the reader last read these articles' stories, before they're moved.
+      let readBefore = items.compactMap { $0.cluster?.readAt }.max()
       for item in items where item.cluster?.id != cluster.id { item.cluster = cluster }
+      // A read story split or merged into one that wasn't read: if its headline is one they
+      // read, it stays read (and what came after counts as new), instead of coming back unread.
+      // With no read time left (lost by earlier regroups), the read articles' arrival stands in.
+      if cluster.lead?.isRead == true,
+        let read = readBefore ?? items.filter(\.isRead).map(\.fetchedAt).max(),
+        cluster.readAt.map({ $0 < read }) ?? true {
+        cluster.readAt = read
+      }
       // Only what changed, so the save leaves the rest (a story read meanwhile) alone.
       let updatedAt = items.map(\.publishedAt).max() ?? cluster.updatedAt
       if cluster.updatedAt != updatedAt { cluster.updatedAt = updatedAt }
