@@ -508,11 +508,13 @@ struct FeedView: View {
     // of its own; Show brings you back to Today with the new stories in.
     .onChange(of: ready) { _, count in
       ReadyPrompt.shared.update(count) {
+        // From a story (or Catchup, or a sheet) the feed jumps to its top out of sight.
+        let away = !path.isEmpty || overlayStory != nil || showingCatchup || topicsKind != nil
         path = []
         overlayStory = nil
         showingCatchup = false
         topicsKind = nil
-        showUpdate()
+        showUpdate(away: away)
       }
     }
     .onAppear {
@@ -576,11 +578,15 @@ struct FeedView: View {
   }
 
   /// Show: the new stories in, and the page at its top.
-  private func showUpdate() {
+  /// `away`: the feed is behind a story or a sheet, so it scrolls to its top unseen; the scroll
+  /// check that unpins the filter bar doesn't run there, and the bar's pinned blur stayed over
+  /// the top. It's unpinned here instead.
+  private func showUpdate(away: Bool = false) {
     ReadyPrompt.shared.update(nil)
     withAnimation(.snappy(duration: 0.25)) { ready = nil }
     held = nil
     recomputeSections()
+    if away { barPinned = false }
     Task { @MainActor in
       await Task.yield()
       withAnimation(.snappy(duration: 0.3)) { scrollPosition.scrollTo(edge: .top) }
