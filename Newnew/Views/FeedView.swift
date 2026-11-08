@@ -108,6 +108,16 @@ enum NewsWindow: Int, CaseIterable, Identifiable {
     shared.revision &+= 1
   }
 
+  /// Article link → when it was seen, for iCloud (`CloudSync`).
+  static var seenTimes: [String: Double] { seenURLs }
+
+  /// Articles read on another device (`CloudSync`): seen as of then.
+  static func markSeen(_ times: [String: Double]) {
+    for (url, time) in times where (seenURLs[url] ?? 0) < time { seenURLs[url] = time }
+    UserDefaults.standard.set(seenURLs, forKey: seenURLsKey)
+    shared.revision &+= 1
+  }
+
   /// Returns the most recent time the user read this cluster across both SwiftData and UserDefaults.
   static func lastReadDate(for cluster: StoryCluster) -> Date? {
     var latest: Date? = cluster.readAt

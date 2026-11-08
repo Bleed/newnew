@@ -38,6 +38,8 @@ struct NewnewApp: App {
     let pipeline = FeedSyncPipeline(context: container.mainContext)
     _pipeline = State(initialValue: pipeline)
     Self.pipeline = pipeline
+    // Outlets, topics, reads and the look, the same on every device signed in to the same iCloud.
+    CloudSync.shared.start(pipeline)
     let empty = OutletStore.shared.hasOnboarded && !pipeline.hasStories
     _showsLaunch = State(initialValue: empty)
     LaunchState.shared.isShowing = empty

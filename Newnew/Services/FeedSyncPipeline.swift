@@ -95,6 +95,8 @@ import SwiftData
         await MainActor.run { self.phase = phase }
       }
       lastNew = result.new
+      // Articles fetched only now may have been read on another device.
+      CloudSync.shared.applyReads()
       lastSync = .now
       lastError = nil
       phase = .done(stories: result.stories)
@@ -169,6 +171,30 @@ import SwiftData
     cluster.readAt = .now
     for article in cluster.articles where !article.isRead { article.isRead = true }
     try? context.save()
+    CloudSync.shared.read(cluster.articles.map(\.url))
+  }
+
+  /// Articles read on another device (link → when, from `CloudSync`). A story here counts as read
+  /// when its headline article or at least half its articles were: the other device may have
+  /// grouped it a little differently.
+  func markRead(_ times: [String: Double]) {
+    var touched: [UUID: (cluster: StoryCluster, time: Double)] = [:]
+    for article in (try? context.fetch(FetchDescriptor<ArticleItem>(predicate: #Predicate { !$0.isRead }))) ?? [] {
+      guard let time = times[article.url] else { continue }
+      article.isRead = true
+      if let cluster = article.cluster {
+        touched[cluster.id] = (cluster, max(touched[cluster.id]?.time ?? 0, time))
+      }
+    }
+    for (cluster, time) in touched.values {
+      let articles = cluster.articles
+      let read = articles.filter(\.isRead).count
+      guard cluster.lead?.isRead == true || read * 2 >= articles.count else { continue }
+      let date = Date(timeIntervalSince1970: time)
+      if cluster.readAt.map({ $0 < date }) ?? true { cluster.readAt = date }
+    }
+    try? context.save()
+    ReadLedger.markSeen(times)
   }
 
   func saveBrief(_ brief: ClusterPerspectiveBrief, for cluster: StoryCluster) {
@@ -186,6 +212,7 @@ import SwiftData
     let examples = await IntelligenceService.topicExamples(phrase)
     context.insert(SemanticTopic(phrase: phrase, kind: topicKind, exampleHeadlines: examples.headlines, keywords: examples.keywords))
     try? context.save()
+    CloudSync.shared.pushTopics()
     step(.reading)
     // The worker reads the examples and matches the stories.
     await retopic()
@@ -203,13 +230,51 @@ import SwiftData
       keywords: Array(shared.prefix(4)))
     context.insert(topic)
     try? context.save()
+    CloudSync.shared.pushTopics()
     await retopic()
   }
 
   func remove(_ topic: SemanticTopic) {
     context.delete(topic)
     try? context.save()
+    CloudSync.shared.pushTopics()
     Task { await retopic() }
+  }
+
+  /// Joining iCloud: the other devices' topics added to these (none removed).
+  func mergeTopics(_ synced: [SyncedTopic]) {
+    let here = Set(((try? context.fetch(FetchDescriptor<SemanticTopic>())) ?? []).map { $0.kindRaw + "|" + $0.phrase })
+    let new = synced.filter { !here.contains($0.key) }
+    guard !new.isEmpty else { return }
+    for topic in new { insert(topic) }
+    try? context.save()
+    Task { await retopic() }
+  }
+
+  /// Another device added or removed a topic: these become the same as its.
+  func replaceTopics(with synced: [SyncedTopic]) {
+    let keys = Set(synced.map(\.key))
+    let stored = (try? context.fetch(FetchDescriptor<SemanticTopic>())) ?? []
+    let here = Set(stored.map { $0.kindRaw + "|" + $0.phrase })
+    var changed = false
+    for topic in stored where !keys.contains(topic.kindRaw + "|" + topic.phrase) {
+      context.delete(topic)
+      changed = true
+    }
+    for topic in synced where !here.contains(topic.key) {
+      insert(topic)
+      changed = true
+    }
+    guard changed else { return }
+    try? context.save()
+    Task { await retopic() }
+  }
+
+  private func insert(_ synced: SyncedTopic) {
+    let topic = SemanticTopic(
+      phrase: synced.phrase, kind: TopicKind(rawValue: synced.kind) ?? .mute, exampleHeadlines: synced.examples, keywords: synced.keywords)
+    topic.createdAt = synced.created
+    context.insert(topic)
   }
 
   private func retopic() async {

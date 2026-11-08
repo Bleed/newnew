@@ -115,6 +115,14 @@ nonisolated enum YouTubeSuggestions {
     customFeeds = (defaults.data(forKey: Self.customKey)).flatMap { try? JSONDecoder().decode([CustomFeed].self, from: $0) } ?? []
   }
 
+  /// After iCloud brought another device's choice (`CloudSync`).
+  func reload() {
+    let defaults = UserDefaults.standard
+    chosen = (defaults.array(forKey: Self.chosenKey) as? [String]).map(Set.init)
+    hasOnboarded = defaults.bool(forKey: Self.onboardedKey)
+    customFeeds = (defaults.data(forKey: Self.customKey)).flatMap { try? JSONDecoder().decode([CustomFeed].self, from: $0) } ?? []
+  }
+
   private static func bundledCatalog() -> [OutletInfo] {
     guard let url = Bundle.main.url(forResource: "outlets", withExtension: "json"),
       let data = try? Data(contentsOf: url),
