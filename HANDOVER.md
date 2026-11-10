@@ -12,7 +12,11 @@ A small Node job on GitHub Actions publishes the outlet list and feed health to 
 
 ## 2. Set up on a new Mac
 
-**Where the code lives.** Clone it outside iCloud Drive, for example `~/Developer/Newnew`. This folder is in iCloud-synced Documents. iCloud file attributes break codesigning of build output.
+**Where the code lives.** The folder arrives through iCloud Documents at the same path: `~/Documents/Apps in development/Newnew`. Before working:
+- In Finder, right-click "Apps in development" and choose Keep Downloaded. Wait until it has finished syncing.
+- Work on one Mac at a time. Editing on both makes "… 2" copies and can corrupt a `.git` folder.
+- Keep build output out of iCloud. Leave Xcode's DerivedData in its default `~/Library` location. Put any build or test scratch paths in `$TMPDIR`.
+- If git ever acts strangely in the folder (errors reading objects, "mmap failed: Operation timed out"), the clean copy is on GitHub. Run `git clone https://github.com/Bleed/newnew` into a temporary folder and compare.
 
 **Tools**
 - Xcode with the iOS 26 SDK (Swift 6, deployment target iOS 26.0).
@@ -35,8 +39,7 @@ A small Node job on GitHub Actions publishes the outlet list and feed health to 
 
 **Get the project**
 ```bash
-git clone https://github.com/Bleed/newnew.git ~/Developer/Newnew
-cd ~/Developer/Newnew
+cd "~/Documents/Apps in development/Newnew"
 xcodegen generate
 open Newnew.xcodeproj
 ```
@@ -90,7 +93,7 @@ open Newnew.xcodeproj
 ## 6. Pitfalls and house rules
 
 **Pitfalls already met**
-- Building inside iCloud Drive breaks signing. Keep the clone outside it.
+- Build output inside iCloud Drive breaks signing (iCloud file attributes). Keep DerivedData in `~/Library` and scratch paths in `$TMPDIR`.
 - A build number changed in Xcode is lost at the next `xcodegen generate`. Edit `project.yml`.
 - CloudKit refused Production subscriptions (CKError 12) until the subscription was created once in Development (a Debug build run from Xcode) and the schema was deployed again. Any new subscription type needs the same step.
 - Server keys belong to one CloudKit environment. A Development test needs its own key.
@@ -111,6 +114,7 @@ open Newnew.xcodeproj
 
 ## 7. Git
 
-- Remote: `origin` = https://github.com/Bleed/newnew.git. Branch `main`.
-- Checked 10 Nov 2026: the working tree is clean and `main` matches `origin/main`. Everything is committed and pushed (128 commits, latest "Build 51").
+- Backed up on GitHub as Bleed/newnew (private): `origin` = https://github.com/Bleed/newnew.git. Branch `main`.
+- Everything is committed and pushed as of 10 Nov 2026 (128 commits, latest "Build 51").
+- GitHub is the backup, not iCloud. Push after each work session.
 - Not in git, so carry it over by hand: `~/.newnew-cloudkit/eckey.pem`. The `build/` folder, the generated `Newnew.xcodeproj` and `github-scraper/node_modules` and `public` are git-ignored and can be rebuilt.
