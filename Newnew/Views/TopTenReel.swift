@@ -113,7 +113,8 @@ struct TopTen: Identifiable {
 
     return TopTen(
       made: now, entries: Array(entries), pillars: pillars,
-      quiet: Pillar.allCases.filter { !active.contains($0) },
+      // Quiet: read, but little happened. A category turned off isn't named.
+      quiet: Pillar.allCases.filter { !active.contains($0) && OutletStore.shared.shows($0) },
       episodes: episodes, videos: videos, posts: posts, since: since)
   }
 }
@@ -798,6 +799,8 @@ private struct MoreOnThis: View {
   @Environment(\.openURL) private var openURL
   @State private var writing = false
   @State private var failed = false
+  /// A lens tapped in the spectrum narrows the outlets below to it, as on the story page.
+  @State private var lens: EditorialLens?
 
   var sources: [IntelligenceService.Source] {
     cluster.sortedArticles.map { IntelligenceService.Source(outlet: $0.outlet, title: $0.title, snippet: $0.shortSnippet) }
@@ -809,15 +812,18 @@ private struct MoreOnThis: View {
     return cluster.sortedArticles.filter { !$0.isMedia && seen.insert($0.outlet).inserted }
   }
 
+  /// The outlets the chosen lens keeps (all of them without one).
+  var listed: [ArticleItem] {
+    guard let lens else { return perOutlet }
+    return perOutlet.filter { EditorialLens.classify(outlet: $0.outlet, pillar: cluster.pillar) == lens }
+  }
+
   var body: some View {
     ScrollView {
       VStack(alignment: .leading, spacing: Rhythm.section) {
         HStack(spacing: 8) {
-          DotText("PAUSED", pitch: 1.4)
-            .foregroundStyle(Swiss.onInk)
-            .padding(.horizontal, 9).pillHeight()
-            .background(Swiss.ink, in: Capsule())
-            .fixedSize()
+          // A quiet chip like N SOURCES: a state, not an action.
+          DotChip("PAUSED", decodeDelay: 0.35).fixedSize()
           Text("The timer waits while this is open").font(.footnote).foregroundStyle(Swiss.muted)
             .lineLimit(1)
           Spacer(minLength: 8)
@@ -831,11 +837,14 @@ private struct MoreOnThis: View {
           }
         }
         .entrance(0.05)
-        read.entrance(0.12)
+        // Who covers it, by kind of outlet, above how they cover it, as on the story page;
+        // shows only with two or more outlets.
+        CoverageSpectrumCard(cluster: cluster, selectedLens: $lens).entrance(0.12)
+        read.entrance(0.16)
         VStack(alignment: .leading, spacing: Rhythm.beat) {
-          Eyebrow("Every outlet's headline")
+          Eyebrow(lens.map { "Every outlet's headline · \($0.shortLabel)" } ?? "Every outlet's headline")
           VStack(alignment: .leading, spacing: Rhythm.row) {
-            ForEach(perOutlet) { article in
+            ForEach(listed) { article in
               HStack(alignment: .firstTextBaseline, spacing: Rhythm.beat) {
                 Text(article.publishedAt.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits)))
                   .font(Swiss.smallFigure).foregroundStyle(Swiss.muted)
@@ -851,17 +860,11 @@ private struct MoreOnThis: View {
           MediaPills(episode: cluster.episode, video: cluster.video).padding(.top, Rhythm.tight)
         }
         .entrance(0.2)
-        HStack(spacing: Rhythm.beat) {
-          Button("Continue", action: resume).buttonStyle(.swissPrimary)
-          if let lead = cluster.lead, let url = URL(string: lead.url) {
-            Button {
-              LinkOpener.open(url) { openURL(url) }
-            } label: {
-              Label("Read at \(lead.outlet)", systemImage: "arrow.up.right").labelStyle(TrailingIcon())
-            }
-            .buttonStyle(.swissSecondary)
-            .accessibilityHint("Opens the article")
-          }
+        // Side by side when they fit; a long outlet name ("South China Morning Post") stacks
+        // them, or the row widens the whole sheet past the screen's edges.
+        ViewThatFits(in: .horizontal) {
+          HStack(spacing: Rhythm.beat) { exits }
+          VStack(alignment: .leading, spacing: Rhythm.beat) { exits }
         }
         .entrance(0.3)
       }
@@ -872,6 +875,20 @@ private struct MoreOnThis: View {
     .background(Swiss.canvas)
     // Opening it was the tap: the read starts now, once.
     .task { await write() }
+  }
+
+  /// Continue, and the lead article at its publisher.
+  @ViewBuilder var exits: some View {
+    Button("Continue", action: resume).buttonStyle(.swissPrimary)
+    if let lead = cluster.lead, let url = URL(string: lead.url) {
+      Button {
+        LinkOpener.open(url) { openURL(url) }
+      } label: {
+        Label("Read at \(lead.outlet)", systemImage: "arrow.up.right").labelStyle(TrailingIcon())
+      }
+      .buttonStyle(.swissSecondary)
+      .accessibilityHint("Opens the article")
+    }
   }
 
   /// The saved read; while it writes, the writing chip; without Apple Intelligence (or if it

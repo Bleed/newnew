@@ -13,6 +13,7 @@ struct OnboardingView: View {
   var done: () -> Void
   @State private var step = Step.welcome
   @State private var selection = OutletStore.shared.selection
+  @State private var hidden = OutletStore.shared.hiddenPillars
 
   enum Step: Int, CaseIterable { case welcome, outlets, own, topics, updates, firstEdition }
 
@@ -86,12 +87,13 @@ struct OnboardingView: View {
   var outlets: some View {
     VStack(alignment: .leading, spacing: 0) {
       OnboardingHeadline("Choose what you read.")
-      OnboardingDeck("\(selection.count) of \(OutletStore.shared.catalog.count) outlets. Change it any time in Settings.")
+      OnboardingDeck("\(selection.count) of \(OutletStore.shared.catalog.count) outlets. Switch off a category you don't want. Change it any time in Settings.")
         .padding(.top, 8)
         .padding(.bottom, 14)
-      OutletPicker(selection: $selection)
+      OutletPicker(selection: $selection, hidden: $hidden)
       Button("Continue") {
         OutletStore.shared.setChosen(selection)
+        OutletStore.shared.setHidden(hidden)
         next()
       }
       .buttonStyle(.swissPrimary)
@@ -287,9 +289,11 @@ struct ProgressDots: View {
 }
 
 /// Every outlet, grouped by pillar, each with a check; a group's "All" switches it as a whole.
-/// The filter pills narrow the list to one group.
+/// The filter pills narrow the list to one group. Each category has a switch: off, none of its
+/// feeds are read, from any outlet (The Guardian's sport too), and Today has no pill for it.
 struct OutletPicker: View {
   @Binding var selection: Set<String>
+  @Binding var hidden: Set<Pillar>
   @State private var group: OutletGroup?
   var store = OutletStore.shared
 
@@ -320,17 +324,24 @@ struct OutletPicker: View {
     }
   }
 
+  /// The category a group is, if it is one (Video isn't).
+  func pillar(_ item: OutletGroup) -> Pillar? {
+    if case .pillar(let pillar) = item { pillar } else { nil }
+  }
+
   func section(_ item: OutletGroup) -> some View {
     let all = store.outlets(in: item)
     let outlets = all.filter { !$0.isPodcast }
     let podcasts = all.filter(\.isPodcast)
     let names = Set(outlets.map(\.outlet))
     let allOn = names.isSubset(of: selection)
+    let category = pillar(item)
+    let isOff = category.map { hidden.contains($0) } ?? false
     return VStack(alignment: .leading, spacing: 8) {
-      HStack {
+      HStack(spacing: Rhythm.beat) {
         Eyebrow(item.title)
         Spacer()
-        if !outlets.isEmpty {
+        if !outlets.isEmpty && !isOff {
           Button(allOn ? "None" : "All \(outlets.count)") {
             if allOn { selection.subtract(names) } else { selection.formUnion(names) }
           }
@@ -338,14 +349,30 @@ struct OutletPicker: View {
           .foregroundStyle(Swiss.ink)
           .buttonStyle(.plain)
         }
+        if let category {
+          // The whole category, from every outlet; at least one stays on.
+          Toggle(isOn: Binding(
+            get: { !hidden.contains(category) },
+            set: { on in withAnimation(.snappy) { if on { hidden.remove(category) } else { hidden.insert(category) } } }
+          )) { EmptyView() }
+          .toggleStyle(.swiss)
+          .fixedSize()
+          .disabled(!isOff && Pillar.allCases.count - hidden.count <= 1)
+          .accessibilityLabel("Show \(item.title)")
+        }
       }
-      if !outlets.isEmpty { rows(outlets) }
-      // Off until chosen, one by one: podcast feeds are large.
-      if !podcasts.isEmpty {
-        Text("Podcasts").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted).padding(.top, 4)
-        rows(podcasts, icon: "headphones")
+      if isOff {
+        Text("Off: no \(item.title) stories, from any outlet.")
+          .font(.footnote).foregroundStyle(Swiss.muted)
+      } else {
+        if !outlets.isEmpty { rows(outlets) }
+        // Off until chosen, one by one: podcast feeds are large.
+        if !podcasts.isEmpty {
+          Text("Podcasts").font(.footnote.weight(.medium)).foregroundStyle(Swiss.muted).padding(.top, 4)
+          rows(podcasts, icon: "headphones")
+        }
+        channels(item)
       }
-      channels(item)
     }
   }
 
@@ -554,13 +581,14 @@ struct OutletsSettingsView: View {
   @Environment(FeedSyncPipeline.self) var pipeline
   @Environment(\.dismiss) var dismiss
   @State private var selection = OutletStore.shared.selection
+  @State private var hidden = OutletStore.shared.hiddenPillars
   @State private var feedsBefore = OutletStore.shared.customFeeds
 
   var body: some View {
     NavigationStack {
       VStack(alignment: .leading, spacing: 16) {
         ReadingCount(chosen: selection.count, total: OutletStore.shared.catalog.count)
-        OutletPicker(selection: $selection)
+        OutletPicker(selection: $selection, hidden: $hidden)
       }
       .padding(.horizontal, Swiss.pageInset)
       .padding(.top, 8)
@@ -578,9 +606,12 @@ struct OutletsSettingsView: View {
 
   func save() {
     let store = OutletStore.shared
+    // A category switched back on is read again, like an outlet added.
     let added = !selection.subtracting(store.selection).isEmpty || store.customFeeds != feedsBefore
-    let changed = selection != store.selection || store.customFeeds != feedsBefore
+      || !store.hiddenPillars.subtracting(hidden).isEmpty
+    let changed = selection != store.selection || store.customFeeds != feedsBefore || hidden != store.hiddenPillars
     store.setChosen(selection)
+    store.setHidden(hidden)
     dismiss()
     if changed { Task { await pipeline.applyOutletChoice(added: added) } }
   }

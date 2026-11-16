@@ -178,7 +178,12 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   nil = not chosen yet = every outlet but the podcasts) and own feeds (`outlets.custom`) in UserDefaults.
   The catalog is `outlets.json` (each outlet's categories, kinds and feeds), with a bundled
   copy in Resources for an offline first launch. Only chosen outlets' feeds are fetched;
-  `applyOutletChoice` deletes articles of outlets dropped and syncs when outlets were added. Own feeds are found and
+  `applyOutletChoice` deletes articles of outlets dropped and syncs when outlets were added.
+  A whole category can be switched off in the same picker (a switch by each pillar's heading,
+  onboarding and Settings; at least one stays on): `OutletStore.hiddenPillars`
+  ("outlets.hiddenPillars", synced through iCloud) drops its feeds from `chosenFeeds` (from
+  every outlet, e.g. The Guardian's sport), `applyOutletChoice` deletes its stored articles (own
+  feeds kept), Today has no pill for it, and Top 10 doesn't name it QUIET. Own feeds are found and
   read on the iPhone (`CustomFeedReader`: a site's `<link rel="alternate">` or the usual
   paths; RSS and Atom), like every feed. Settings › Outlets has the same picker and the
   add-your-own panel. YouTube channels too: their feed's `yt:videoId` makes the items videos
@@ -271,8 +276,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   lines), `OutletPills`, two other outlets' headlines in columns 28 pt apart (no rules; one
   alone takes the width), and the More on this bar, a grey tile. Legal note: the picture
   covers at most about 40 % of the screen, never all of it. The blur is on a slide, not in a
-  list row. An article is shared only from More on this (`ShareLink` at the top right, on the
-  PAUSED line, the lead article): not from the slides or the story page (on request).
+  list row. The lead article is shared from More on this (`ShareLink` at the top right, on
+  the PAUSED line) and from the story page's ••• menu, never from the slides (on request).
   Spacing follows `Rhythm` (see Look).
 - The timer sits just under the Dynamic Island (the status bar is hidden), the top line 6 pt
   below the safe area. The timer is the dot face's own dots (`DotTimer`: pitch 1.4 snapped to whole pixels, like
@@ -282,10 +287,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   times a second and stalled the entrances. A story stays 6 s plus a little for long text,
   10 s at most (`Entry.seconds`), updates 8 s. Tap right 65 % next, left back (on Done too),
   hold to pause, swipe up for More on this, down to close. Showing a story marks it read.
-- More on this (a sheet; the timer waits): PAUSED dot chip; the read starts when the sheet
+- More on this (a sheet; the timer waits): a quiet PAUSED dot chip; the read starts when the sheet
   opens (opening it is the tap Rule 2 asks for; cached after): the writing chip while it
   writes, then `BriefPanel`; the headline preview without Apple Intelligence or if it fails.
-  Every outlet's headline with time and credit, Watch/Listen, then Continue, "Read at
+  The coverage spectrum sits above the read (a lens tapped narrows the outlet list); every
+  outlet's headline with time and credit, Watch/Listen, then Continue, "Read at
   <lead outlet> ↗" (`LinkOpener`); Share at the top right. No Full story button: the sheet holds what the story page
   had. Done's still-developing rows still open the story page.
 - Each page's contents arrive a beat after the page (`Arrives`), so the clock-timed entrances

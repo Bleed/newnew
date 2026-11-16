@@ -229,6 +229,8 @@ struct FeedView: View {
   var filter: FeedFilter {
     let filter = FeedFilter(raw: filterRaw)
     if case .topic(let phrase) = filter, !followedTopics.contains(phrase) { return .all }
+    // A category since turned off: All.
+    if case .pillar(let pillar) = filter, !OutletStore.shared.shows(pillar) { return .all }
     return filter
   }
 
@@ -670,13 +672,13 @@ struct FeedView: View {
       ReadLedger.record(cluster)
       recomputeSections()
     }
-    Button("Follow stories like this", systemImage: "plus.circle") {
+    Button("Follow similar stories", systemImage: "hand.thumbsup") {
       Task {
         await pipeline.addTopic(like: cluster, kind: .follow)
         recomputeSections()
       }
     }
-    Button("Mute stories like this", systemImage: "speaker.slash") {
+    Button("Mute similar stories", systemImage: "hand.thumbsdown") {
       Task {
         await pipeline.addTopic(like: cluster, kind: .mute)
         recomputeSections()
@@ -1639,7 +1641,10 @@ struct FilterBar: View {
         HStack(spacing: 6) {
           // Each pill is known by its filter's `raw`, which is what the row scrolls to.
           pill(.all)
-          ForEach(Pillar.allCases.map { FeedFilter.pillar($0).raw }, id: \.self) { raw in pill(FeedFilter(raw: raw)) }
+          // Categories turned off in Settings › Outlets have no pill.
+          ForEach(Pillar.allCases.filter(OutletStore.shared.shows).map { FeedFilter.pillar($0).raw }, id: \.self) { raw in
+            pill(FeedFilter(raw: raw))
+          }
           pill(.media)
           if !topics.isEmpty {
             divider

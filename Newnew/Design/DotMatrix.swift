@@ -485,14 +485,18 @@ extension View {
 struct DotChip: View {
   let text: String
   var label: String?
-  init(_ text: String, label: String? = nil) {
+  /// Seconds before the entrance starts: in a sheet, so it plays once the sheet has landed
+  /// instead of while it slides up.
+  var decodeDelay: Double = 0
+  init(_ text: String, label: String? = nil, decodeDelay: Double = 0) {
     self.text = text
     self.label = label
+    self.decodeDelay = decodeDelay
   }
 
   var body: some View {
     // The board's small size (its message rows), so chips and the board read as one face.
-    DotText(text, pitch: 1.4)
+    DotText(text, pitch: 1.4, decodeDelay: decodeDelay)
       // Full-strength dots: grey ones vanish on tiles and in dark mode.
       .foregroundStyle(Swiss.ink)
       .padding(.horizontal, 9)

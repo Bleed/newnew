@@ -22,7 +22,8 @@ import SwiftData
   static let chosenKey = "outlets.chosen"
   static let customKey = "outlets.custom"
   static let onboardedKey = "outlets.onboarded"
-  static var mirroredKeys: [String] { settingKeys + [chosenKey, customKey, onboardedKey] }
+  static let hiddenKey = OutletStore.hiddenKey
+  static var mirroredKeys: [String] { settingKeys + [chosenKey, customKey, onboardedKey, hiddenKey] }
   /// Read articles: a short fingerprint of each link → when it was read.
   static let readKey = "cloud.read"
   static let topicsKey = "cloud.topics"
@@ -74,7 +75,7 @@ import SwiftData
         if key == Self.onboardedKey, defaults.bool(forKey: key) { continue }
         if !Self.same(value, defaults.object(forKey: key)) {
           defaults.set(value, forKey: key)
-          if key == Self.chosenKey || key == Self.onboardedKey { outletsChanged = true }
+          if key == Self.chosenKey || key == Self.onboardedKey || key == Self.hiddenKey { outletsChanged = true }
         }
       } else if let local = defaults.object(forKey: key) {
         cloud.set(local, forKey: key)
@@ -134,7 +135,7 @@ import SwiftData
       // A device that has been set up stays set up.
       if key == Self.onboardedKey, value as? Bool != true { continue }
       defaults.set(value, forKey: key)
-      if [Self.chosenKey, Self.customKey, Self.onboardedKey].contains(key) { outletsChanged = true }
+      if [Self.chosenKey, Self.customKey, Self.onboardedKey, Self.hiddenKey].contains(key) { outletsChanged = true }
     }
     if outletsChanged { outletsArrived() }
     if keys.contains(Self.readKey) { applyReads() }
@@ -146,10 +147,12 @@ import SwiftData
   private func outletsArrived() {
     let store = OutletStore.shared
     let before = store.selection.union(store.customFeeds.map(\.title))
+    let hiddenBefore = store.hiddenPillars
     store.reload()
     let after = store.selection.union(store.customFeeds.map(\.title))
-    guard before != after, let pipeline else { return }
-    Task { await pipeline.applyOutletChoice(added: !after.subtracting(before).isEmpty) }
+    guard before != after || hiddenBefore != store.hiddenPillars, let pipeline else { return }
+    let added = !after.subtracting(before).isEmpty || !hiddenBefore.subtracting(store.hiddenPillars).isEmpty
+    Task { await pipeline.applyOutletChoice(added: added) }
   }
 
   /// What's been read on any device, applied to the articles stored here; also after each sync,

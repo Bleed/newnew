@@ -102,6 +102,9 @@ nonisolated enum YouTubeSuggestions {
   private static let customKey = "outlets.custom"
   /// Every outlet the reader has had in the list, so an outlet new to it can be switched on.
   private static let seenKey = "outlets.seen"
+  /// Categories the reader turned off (`Pillar` raw values): their feeds aren't read, from any
+  /// outlet, and their filter pill goes.
+  static let hiddenKey = "outlets.hiddenPillars"
   /// Outlets added with the Sports, Health, Travel and Art & Design pillars (build 52): new to a
   /// reader who chose before them, so they arrive switched on.
   private static let addedWithNewPillars: Set<String> = [
@@ -115,9 +118,15 @@ nonisolated enum YouTubeSuggestions {
   private(set) var chosen: Set<String>?
   private(set) var customFeeds: [CustomFeed]
   private(set) var hasOnboarded: Bool
+  private(set) var hiddenPillars: Set<Pillar>
+
+  private static func storedHidden() -> Set<Pillar> {
+    Set((UserDefaults.standard.stringArray(forKey: hiddenKey) ?? []).compactMap(Pillar.init(rawValue:)))
+  }
 
   init() {
     let defaults = UserDefaults.standard
+    hiddenPillars = Self.storedHidden()
     catalog = Self.bundledCatalog()
     chosen = (defaults.array(forKey: Self.chosenKey) as? [String]).map(Set.init)
     hasOnboarded = defaults.bool(forKey: Self.onboardedKey)
@@ -146,6 +155,7 @@ nonisolated enum YouTubeSuggestions {
     chosen = (defaults.array(forKey: Self.chosenKey) as? [String]).map(Set.init)
     hasOnboarded = defaults.bool(forKey: Self.onboardedKey)
     customFeeds = (defaults.data(forKey: Self.customKey)).flatMap { try? JSONDecoder().decode([CustomFeed].self, from: $0) } ?? []
+    hiddenPillars = Self.storedHidden()
   }
 
   private static func bundledCatalog() -> [OutletInfo] {
@@ -183,9 +193,19 @@ nonisolated enum YouTubeSuggestions {
   /// (their feeds are large; each is chosen on its own).
   var selection: Set<String> { chosen ?? Set(catalog.filter { !$0.isPodcast }.map(\.outlet)) }
 
-  /// The chosen outlets' feeds, for `FeedFetcher`.
+  /// The chosen outlets' feeds, for `FeedFetcher`; none from a category turned off.
   var chosenFeeds: [(outlet: String, feed: FeedSource)] {
-    catalog.filter { selection.contains($0.outlet) }.flatMap { info in (info.feeds ?? []).map { (info.outlet, $0) } }
+    catalog.filter { selection.contains($0.outlet) }.flatMap { info in
+      (info.feeds ?? []).filter { shows(Pillar(category: $0.category)) }.map { (info.outlet, $0) }
+    }
+  }
+
+  /// Whether the category is read (not turned off in the outlet picker).
+  func shows(_ pillar: Pillar) -> Bool { !hiddenPillars.contains(pillar) }
+
+  func setHidden(_ pillars: Set<Pillar>) {
+    hiddenPillars = pillars
+    UserDefaults.standard.set(pillars.map(\.rawValue).sorted(), forKey: Self.hiddenKey)
   }
 
   func setChosen(_ outlets: Set<String>) {

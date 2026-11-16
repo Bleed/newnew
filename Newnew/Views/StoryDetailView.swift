@@ -216,10 +216,17 @@ struct StoryDetailView: View {
     .toolbar {
       ToolbarItem(placement: .topBarTrailing) {
         Menu("More", systemImage: "ellipsis") {
-          Button("Follow stories like this", systemImage: "plus.circle") {
+          // The lead article, at its publisher.
+          if let lead = cluster.lead, let url = URL(string: lead.url) {
+            ShareLink(item: url, subject: Text(lead.title), message: Text("\(lead.title) · \(lead.outlet)")) {
+              Label("Share article", systemImage: "square.and.arrow.up")
+            }
+            .accessibilityLabel("Share \(lead.outlet)'s article")
+          }
+          Button("Follow similar stories", systemImage: "hand.thumbsup") {
             Task { await pipeline.addTopic(like: cluster, kind: .follow) }
           }
-          Button("Mute stories like this", systemImage: "speaker.slash") {
+          Button("Mute similar stories", systemImage: "hand.thumbsdown") {
             Task { await pipeline.addTopic(like: cluster, kind: .mute) }
           }
           if cluster.brief != nil && !briefDismissed {

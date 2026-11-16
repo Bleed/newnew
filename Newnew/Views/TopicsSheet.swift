@@ -234,12 +234,18 @@ struct OutletSettings: View {
       VStack(alignment: .leading, spacing: 12) {
         VStack(alignment: .leading, spacing: 3) {
           Text("Reading \(store.selection.count) of \(store.catalog.count) outlets").font(.body.weight(.medium))
-          Text("Change which outlets newnew reads at any time. Removing one clears its articles from this iPhone.")
+          if !store.hiddenPillars.isEmpty {
+            // Categories switched off, in filter-bar order.
+            Text("Off: " + Pillar.allCases.filter { !store.shows($0) }.map(\.title).joined(separator: ", "))
+              .font(.footnote.weight(.medium))
+              .foregroundStyle(Swiss.ink)
+          }
+          Text("Change which outlets and categories newnew reads at any time. Removing one clears its articles from this iPhone.")
             .font(.footnote)
             .tileSecondary()
             .fixedSize(horizontal: false, vertical: true)
         }
-        Button("Choose outlets") { choosing = true }.buttonStyle(.swissSecondary)
+        Button("Choose outlets and categories") { choosing = true }.buttonStyle(.swissSecondary)
       }
       .padding(14)
       .frame(maxWidth: .infinity, alignment: .leading)

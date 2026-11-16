@@ -149,8 +149,11 @@ import SwiftData
   /// if any outlet was added a sync reads its feeds.
   func applyOutletChoice(added: Bool) async {
     let outlets = OutletStore.shared
-    for article in (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? [] where !outlets.reads(article.outlet) {
-      context.delete(article)
+    let own = Set(outlets.customFeeds.map(\.title))
+    for article in (try? context.fetch(FetchDescriptor<ArticleItem>())) ?? [] {
+      // An outlet left out, or a category turned off (own feeds have none of their own).
+      let hidden = !own.contains(article.outlet) && !outlets.shows(Pillar(category: article.category))
+      if !outlets.reads(article.outlet) || hidden { context.delete(article) }
     }
     try? context.save()
     await regroup()
