@@ -346,7 +346,9 @@ struct BoardRollText: View {
     }
     .task(id: start) {
       guard start != nil else { return }
-      try? await Task.sleep(for: .seconds(delay + Double(rollLength(text.count)) * Self.glyphTime + 0.1))
+      // Cancelled (a new value, or the view went): stop here. Clearing now ended the animation
+      // early, the Top 10 reel's flap and dot faces jumping straight to the end.
+      do { try await Task.sleep(for: .seconds(delay + Double(rollLength(text.count)) * Self.glyphTime + 0.1)) } catch { return }
       start = nil
     }
   }

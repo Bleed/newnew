@@ -3,18 +3,22 @@ import Foundation
 /// The editorial mix: news, and the lighter pillars that keep the page from reading like a wire
 /// terminal. The scraper's feed categories map onto them; Today mixes them by `share`.
 nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
-  case briefing, tech, fashion, entertainment, gaming, lifestyle
+  case briefing, sports, tech, health, entertainment, fashion, design, travel, gaming, lifestyle
 
   var id: String { rawValue }
 
   init(category: String?) {
     switch category {
     case "Technology": self = .tech
+    case "Sport": self = .sports
+    case "Health": self = .health
+    case "Travel": self = .travel
+    case "Art & Design", "Design", "Architecture", "Art": self = .design
     case "Fashion & Style": self = .fashion
     case "Entertainment", "Culture": self = .entertainment
     case "Gaming": self = .gaming
     case "Lifestyle & Food": self = .lifestyle
-    // World, Business, Science, Politics, US, Local, Sport, Data, the news podcasts.
+    // World, Business, Science, Politics, US, Local, Data, the news podcasts.
     default: self = .briefing
     }
   }
@@ -22,6 +26,10 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
   var title: String {
     switch self {
     case .briefing: "Briefing"
+    case .sports: "Sports"
+    case .health: "Health"
+    case .travel: "Travel"
+    case .design: "Art & Design"
     case .tech: "Tech & Gear"
     case .fashion: "Fashion & Style"
     case .entertainment: "Entertainment"
@@ -33,10 +41,12 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
   /// Its share of Today's top stories.
   var share: Double {
     switch self {
-    case .briefing: 0.25
-    case .tech: 0.20
-    case .fashion, .entertainment, .gaming: 0.15
-    case .lifestyle: 0.10
+    case .briefing: 0.20
+    case .tech: 0.13
+    case .sports: 0.11
+    case .entertainment: 0.10
+    case .health, .fashion, .design, .gaming: 0.08
+    case .travel, .lifestyle: 0.07
     }
   }
 
@@ -48,8 +58,8 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
   /// in Tech, Entertainment, and Gaming aren't misclassified as product/critic reviews.
   var briefMode: BriefMode {
     switch self {
-    case .briefing, .tech, .entertainment, .gaming: .perspective
-    case .fashion, .lifestyle: .trend
+    case .briefing, .sports, .health, .tech, .entertainment, .gaming: .perspective
+    case .fashion, .lifestyle, .travel, .design: .trend
     }
   }
 }
@@ -149,7 +159,7 @@ extension StoryCluster {
     }
 
     // Fashion & Lifestyle non-news stories use `.trend` unless multiple outlets are reporting a hard news event
-    if pillar == .fashion || pillar == .lifestyle {
+    if [.fashion, .lifestyle, .travel, .design].contains(pillar) {
       return .trend
     }
 

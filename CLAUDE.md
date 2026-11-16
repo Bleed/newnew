@@ -133,9 +133,20 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   scored −0.1 to 0.4, an unrelated Jordan story 0.37. A story matches when ≥ ⅓ of its
   articles do; muting wins over following. Tested with a temporary launch-argument probe on
   the live feed (Apple news, Space, electric cars, Ukraine).
-- **Pillars** (`Pillar`, from the feed's category): Briefing (World, Business, Science,
-  Politics, US, Local, Sport, Data, news podcasts) 25 %, Tech & Gear 20 %, Fashion & Style,
-  Entertainment and Gaming 15 % each, Lifestyle & Food 10 %. A story's pillar is its articles'
+- **Pillars** (`Pillar`, from the feed's category), in filter-bar order: Briefing (World,
+  Business, Science, Politics, US, Local, Data, news podcasts) 20 %, Sports ("Sport") 11 %,
+  Tech & Gear 13 %, Health 8 %, Entertainment 10 %, Fashion & Style 8 %, Art & Design (art,
+  design and architecture; "Art & Design") 8 %, Travel 7 %, Gaming 8 %, Lifestyle & Food 7 %.
+  Sports, Health, Travel and Art & Design were added 2026-11-16 with new feeds (Skift, The
+  Points Guy, STAT, Medical Xpress, Sky Sports, Yahoo Sports, CBS Sports, ArchDaily,
+  designboom, The Art Newspaper, Hyperallergic, Colossal, Artnet News, Wallpaper*, and
+  sections of The Guardian, BBC News, NYT and NPR); Dezeen, AD, It's Nice That, Design Milk and
+  99% Invisible moved to Art & Design, Condé Nast Traveler to Travel. Travel and Art & Design
+  are light categories in `FeedFetcher`; Sports and Health are news (kept whole). Outlets new
+  to the list are switched on once for readers who had already chosen
+  (`OutletStore.adoptNewOutlets`, "outlets.seen"); podcasts stay off. After the Pillars
+  comes the Podcasts & Video filter (`FeedFilter.media`): stories with an episode or a video,
+  newest first, all as cards. A story's pillar is its articles'
   majority. On All, top stories are the pillars interleaved by share (smooth weighted
   round-robin, `FeedSections.balanced`), most important first within each; breaking news
   (`Alerts.isBreaking`) leads regardless. News reaches the top only with several outlets; a
@@ -177,7 +188,10 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   `feeds/videos.xml?channel_id=` from that. Each group in the picker suggests a few YouTube
   channels (`YouTubeSuggestions`, IDs checked 2026-10-29); checking one adds it as an own feed.
   Links open the publisher's app first (`LinkOpener`: universal links only, so YouTube, NYT,
-  Guardian…), falling back to the in-app browser. Breaking push still covers all news outlets (the server job doesn't
+  Guardian…), falling back to Safari inside newnew, never the Safari app: the root sets
+  `LinkOpener.action` as the `openURL` handler (`presentInApp` shows an SFSafariViewController
+  over whatever is up, sheets and the Top 10 reel included); the story page keeps its own
+  in-window browser. Breaking push still covers all news outlets (the server job doesn't
   know a reader's choice).
 - **Regions** (`RegionTagger`): a word list of places, people and institutions per region
   (Europe, US, Middle East, Asia). A story is in a region when ≥ ⅓ of its articles are. The
@@ -227,6 +241,60 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   drawn in two fills. Regions are tagged only for new articles (main-actor time).
   Keep loop state in an object: a ViewModifier's @State written from a task it started never
   reached the screen.
+
+## Top 10 reel
+
+- Replaces the Catchup reel (Figma page "Top 15 · sketch", sections "Top 15 reel · v5" to
+  "v8"; v8 is what's built, then made Top 10 on 2026-11-16). Opened by the toolbar's story
+  button (iPhone and iPad) and by the dot board's TOP 10 message; there is no filter pill. A cut, not
+  the cover's slide up (`openTop`, `disablesAnimations`): the slide hid the entrances. Light or
+  dark with the system. Code: `TopTenReel.swift` (`TopTen`, `TopTenReel`).
+- `TopTen.make` builds the deck when it opens, from every story whatever the filter: the last
+  36 h, not muted, no chart or media-only leads, at least 2 outlets, not read with nothing
+  new. A pillar takes part only when one of its stories has 3+ outlets in the last 24 h; the
+  others are named QUIET on the cover. Breaking first, then `FeedSections.importance` across
+  pillars (no balancing), 10 at most. Each story's facts (outlets, breaking) are worked out
+  once: `isBreaking` in the sort comparator re-sorted SwiftData articles thousands of times and
+  took seconds. A story read before with news since comes back as "Back · N new" and shows
+  what's new instead of "How it's told". Updates: podcast episodes (3), YouTube videos (2)
+  and own-feed posts (3) since the reel was last finished (`top10.finishedAt`), a day at most.
+- Pages: cover, stories, new episodes, videos and posts, Done. Cover and Done are Today's
+  header at the same sizes (rebus 19 pt, `BlockRebusLine` delays 0 / 0.3 / 0.45 / 0.6):
+  TOP10TOP10 flaps in from NEWNEW, DONEDONE from TOP10TOP10 (`BlockText.rollsFrom`, the same
+  split-flap roll as Today's loader landing). Rebus numbers are mono in ink pills.
+- A story slide is a front page: the publisher's picture across the full width and up to the
+  top edge (the safe area + 200 to 360 pt; it gives up height only when the words need it),
+  with a progressive blur (`TopBlur`: half of (the top safe area + 84 pt), full for its first
+  half, then fading out; it ends near the Dynamic Island's bottom; material and a little page tint) only under the dot timer and the top line, the photo sharp below them (01/10 in a dot chip on ink, "Top 10 · Mon 16 Nov" in regular
+  SF, close on glass); then the card's meta line (category, mono age, Developing or
+  Back, the N SOURCES dot chip), Times 34 headline with its `HeadlineCredit`, the extract (2
+  lines), `OutletPills`, two other outlets' headlines in columns 28 pt apart (no rules; one
+  alone takes the width), and the More on this bar, a grey tile. Legal note: the picture
+  covers at most about 40 % of the screen, never all of it. The blur is on a slide, not in a
+  list row. An article is shared only from More on this (`ShareLink` at the top right, on the
+  PAUSED line, the lead article): not from the slides or the story page (on request).
+  Spacing follows `Rhythm` (see Look).
+- The timer sits just under the Dynamic Island (the status bar is hidden), the top line 6 pt
+  below the safe area. The timer is the dot face's own dots (`DotTimer`: pitch 1.4 snapped to whole pixels, like
+  `DotText`): one run of dots per story and update page, two dots apart; the running page
+  lights dot by dot, the next dot fading up with the time, the rest at 20 %. Its time lives in
+  `ReelClock`, which only the timer reads: kept in the reel's state, it redrew every page 33
+  times a second and stalled the entrances. A story stays 6 s plus a little for long text,
+  10 s at most (`Entry.seconds`), updates 8 s. Tap right 65 % next, left back (on Done too),
+  hold to pause, swipe up for More on this, down to close. Showing a story marks it read.
+- More on this (a sheet; the timer waits): PAUSED dot chip; the read starts when the sheet
+  opens (opening it is the tap Rule 2 asks for; cached after): the writing chip while it
+  writes, then `BriefPanel`; the headline preview without Apple Intelligence or if it fails.
+  Every outlet's headline with time and credit, Watch/Listen, then Continue, "Read at
+  <lead outlet> ↗" (`LinkOpener`); Share at the top right. No Full story button: the sheet holds what the story page
+  had. Done's still-developing rows still open the story page.
+- Each page's contents arrive a beat after the page (`Arrives`), so the clock-timed entrances
+  start on screen; then its parts rise in one after another (`entrance`, 0.07 s apart) and
+  every dot-face chip plays its departures-board entrance (each page is a new view,
+  `.id(index)`).
+- Entrance timers (`BlockText`, `BlockRebusLine`, `DotText`, `BoardRollText`) end only when
+  their sleep runs out: a cancelled `try? await Task.sleep` used to fall through and end the
+  animation at once, which is why the reel showed TOP10TOP10 and its dot faces already landed.
 
 ## Loading board and alerts
 
@@ -286,7 +354,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 
 - newnew publishes no news: each iPhone reads the publishers' public feeds itself, like any RSS
   reader, and keeps extracts to 150 characters. Pictures are the publisher's own files.
-- Photos are never full screen: the Catchup reel shows the picture as a framed card.
+- Photos are never full screen: the Top 10 reel's picture runs full width at the top of a story
+  but covers at most about 40 % of the screen.
 - The AI read is written on the reader's iPhone, never published by newnew; it is labelled as
   Apple Intelligence and can be hidden. A report option was tried and removed (2026-10-29).
 - Coverage-spectrum badges describe, not judge: SPECIALIST PRESS, GENERAL NEWS, MANY DESKS.
@@ -306,7 +375,7 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   on the page) and what's new ("18 NEW IN 17 STORIES"). Rows arrive as a departures board 0.12 s
   apart and changed values roll; the tile stops growing at xxxLarge text so rows fit. Under a
   dotted rule, inside the tile, `BoardMessageRows` shows the tap-through messages (TOP with the
-  age in grey, CATCHUP, read hidden, hidden by topics) in a small dot face (pitch 1.4) on two
+  age in grey, TOP 10, read hidden, hidden by topics) in a small dot face (pitch 1.4) on two
   rows wrapped at words, with an ink arrow; they take turns every 7 s. Each message arrives as
   one departures board read left to right across both rows (`decodesOnChange` replays the
   entrance on new text; `decodeIndexOffset` lets row 2 and the grey age carry on row 1's cell
@@ -320,8 +389,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   landscape, two in portrait; each story goes to the shortest column by an estimated height,
   each column a `LazyVStack`), In brief at the top of the last. A story opens over the page in
   an overlay (about 90 % of the screen, up to 1120 × 900) holding `StoryPagerView`, which on
-  iPad has Close, previous and next buttons and the arrow keys; the Catchup button is hidden
-  and a reel story opens in the overlay. The story page is two columns on wide windows (54 %:
+  iPad has Close, previous and next buttons and the arrow keys; the toolbar's Top 10 button opens
+  the reel there too, and a reel story opens in the overlay. The story page is two columns on wide windows (54 %:
   lead, updates, coverage spectrum; 46 %: media, the brief, the coverage list, each scrolling
   on its own); a lens tapped in the spectrum filters the list, hovering an angle highlights its
   outlet, and a publisher's page opens full width in the same window.
@@ -374,11 +443,19 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   4 + 0.4 × index steps and settles, dot rows rippling 0.012 s apart; once on screen and after
   the launch board. Later value changes still roll. Not on the loading boards.
 - Signals: mint pill = attention ("Developing", "2 new"), red dot and words = act now. Rare.
-- Quiet 7 % grey pills for outlets; one black pill per screen for the main action.
+- Quiet grey pills for outlets (`Swiss.quietFill`: ink 7 % in light, white 15 % in dark, where
+  7 % all but vanished; every quiet pill, chip and round button uses it); one black pill per
+  screen for the main action.
 - Type scale (design pass 2026-10-28): headlines 34 (story page, reel), 24 (cards, receipt),
   20 (brief and coverage rows). Text weights regular, medium for emphasis; no semibold or bold.
   Every size is a text style (scales with the text-size setting), mono at `.caption` or
   `.caption2` at the smallest, never a fixed point size.
+- Spacing is four steps, `Rhythm` (Swiss.swift), everywhere: tight 6 inside a block (a
+  headline and its credit, a meta line and its title), beat 12 between blocks (picture, meta,
+  headline, extract, pills; tiles in a list), row 18 between items of a plain list, section
+  28 between sections (Today's In brief, each part of the story page, the reel's parts). A
+  card's Listen / Watch pills wrap on in the outlet pills' row (`OutletPills { … }`). Meta
+  lines: the name in footnote medium, the age in `Swiss.smallFigure`.
 - Controls: `.swissPrimary` / `.swissSecondary` for actions (the reel is dark, so its primary
   shows white). `SelectablePillStyle` for choices: an ink outline means "selected", never an
   action. `.roundIcon` for close and remove (32 pt circle, 44 pt touch area). Small pills use

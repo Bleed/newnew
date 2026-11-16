@@ -20,7 +20,7 @@ nonisolated enum FeedFetcher {
   /// Most podcasts come weekly.
   static let podcastMaxAge: TimeInterval = 7 * 24 * 3600
   static let perFeed = 30
-  static let lightCategories: Set<String> = ["Technology", "Entertainment", "Fashion & Style", "Gaming", "Lifestyle & Food"]
+  static let lightCategories: Set<String> = ["Technology", "Entertainment", "Fashion & Style", "Gaming", "Lifestyle & Food", "Travel", "Art & Design"]
   static let lightPerFeed = 8
   static let lightPerCategory = 15
   static let uncappedCategories: Set<String> = ["Technology"]

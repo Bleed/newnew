@@ -6,7 +6,8 @@
         "World",
         "Business",
         "Technology",
-        "Science"
+        "Science",
+        "Health"
       ],
       "kinds": [
         "article",
@@ -33,6 +34,10 @@
           "url": "https://www.youtube.com/feeds/videos.xml?channel_id=UC16niRr50-MSBwiO3YDb3RA",
           "category": "World",
           "kind": "video"
+        },
+        {
+          "url": "https://feeds.bbci.co.uk/news/health/rss.xml",
+          "category": "Health"
         }
       ]
     },
@@ -59,7 +64,10 @@
         "Technology",
         "Science",
         "Sport",
-        "Entertainment"
+        "Entertainment",
+        "Travel",
+        "Health",
+        "Art & Design"
       ],
       "kinds": [
         "article"
@@ -88,6 +96,18 @@
         {
           "url": "https://www.theguardian.com/uk/culture/rss",
           "category": "Entertainment"
+        },
+        {
+          "url": "https://www.theguardian.com/travel/rss",
+          "category": "Travel"
+        },
+        {
+          "url": "https://www.theguardian.com/society/health/rss",
+          "category": "Health"
+        },
+        {
+          "url": "https://www.theguardian.com/artanddesign/rss",
+          "category": "Art & Design"
         }
       ]
     },
@@ -97,7 +117,8 @@
         "World",
         "Business",
         "Science",
-        "US"
+        "US",
+        "Health"
       ],
       "kinds": [
         "article"
@@ -118,6 +139,10 @@
         {
           "url": "https://feeds.npr.org/1003/rss.xml",
           "category": "US"
+        },
+        {
+          "url": "https://feeds.npr.org/1128/rss.xml",
+          "category": "Health"
         }
       ]
     },
@@ -241,7 +266,9 @@
         "World",
         "Business",
         "Technology",
-        "Science"
+        "Science",
+        "Travel",
+        "Health"
       ],
       "kinds": [
         "article"
@@ -262,6 +289,14 @@
         {
           "url": "https://rss.nytimes.com/services/xml/rss/nyt/Science.xml",
           "category": "Science"
+        },
+        {
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Travel.xml",
+          "category": "Travel"
+        },
+        {
+          "url": "https://rss.nytimes.com/services/xml/rss/nyt/Well.xml",
+          "category": "Health"
         }
       ]
     },
@@ -1021,7 +1056,7 @@
     {
       "outlet": "Dezeen",
       "categories": [
-        "Lifestyle & Food"
+        "Art & Design"
       ],
       "kinds": [
         "article"
@@ -1029,14 +1064,14 @@
       "feeds": [
         {
           "url": "https://www.dezeen.com/feed/",
-          "category": "Lifestyle & Food"
+          "category": "Art & Design"
         }
       ]
     },
     {
       "outlet": "Architectural Digest",
       "categories": [
-        "Lifestyle & Food"
+        "Art & Design"
       ],
       "kinds": [
         "article"
@@ -1044,7 +1079,7 @@
       "feeds": [
         {
           "url": "https://www.architecturaldigest.com/feed/rss",
-          "category": "Lifestyle & Food"
+          "category": "Art & Design"
         }
       ]
     },
@@ -1081,7 +1116,7 @@
     {
       "outlet": "Condé Nast Traveler",
       "categories": [
-        "Lifestyle & Food"
+        "Travel"
       ],
       "kinds": [
         "article"
@@ -1089,7 +1124,7 @@
       "feeds": [
         {
           "url": "https://www.cntraveler.com/feed/rss",
-          "category": "Lifestyle & Food"
+          "category": "Travel"
         }
       ]
     },
@@ -1126,7 +1161,7 @@
     {
       "outlet": "It's Nice That",
       "categories": [
-        "Lifestyle & Food"
+        "Art & Design"
       ],
       "kinds": [
         "article"
@@ -1134,14 +1169,14 @@
       "feeds": [
         {
           "url": "http://feeds2.feedburner.com/itsnicethat/SlXC",
-          "category": "Lifestyle & Food"
+          "category": "Art & Design"
         }
       ]
     },
     {
       "outlet": "Design Milk",
       "categories": [
-        "Lifestyle & Food"
+        "Art & Design"
       ],
       "kinds": [
         "article"
@@ -1149,7 +1184,7 @@
       "feeds": [
         {
           "url": "https://design-milk.com/feed",
-          "category": "Lifestyle & Food"
+          "category": "Art & Design"
         }
       ]
     },
@@ -1524,7 +1559,7 @@
     {
       "outlet": "99% Invisible",
       "categories": [
-        "Lifestyle & Food"
+        "Art & Design"
       ],
       "kinds": [
         "podcast"
@@ -1532,7 +1567,7 @@
       "feeds": [
         {
           "url": "https://feeds.simplecast.com/BqbsxVfO",
-          "category": "Lifestyle & Food",
+          "category": "Art & Design",
           "kind": "podcast"
         }
       ]
@@ -1598,6 +1633,216 @@
           "url": "https://www.visualcapitalist.com/feed/",
           "category": "Data",
           "kind": "chart"
+        }
+      ]
+    },
+    {
+      "outlet": "Skift",
+      "categories": [
+        "Travel"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://skift.com/feed/",
+          "category": "Travel"
+        }
+      ]
+    },
+    {
+      "outlet": "The Points Guy",
+      "categories": [
+        "Travel"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://thepointsguy.com/feed/",
+          "category": "Travel"
+        }
+      ]
+    },
+    {
+      "outlet": "STAT",
+      "categories": [
+        "Health"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.statnews.com/feed/",
+          "category": "Health"
+        }
+      ]
+    },
+    {
+      "outlet": "Medical Xpress",
+      "categories": [
+        "Health"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://medicalxpress.com/rss-feed/",
+          "category": "Health"
+        }
+      ]
+    },
+    {
+      "outlet": "Sky Sports",
+      "categories": [
+        "Sport"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.skysports.com/rss/12040",
+          "category": "Sport"
+        }
+      ]
+    },
+    {
+      "outlet": "Yahoo Sports",
+      "categories": [
+        "Sport"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://sports.yahoo.com/rss/",
+          "category": "Sport"
+        }
+      ]
+    },
+    {
+      "outlet": "CBS Sports",
+      "categories": [
+        "Sport"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.cbssports.com/rss/headlines/",
+          "category": "Sport"
+        }
+      ]
+    },
+    {
+      "outlet": "ArchDaily",
+      "categories": [
+        "Art & Design"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.archdaily.com/feed",
+          "category": "Art & Design"
+        }
+      ]
+    },
+    {
+      "outlet": "designboom",
+      "categories": [
+        "Art & Design"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.designboom.com/feed/",
+          "category": "Art & Design"
+        }
+      ]
+    },
+    {
+      "outlet": "The Art Newspaper",
+      "categories": [
+        "Art & Design"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.theartnewspaper.com/rss.xml",
+          "category": "Art & Design"
+        }
+      ]
+    },
+    {
+      "outlet": "Hyperallergic",
+      "categories": [
+        "Art & Design"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://hyperallergic.com/feed/",
+          "category": "Art & Design"
+        }
+      ]
+    },
+    {
+      "outlet": "Colossal",
+      "categories": [
+        "Art & Design"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.thisiscolossal.com/feed/",
+          "category": "Art & Design"
+        }
+      ]
+    },
+    {
+      "outlet": "Artnet News",
+      "categories": [
+        "Art & Design"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://news.artnet.com/feed",
+          "category": "Art & Design"
+        }
+      ]
+    },
+    {
+      "outlet": "Wallpaper*",
+      "categories": [
+        "Art & Design"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.wallpaper.com/feeds/all",
+          "category": "Art & Design"
         }
       ]
     }

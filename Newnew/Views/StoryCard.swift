@@ -8,7 +8,7 @@ struct StoryCard: View {
   var body: some View {
     if let lead = cluster.lead {
       let extract = lead.shortSnippet
-      VStack(alignment: .leading, spacing: 12) {
+      VStack(alignment: .leading, spacing: Rhythm.beat) {
         picture(lead)
         HStack(alignment: .center, spacing: 8) {
           meta(lead)
@@ -16,20 +16,25 @@ struct StoryCard: View {
           signal
           DotChip("\(cluster.outlets.count) \(cluster.outlets.count == 1 ? "SOURCE" : "SOURCES")")
         }
-        Text(lead.title)
-          .font(Swiss.headline(24, relativeTo: .title3))
-          .foregroundStyle(isSettled ? Swiss.muted : Swiss.ink)
-          .multilineTextAlignment(.leading)
-          .fixedSize(horizontal: false, vertical: true)
-        HeadlineCredit(article: lead)
+        // The headline and whose it is read as one block, as in the Top 10 reel.
+        VStack(alignment: .leading, spacing: Rhythm.tight) {
+          Text(lead.title)
+            .font(Swiss.headline(24, relativeTo: .title3))
+            .foregroundStyle(isSettled ? Swiss.muted : Swiss.ink)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+          HeadlineCredit(article: lead)
+        }
         if !extract.isEmpty {
           Text(extract)
             .font(.subheadline)
             .foregroundStyle(Swiss.muted)
             .lineLimit(2)
         }
-        OutletPills(outlets: cluster.outlets)
-        MediaPills(episode: cluster.episode, video: cluster.video)
+        // Listen and Watch wrap on with the outlets: the same pills, one row.
+        OutletPills(outlets: cluster.outlets) {
+          MediaPills(episode: cluster.episode, video: cluster.video)
+        }
       }
       .padding(14)
       .padding(.bottom, 2)
@@ -102,17 +107,32 @@ struct StoryCard: View {
   }
 }
 
-/// The outlets, newest first, as quiet pills; past four, a count.
-struct OutletPills: View {
+/// The outlets, newest first, as quiet pills; past four, a count. Pills that follow (Listen,
+/// Watch) wrap on in the same row.
+struct OutletPills<Trailing: View>: View {
   let outlets: [String]
   var limit = 4
+  @ViewBuilder var trailing: Trailing
+
+  init(outlets: [String], limit: Int = 4, @ViewBuilder trailing: () -> Trailing) {
+    self.outlets = outlets
+    self.limit = limit
+    self.trailing = trailing()
+  }
 
   var body: some View {
     FlowLayout(spacing: 6) {
       ForEach(outlets.prefix(limit), id: \.self) { QuietPill($0) }
       if outlets.count > limit { QuietPill("+\(outlets.count - limit)") }
+      trailing
     }
     .foregroundStyle(Swiss.ink)
+  }
+}
+
+extension OutletPills where Trailing == EmptyView {
+  init(outlets: [String], limit: Int = 4) {
+    self.init(outlets: outlets, limit: limit) { EmptyView() }
   }
 }
 
@@ -127,8 +147,8 @@ struct BriefRow: View {
 
   var body: some View {
     if let lead = cluster.lead {
-      HStack(alignment: .top, spacing: 12) {
-        VStack(alignment: .leading, spacing: 4) {
+      HStack(alignment: .top, spacing: Rhythm.beat) {
+        VStack(alignment: .leading, spacing: Rhythm.tight) {
           HStack(spacing: 6) {
             Text(lead.outlet).font(.footnote.weight(.medium))
             Text(lead.publishedAt.shortAgo).font(Swiss.smallFigure)
@@ -281,7 +301,7 @@ struct MediaPillStyle: ButtonStyle {
       .padding(.horizontal, 10)
       .pillHeight()
       .foregroundStyle(Swiss.ink)
-      .background(Swiss.ink.opacity(0.07), in: Capsule())
+      .background(Swiss.quietFill, in: Capsule())
       .opacity(configuration.isPressed ? 0.6 : 1)
       .contentShape(Capsule())
       .fixedSize()

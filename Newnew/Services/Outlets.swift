@@ -84,8 +84,9 @@ nonisolated enum YouTubeSuggestions {
       [feed("IGN", "UCKy1dAqELo0zrOtPkf0eTMw"), feed("Game Maker's Toolkit", "UCqJ-Xo29CKyLTjn6z2XwYAw"),
        feed("Noclip", "UC0fDG3byEcMtbOqPMymDNbw")]
     case .pillar(.lifestyle):
-      [feed("Bon Appétit · YouTube", "UCbpMy0Fg74eXXkvxJrtEn3w"), feed("Joshua Weissman", "UChBEbMKI1eCcejTtmI32UEw"),
-       feed("Dezeen · YouTube", "UCsWG9ANbrmgR0z-eFk_A3YQ")]
+      [feed("Bon Appétit · YouTube", "UCbpMy0Fg74eXXkvxJrtEn3w"), feed("Joshua Weissman", "UChBEbMKI1eCcejTtmI32UEw")]
+    case .pillar(.design):
+      [feed("Dezeen · YouTube", "UCsWG9ANbrmgR0z-eFk_A3YQ")]
     default: []
     }
   }
@@ -99,6 +100,14 @@ nonisolated enum YouTubeSuggestions {
   private static let chosenKey = "outlets.chosen"
   private static let onboardedKey = "outlets.onboarded"
   private static let customKey = "outlets.custom"
+  /// Every outlet the reader has had in the list, so an outlet new to it can be switched on.
+  private static let seenKey = "outlets.seen"
+  /// Outlets added with the Sports, Health, Travel and Art & Design pillars (build 52): new to a
+  /// reader who chose before them, so they arrive switched on.
+  private static let addedWithNewPillars: Set<String> = [
+    "Skift", "The Points Guy", "STAT", "Medical Xpress", "Sky Sports", "Yahoo Sports", "CBS Sports", "ArchDaily",
+    "designboom", "The Art Newspaper", "Hyperallergic", "Colossal", "Artnet News", "Wallpaper*",
+  ]
 
   private(set) var catalog: [OutletInfo]
   /// Nil until the reader has chosen: everything is read meanwhile (the first launch's sync runs
@@ -113,6 +122,22 @@ nonisolated enum YouTubeSuggestions {
     chosen = (defaults.array(forKey: Self.chosenKey) as? [String]).map(Set.init)
     hasOnboarded = defaults.bool(forKey: Self.onboardedKey)
     customFeeds = (defaults.data(forKey: Self.customKey)).flatMap { try? JSONDecoder().decode([CustomFeed].self, from: $0) } ?? []
+    adoptNewOutlets()
+  }
+
+  /// Outlets new to the list (a pillar added, an outlet added to `feeds.json`) are switched on
+  /// for a reader who has already chosen, once: they never chose against them. Podcasts stay
+  /// off, as always. One the reader then turns off stays off.
+  func adoptNewOutlets() {
+    let defaults = UserDefaults.standard
+    let names = Set(catalog.map(\.outlet))
+    var seen = Set(defaults.stringArray(forKey: Self.seenKey) ?? [])
+    if seen.isEmpty { seen = names.subtracting(Self.addedWithNewPillars) }
+    if let chosen {
+      let new = catalog.filter { !seen.contains($0.outlet) && !$0.isPodcast }.map(\.outlet)
+      if !new.isEmpty { setChosen(chosen.union(new)) }
+    }
+    defaults.set(Array(seen.union(names)).sorted(), forKey: Self.seenKey)
   }
 
   /// After iCloud brought another device's choice (`CloudSync`).
@@ -143,6 +168,7 @@ nonisolated enum YouTubeSuggestions {
       list.outlets.allSatisfy({ !($0.feeds ?? []).isEmpty })
     else { return }
     catalog = list.outlets
+    adoptNewOutlets()
   }
 
   func outlets(in group: OutletGroup) -> [OutletInfo] { catalog.filter { $0.group == group } }

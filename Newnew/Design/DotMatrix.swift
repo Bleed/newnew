@@ -234,13 +234,15 @@ struct DotText: View {
     }
     .task(id: pixelStart) {
       guard pixelStart != nil else { return }
-      try? await Task.sleep(for: .seconds(decodeDelay + pixelTime + 0.05))
+      // Cancelled (a new value, or the view went): stop here. Clearing now ended the animation
+      // early, the Top 10 reel's flap and dot faces jumping straight to the end.
+      do { try await Task.sleep(for: .seconds(decodeDelay + pixelTime + 0.05)) } catch { return }
       pixelsDone = true
       pixelStart = nil
     }
     .task(id: start) {
       guard start != nil else { return }
-      try? await Task.sleep(for: .seconds(duration))
+      do { try await Task.sleep(for: .seconds(duration)) } catch { return }
       start = nil
     }
     .accessibilityElement()
@@ -495,7 +497,7 @@ struct DotChip: View {
       .foregroundStyle(Swiss.ink)
       .padding(.horizontal, 9)
       .pillHeight()
-      .background(Swiss.ink.opacity(0.07), in: Capsule())
+      .background(Swiss.quietFill, in: Capsule())
       .fixedSize()
       .accessibilityLabel(label ?? text)
   }

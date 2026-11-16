@@ -257,6 +257,9 @@ struct BlockText: View {
   /// At the letters' own proportions, as on the icon, instead of the header's: as tall as the
   /// width given makes them.
   var natural = false
+  /// Arrives by flapping from this word into `text`, as Today's NEWNEW lands when loading ends
+  /// (the Top 10 reel: NEWNEW → TOP10TOP10, TOP10TOP10 → DONEDONE), instead of the usual entrance.
+  var rollsFrom: String?
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var start: Date?
   @State private var rollStart = Date.now
@@ -358,7 +361,12 @@ struct BlockText: View {
     .afterLaunch {
       guard !launched else { return }
       launched = true
-      if !reduceMotion { start = .now }
+      guard !reduceMotion else { return }
+      if let rollsFrom {
+        settle = (Array(DotFont.boardText(rollsFrom).filter { $0 == " " || BlockFont.glyphs[$0] != nil }), .now)
+      } else {
+        start = .now
+      }
     }
     .onChange(of: text) {
       if !reduceMotion { start = .now }
@@ -373,12 +381,14 @@ struct BlockText: View {
     }
     .task(id: settle?.start) {
       guard settle != nil else { return }
-      try? await Task.sleep(for: .seconds(settleTime))
+      // Cancelled (a new value, or the view went): stop here. Clearing now ended the animation
+      // early, the Top 10 reel's flap and dot faces jumping straight to the end.
+      do { try await Task.sleep(for: .seconds(settleTime)) } catch { return }
       settle = nil
     }
     .task(id: start) {
       guard start != nil else { return }
-      try? await Task.sleep(for: .seconds(duration))
+      do { try await Task.sleep(for: .seconds(duration)) } catch { return }
       start = nil
     }
     .accessibilityElement()
@@ -532,7 +542,7 @@ struct BlockRebusLine: View {
     .onChange(of: replay) { play(after: 0) }
     .task(id: start) {
       guard let start else { return }
-      try? await Task.sleep(for: .seconds(start.timeIntervalSinceNow + duration))
+      do { try await Task.sleep(for: .seconds(start.timeIntervalSinceNow + duration)) } catch { return }
       self.start = nil
     }
   }

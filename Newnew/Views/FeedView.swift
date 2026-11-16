@@ -199,7 +199,8 @@ struct FeedView: View {
   @AppStorage("newsWindowHours") var newsWindowHours: Int = NewsWindow.h24.rawValue
   @Environment(\.scenePhase) var scenePhase
   @State private var topicsKind: TopicKind?
-  @State private var showingCatchup = false
+  /// The Top 10 reel, made when it opens (`TopTen.make`).
+  @State private var topDeck: TopTen?
   @State private var path: [StoryCluster] = []
   @AppStorage("feedFilter") var filterRaw = FeedFilter.all.raw
   @Query(sort: \SemanticTopic.createdAt) var topics: [SemanticTopic]
@@ -285,7 +286,7 @@ struct FeedView: View {
           ) {
             overlayStory = $0
           } openCatchup: {
-            showingCatchup = true
+            openTop()
           } showMutes: {
             topicsKind = .mute
           } showRead: {
@@ -304,12 +305,12 @@ struct FeedView: View {
       } else {
       ScrollViewReader { _ in
         ScrollView {
-          LazyVStack(alignment: .leading, spacing: 12, pinnedViews: [.sectionHeaders]) {
+          LazyVStack(alignment: .leading, spacing: Rhythm.beat, pinnedViews: [.sectionHeaders]) {
             NewsTop(
               since: since ?? .distantPast,
               visible: visible,
               top: wide.first,
-              catchupCount: min(wide.count, 8),
+              catchupCount: wide.isEmpty ? 0 : TopTen.size,
               hiddenCount: hiddenCount,
               lastSync: pipeline.lastSync,
               readHiddenCount: readHiddenCount,
@@ -318,7 +319,7 @@ struct FeedView: View {
             ) {
               path.append($0)
             } openCatchup: {
-              showingCatchup = true
+              openTop()
             } showMutes: {
               topicsKind = .mute
             } showRead: {
@@ -352,7 +353,7 @@ struct FeedView: View {
                 }
               }
               if !brief.isEmpty {
-                Eyebrow("In brief").padding(.top, 16)
+                Eyebrow("In brief").padding(.top, Rhythm.section - Rhythm.beat)
                 ForEach(brief) { cluster in
                   NavigationLink(value: cluster) { BriefRow(cluster: cluster) }
                     .buttonStyle(.plain)
@@ -382,7 +383,7 @@ struct FeedView: View {
                     .foregroundStyle(Swiss.muted)
                   }
                 }
-                .padding(.top, 12)
+                .padding(.top, Rhythm.section - Rhythm.beat)
                 .frame(maxWidth: .infinity)
               }
               }
@@ -472,13 +473,12 @@ struct FeedView: View {
         )
       }
       .toolbar {
-        if sizeClass != .regular {
-          ToolbarItem(placement: .topBarLeading) {
-            Button("Catchup", systemImage: "rectangle.portrait.on.rectangle.portrait.angled") {
-              showingCatchup = true
-            }
-            .disabled(wide.isEmpty)
+        // The Top 10 reel's only way in (iPhone and iPad), besides the dot board's message.
+        ToolbarItem(placement: .topBarLeading) {
+          Button("Top 10", systemImage: "rectangle.portrait.on.rectangle.portrait.angled") {
+            openTop()
           }
+          .disabled(clusters.isEmpty)
         }
         // Nothing in the middle: the page's own top is the title.
         ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
@@ -503,8 +503,8 @@ struct FeedView: View {
         )
         .presentationSizing(.fitted)
       }
-      .fullScreenCover(isPresented: $showingCatchup) {
-        CatchupReelView(stories: Array(wide.prefix(8))) { chosenCluster in
+      .fullScreenCover(item: $topDeck) { deck in
+        TopTenReel(deck: deck) { chosenCluster in
           if sizeClass == .regular {
             overlayStory = chosenCluster
           } else {
@@ -519,10 +519,10 @@ struct FeedView: View {
     .onChange(of: ready) { _, count in
       ReadyPrompt.shared.update(count) {
         // From a story (or Catchup, or a sheet) the feed jumps to its top out of sight.
-        let away = !path.isEmpty || overlayStory != nil || showingCatchup || topicsKind != nil
+        let away = !path.isEmpty || overlayStory != nil || topDeck != nil || topicsKind != nil
         path = []
         overlayStory = nil
-        showingCatchup = false
+        topDeck = nil
         topicsKind = nil
         showUpdate(away: away)
       }
@@ -530,7 +530,7 @@ struct FeedView: View {
     .onAppear {
       if since == nil { since = Date(timeIntervalSince1970: lastLookedAt) }
       recomputeSections()
-      CatchupImagePreloader.shared.preload(clusters: Array(sections.wide.prefix(8)))
+      CatchupImagePreloader.shared.preload(clusters: TopTen.make(from: clusters).entries.map(\.cluster))
       openRoutedStory()
     }
     .onChange(of: readStoriesRaw) {
@@ -543,7 +543,7 @@ struct FeedView: View {
     .onChange(of: sectionsCacheKey) {
       if path.isEmpty {
         recomputeSections()
-        CatchupImagePreloader.shared.preload(clusters: Array(sections.wide.prefix(8)))
+        CatchupImagePreloader.shared.preload(clusters: TopTen.make(from: clusters).entries.map(\.cluster))
       }
     }
     .onChange(of: path) { _, newPath in
@@ -623,6 +623,16 @@ struct FeedView: View {
       router.articleURL = nil
       path = [cluster]
     }
+  }
+
+  /// Opens the Top 10 reel on a deck made now from every story, whatever the filter.
+  func openTop() {
+    guard !clusters.isEmpty else { return }
+    // A cut, not the cover's slide up: the reel's entrances (NEWNEW flapping into TOP10TOP10,
+    // the rebus, the dot faces) start the moment it's built, and the slide hid them.
+    var cut = Transaction()
+    cut.disablesAnimations = true
+    withTransaction(cut) { topDeck = TopTen.make(from: clusters) }
   }
 
   func choose(_ next: FeedFilter) {
@@ -1014,7 +1024,7 @@ struct NewsTop: View {
         spoken: "Top story: \(lead.title)", action: { open(top) }))
     }
     if catchupCount > 0 {
-      out.append(BoardMessage(id: "catchup-\(catchupCount)", text: "CATCHUP · \(catchupCount) TOP STORIES REEL", spoken: "Catchup, \(catchupCount) top stories reel", action: openCatchup))
+      out.append(BoardMessage(id: "catchup-\(catchupCount)", text: "TOP 10 · THE MOST IMPORTANT, IN A REEL", spoken: "Top 10, the most important stories in a reel", action: openCatchup))
     }
     if readHiddenCount > 0 {
       out.append(BoardMessage(id: "read-\(readHiddenCount)", text: "\(readHiddenCount) READ HIDDEN · SHOW", spoken: "\(readHiddenCount) read stories hidden. Show", action: showRead))
@@ -1336,6 +1346,7 @@ struct FeedSections {
       switch filter {
       case .all: matchesFilter = true
       case .pillar(let chosen): matchesFilter = (pillar == chosen)
+      case .media: matchesFilter = cluster.articles.contains(where: \.isMedia)
       case .region(let region): matchesFilter = (pillar == .briefing && cluster.regions.contains(region))
       case .topic(let phrase): matchesFilter = (cluster.followedBy == phrase)
       }
@@ -1380,6 +1391,9 @@ struct FeedSections {
     case .pillar(let pillar) where pillar != .briefing:
       // Lighter pillars are mostly one outlet per piece: all of them as cards.
       wide = visible.sorted(by: byImportance)
+    case .media:
+      // Episodes and videos: all as cards (Listen and Watch on each), newest first.
+      wide = visible.sorted(by: newestFirst)
     default:
       wide = visible.filter { outlets[$0.id, default: 0] > 1 }.sorted(by: byImportance)
       brief = visible.filter { outlets[$0.id, default: 0] <= 1 }.sorted(by: newestFirst)
@@ -1428,11 +1442,16 @@ struct FeedSections {
 enum FeedFilter: Hashable {
   case all
   case pillar(Pillar)
+  /// Stories with a podcast episode or a video: the shows and channels you follow, and the
+  /// outlets' own clips.
+  case media
   case region(Region)
   case topic(String)
 
   init(raw: String) {
-    if raw.hasPrefix("topic:") {
+    if raw == "media" {
+      self = .media
+    } else if raw.hasPrefix("topic:") {
       self = .topic(String(raw.dropFirst("topic:".count)))
     } else if raw.hasPrefix("pillar:"), let pillar = Pillar(rawValue: String(raw.dropFirst("pillar:".count))) {
       self = .pillar(pillar)
@@ -1448,6 +1467,7 @@ enum FeedFilter: Hashable {
     switch self {
     case .all: "all"
     case .pillar(let pillar): "pillar:\(pillar.rawValue)"
+    case .media: "media"
     case .region(let region): region.rawValue
     case .topic(let phrase): "topic:\(phrase)"
     }
@@ -1457,6 +1477,7 @@ enum FeedFilter: Hashable {
     switch self {
     case .all: "All"
     case .pillar(let pillar): pillar.title
+    case .media: "Podcasts & Video"
     case .region(let region): region.title
     case .topic(let phrase): phrase
     }
@@ -1619,6 +1640,7 @@ struct FilterBar: View {
           // Each pill is known by its filter's `raw`, which is what the row scrolls to.
           pill(.all)
           ForEach(Pillar.allCases.map { FeedFilter.pillar($0).raw }, id: \.self) { raw in pill(FeedFilter(raw: raw)) }
+          pill(.media)
           if !topics.isEmpty {
             divider
             ForEach(topics.map { FeedFilter.topic($0).raw }, id: \.self) { raw in pill(FeedFilter(raw: raw)) }

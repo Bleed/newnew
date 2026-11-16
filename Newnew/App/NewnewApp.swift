@@ -62,6 +62,8 @@ struct NewnewApp: App {
         }
       }
       .environment(pipeline)
+      // Every link: the publisher's app if it has one, else Safari inside newnew.
+      .environment(\.openURL, LinkOpener.action)
       .task {
         await outlets.refreshCatalog()
         await syncInForeground()

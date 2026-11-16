@@ -22,6 +22,11 @@ enum Swiss {
   /// Text on an ink tile.
   nonisolated static let onInk = Color.adaptive(light: 0xFFFFFF, dark: 0x000000)
   nonisolated static let muted = Color.adaptive(light: 0x828282, dark: 0x8E8E8E)
+  /// Quiet pills, chips and round buttons: ink at 7 % on paper; on black 7 % all but vanished,
+  /// so 15 % white there (2026-11-16).
+  nonisolated static let quietFill = Color(uiColor: UIColor { traits in
+    traits.userInterfaceStyle == .dark ? UIColor(white: 1, alpha: 0.15) : UIColor(white: 0, alpha: 0.07)
+  })
 
   /// Attention: developing stories, new sources since you read one. Black text.
   nonisolated static let signal = Color(rgb: 0xBAECB7)
@@ -209,6 +214,16 @@ struct BulletDot: View {
   }
 }
 
+/// The app's spacing, four steps used everywhere: tight inside a block (a headline and its
+/// credit, a meta line and its title), a beat between blocks of one section, a row between
+/// items of a list, and a section break.
+nonisolated enum Rhythm {
+  static let tight: CGFloat = 6
+  static let beat: CGFloat = 12
+  static let row: CGFloat = 18
+  static let section: CGFloat = 28
+}
+
 /// Small grey label above a value or a section: "Covered widely".
 struct Eyebrow: View {
   let text: String
@@ -268,7 +283,7 @@ struct QuietPill: View {
       .lineLimit(1)
       .padding(.horizontal, 9)
       .pillHeight()
-      .background(Swiss.ink.opacity(0.07), in: Capsule())
+      .background(Swiss.quietFill, in: Capsule())
       .fixedSize()
   }
 }
@@ -285,7 +300,7 @@ struct SwissButtonStyle: ButtonStyle {
       .padding(.horizontal, 14)
       .padding(.vertical, 8)
       .foregroundStyle(prominent ? Swiss.onInk : Swiss.ink)
-      .background(prominent ? Swiss.ink : Swiss.ink.opacity(0.07), in: Capsule())
+      .background(prominent ? Swiss.ink : Swiss.quietFill, in: Capsule())
       .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.35)
       .contentShape(Capsule())
       .fixedSize()
@@ -315,7 +330,7 @@ struct SelectablePillStyle: ButtonStyle {
       .padding(.horizontal, small ? 12 : 14)
       .frame(minHeight: height)
       .foregroundStyle(Swiss.ink)
-      .background(isOn ? Color.clear : Swiss.ink.opacity(0.07), in: Capsule())
+      .background(isOn ? Color.clear : Swiss.quietFill, in: Capsule())
       .overlay { if isOn { Capsule().strokeBorder(Swiss.ink, lineWidth: 1.5) } }
       .opacity(configuration.isPressed ? 0.7 : 1)
       .contentShape(Capsule())
@@ -327,7 +342,7 @@ struct SelectablePillStyle: ButtonStyle {
 /// touch area around it.
 struct RoundIconButtonStyle: ButtonStyle {
   var foreground: Color = Swiss.ink
-  var background: AnyShapeStyle = AnyShapeStyle(Swiss.ink.opacity(0.07))
+  var background: AnyShapeStyle = AnyShapeStyle(Swiss.quietFill)
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label

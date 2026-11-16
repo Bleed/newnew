@@ -57,6 +57,31 @@ enum LinkOpener {
     }
   }
 
+  /// The app's link handler, set at the root: a web link opens in the app that claims it, else
+  /// in Safari inside newnew (`presentInApp`), never out to the Safari app. Other schemes (mail,
+  /// settings) go to the system. Pages with a browser of their own (the story page) set theirs.
+  static let action = OpenURLAction { url in
+    guard url.scheme == "http" || url.scheme == "https" else { return .systemAction }
+    open(url) { presentInApp(url) }
+    return .handled
+  }
+
+  /// Safari inside newnew, over whatever is on screen (a sheet, the Top 10 reel included).
+  @MainActor static func presentInApp(_ url: URL) {
+    let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+      .first { $0.activationState == .foregroundActive } ?? UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+    // The app's own window, not the ready pill's.
+    guard let window = scene?.windows.first(where: { $0.isKeyWindow }) ?? scene?.windows.first,
+      var top = window.rootViewController
+    else { return }
+    while let presented = top.presentedViewController { top = presented }
+    let config = SFSafariViewController.Configuration()
+    config.barCollapsingEnabled = true
+    let safari = SFSafariViewController(url: url, configuration: config)
+    safari.dismissButtonStyle = .done
+    top.present(safari, animated: true)
+  }
+
   /// Other addresses for the same page, most likely first.
   static func alternates(_ url: URL) -> [URL] {
     guard var parts = URLComponents(url: url, resolvingAgainstBaseURL: false), let host = parts.host?.lowercased() else { return [] }
@@ -221,13 +246,14 @@ struct StoryDetailView: View {
 
   /// iPhone / Compact single-column scroll layout.
   private var singleColumnLayout: some View {
-    VStack(alignment: .leading, spacing: 14) {
+    // Blocks a beat apart; each section a section break below the last.
+    VStack(alignment: .leading, spacing: Rhythm.beat) {
       leadSection
       updatesSection
-      mediaSection(topPadding: 6)
-      spectrumSection
-      perspectiveSection(topPadding: 6)
-      coverageSection(topPadding: 8)
+      mediaSection(topPadding: Self.sectionGap)
+      spectrumSection(topPadding: Self.sectionGap)
+      perspectiveSection(topPadding: Self.sectionGap)
+      coverageSection(topPadding: Self.sectionGap)
     }
     .padding(.horizontal, Swiss.pageInset)
     .padding(.bottom, 32)
@@ -241,10 +267,10 @@ struct StoryDetailView: View {
     return HStack(alignment: .top, spacing: 0) {
       // Left 54% Scroll Pane: Lead Story, Updates, and Interactive Coverage Spectrum
       ScrollView {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: Rhythm.beat) {
           leadSection
           updatesSection
-          spectrumSection
+          spectrumSection(topPadding: Self.sectionGap)
         }
         .padding(.leading, Swiss.pageInset)
         .padding(.trailing, 20)
@@ -260,10 +286,10 @@ struct StoryDetailView: View {
 
       // Right 46% Scroll Pane: Videos/Podcasts + Compare Coverage (AI Brief) + Outlet Coverage List
       ScrollView {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Rhythm.beat) {
           mediaSection(topPadding: 0)
-          perspectiveSection(topPadding: 0)
-          coverageSection(topPadding: 6)
+          perspectiveSection(topPadding: hasMedia ? Self.sectionGap : 0)
+          coverageSection(topPadding: Self.sectionGap)
         }
         .padding(.leading, 20)
         .padding(.trailing, Swiss.pageInset)
@@ -272,6 +298,11 @@ struct StoryDetailView: View {
       .frame(width: rightWidth)
     }
   }
+
+  /// Added to the stack's beat, a section break between sections.
+  private static let sectionGap = Rhythm.section - Rhythm.beat
+
+  private var hasMedia: Bool { cluster.articles.contains(where: \.isMedia) }
 
   // MARK: - Modular Sections
 
@@ -295,6 +326,8 @@ struct StoryDetailView: View {
       }
       .foregroundStyle(Swiss.muted)
 
+      // The headline and whose it is, one block.
+      VStack(alignment: .leading, spacing: Rhythm.tight) {
       Text(lead.title)
         .font(Swiss.headline(34, relativeTo: .title))
         .foregroundStyle(Swiss.ink)
@@ -311,19 +344,20 @@ struct StoryDetailView: View {
         .font(.footnote)
         .padding(.horizontal, 10)
         .pillHeight()
-        .background(Swiss.ink.opacity(0.07), in: Capsule())
+        .background(Swiss.quietFill, in: Capsule())
       }
       .buttonStyle(.plain)
       .accessibilityElement(children: .ignore)
       .accessibilityLabel("Headline from \(lead.outlet)")
       .accessibilityAddTraits(.isLink)
+      }
     }
   }
 
   @ViewBuilder
   private var updatesSection: some View {
     if !updatesSinceLastRead.isEmpty {
-      VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: Rhythm.beat) {
         Eyebrow("New since you read")
         ForEach(updatesSinceLastRead.prefix(3)) { item in
           Button {
@@ -341,7 +375,7 @@ struct StoryDetailView: View {
           .buttonStyle(.plain)
         }
       }
-      .padding(.top, 4)
+      .padding(.top, Self.sectionGap)
     }
   }
 
@@ -357,13 +391,13 @@ struct StoryDetailView: View {
   }
 
   @ViewBuilder
-  private var spectrumSection: some View {
+  private func spectrumSection(topPadding: CGFloat) -> some View {
     if cluster.outlets.count > 1 {
       CoverageSpectrumCard(
         cluster: cluster,
         selectedLens: $selectedLens
       )
-      .padding(.top, 6)
+      .padding(.top, topPadding)
     }
   }
 
@@ -376,6 +410,8 @@ struct StoryDetailView: View {
 
   @ViewBuilder
   private func coverageSection(topPadding: CGFloat) -> some View {
+    // A story of videos or episodes alone has no written coverage: no empty heading.
+    if !filteredCoverageArticles.isEmpty || selectedLens != nil {
     HStack(alignment: .firstTextBaseline) {
       Eyebrow(selectedLens == nil ? "Coverage" : "Coverage · \(selectedLens!.shortLabel)")
       Spacer()
@@ -394,6 +430,7 @@ struct StoryDetailView: View {
       }
     }
     .padding(.top, topPadding)
+    }
 
     ForEach(filteredCoverageArticles) { article in
       let isHighlighted = highlightedOutlet?.caseInsensitiveCompare(article.outlet) == .orderedSame
@@ -417,7 +454,8 @@ struct StoryDetailView: View {
     Text("Headlines and short extracts from each outlet's RSS feed. Tap any outlet to read the full article on the publisher's site.")
       .font(.footnote)
       .foregroundStyle(Swiss.muted)
-      .padding(.top, 4)
+      .fixedSize(horizontal: false, vertical: true)
+      .padding(.top, Self.sectionGap)
   }
 
   /// Concatenates category and update time into one single Text block so it stays on one line
@@ -471,11 +509,11 @@ struct StoryDetailView: View {
       )
       .opacity(isWriting ? 0.5 : 1)
     } else {
-      VStack(alignment: .leading, spacing: 10) {
+      VStack(alignment: .leading, spacing: Rhythm.beat) {
         Text(invitation)
           .font(.subheadline)
           .foregroundStyle(Swiss.muted)
-        HStack(spacing: 10) {
+        HStack(spacing: Rhythm.beat) {
           Button {
             briefDismissed = false
             Task { await write() }
@@ -934,7 +972,7 @@ struct BriefPanel: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: Rhythm.row) {
       EyebrowRow(brief.isGenerated ? titles.heading : "Preview") {
         if newSources > 0 {
           Button(action: refresh) { SignalBadge(.attention, "\(newSources) new · Update") }
@@ -1113,7 +1151,7 @@ struct MediaFold: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: Rhythm.beat) {
       Button {
         withAnimation(.snappy(duration: 0.25)) { isOpen.toggle() }
       } label: {
