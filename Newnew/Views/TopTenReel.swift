@@ -459,7 +459,7 @@ private struct WideAction: View {
     Button(action: action) {
       Text(title)
         .font(.callout.weight(.medium))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
         .foregroundStyle(Swiss.onInk)
