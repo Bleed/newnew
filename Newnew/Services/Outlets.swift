@@ -106,18 +106,10 @@ nonisolated enum YouTubeSuggestions {
   /// Categories the reader turned off (`Pillar` raw values): their feeds aren't read, from any
   /// outlet, and their filter pill goes.
   static let hiddenKey = "outlets.hiddenPillars"
-  /// Outlets added with the Sports, Health, Travel and Art & Design pillars (build 52): new to a
-  /// reader who chose before them, so they arrive switched on.
-  private static let addedWithNewPillars: Set<String> = [
-    "Skift", "The Points Guy", "STAT", "Medical Xpress", "Sky Sports", "Yahoo Sports", "CBS Sports", "ArchDaily",
-    "designboom", "The Art Newspaper", "Hyperallergic", "Colossal", "Artnet News", "Wallpaper*",
-    // Music (build 56), Business (build 57).
-    "Stereogum", "NME", "Consequence", "Billboard", "The Quietus", "Fortune", "Forbes", "Financial Times",
-  ]
 
   private(set) var catalog: [OutletInfo]
-  /// Nil until the reader has chosen: everything is read meanwhile (the first launch's sync runs
-  /// while onboarding is on screen).
+  /// Nil until the reader has chosen. Nothing is read meanwhile: the reader picks every outlet
+  /// (2026-11-17, so newnew reads only what the reader chose, like any RSS reader).
   private(set) var chosen: Set<String>?
   private(set) var customFeeds: [CustomFeed]
   private(set) var hasOnboarded: Bool
@@ -137,19 +129,12 @@ nonisolated enum YouTubeSuggestions {
     adoptNewOutlets()
   }
 
-  /// Outlets new to the list (a pillar added, an outlet added to `feeds.json`) are switched on
-  /// for a reader who has already chosen, once: they never chose against them. Podcasts stay
-  /// off, as always. One the reader then turns off stays off.
+  /// Notes every outlet the reader has had in the list. Outlets new to the list are no longer
+  /// switched on for anyone (2026-11-17): they wait, unchecked, in Settings › Outlets.
   func adoptNewOutlets() {
     let defaults = UserDefaults.standard
-    let names = Set(catalog.map(\.outlet))
-    var seen = Set(defaults.stringArray(forKey: Self.seenKey) ?? [])
-    if seen.isEmpty { seen = names.subtracting(Self.addedWithNewPillars) }
-    if let chosen {
-      let new = catalog.filter { !seen.contains($0.outlet) && !$0.isPodcast }.map(\.outlet)
-      if !new.isEmpty { setChosen(chosen.union(new)) }
-    }
-    defaults.set(Array(seen.union(names)).sorted(), forKey: Self.seenKey)
+    let seen = Set(defaults.stringArray(forKey: Self.seenKey) ?? [])
+    defaults.set(Array(seen.union(catalog.map(\.outlet))).sorted(), forKey: Self.seenKey)
   }
 
   /// After iCloud brought another device's choice (`CloudSync`).
@@ -192,9 +177,12 @@ nonisolated enum YouTubeSuggestions {
     return selection.contains(outlet)
   }
 
-  /// The selection being edited: until the reader has chosen, every outlet but the podcasts
-  /// (their feeds are large; each is chosen on its own).
-  var selection: Set<String> { chosen ?? Set(catalog.filter { !$0.isPodcast }.map(\.outlet)) }
+  /// The selection being edited: nothing until the reader has chosen. A reader onboarded before
+  /// choices were stored keeps what it meant then: every outlet but the podcasts.
+  var selection: Set<String> {
+    if let chosen { return chosen }
+    return hasOnboarded ? Set(catalog.filter { !$0.isPodcast }.map(\.outlet)) : []
+  }
 
   /// The chosen outlets' feeds, for `FeedFetcher`; none from a category turned off.
   var chosenFeeds: [(outlet: String, feed: FeedSource)] {

@@ -208,7 +208,7 @@ async function sendBreaking(articles) {
   const stories = findStories(articles)
   const { send, state } = selectNew(stories, previous)
   const config = cloudKitConfig()
-  for (const s of send) console.log(`breaking: ${s.outlets} outlets | ${s.headline}${config ? '' : ' (not sent: no CloudKit key)'}`)
+  for (const s of send) console.log(`breaking: ${s.subject} · ${s.outlets} outlets (lead: ${s.headline})${config ? '' : ' (not sent: no CloudKit key)'}`)
   try {
     if (config && send.length) console.log(`CloudKit: ${(await sendToCloudKit(send, config)).created} sent`)
     await writeFile(statePath, JSON.stringify(config ? state : previous ?? { sent: [] }, null, 2))

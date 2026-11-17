@@ -91,6 +91,8 @@ struct NewnewApp: App {
 
   /// What's on screen counts as seen: no alert for it later.
   func syncInForeground() async {
+    // Nothing to read until the reader has chosen outlets (onboarding starts the first sync).
+    guard OutletStore.shared.hasOnboarded || OutletStore.shared.chosen != nil else { return }
     await pipeline.syncIfNeeded()
     await Alerts.notifyNewStories(pipeline, posting: false)
   }
@@ -113,9 +115,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
   /// A breaking push (CloudKit): sync now, so the story is grouped when the alert is opened.
   func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
     guard CKNotification(fromRemoteNotificationDictionary: userInfo) != nil, let pipeline = NewnewApp.pipeline else { return .noData }
-    // The alert shows either way; reading the feeds waits for what the setting allows.
-    guard await BackgroundRefresh.allowedNow() else { return .noData }
+    // The alert shows either way; reading the feeds waits for what the setting allows. Without a
+    // sync it can still be put in the reader's words from the stories already here.
+    guard await BackgroundRefresh.allowedNow() else {
+      await Alerts.rewriteBreaking(userInfo, pipeline: pipeline)
+      return .noData
+    }
     await pipeline.sync(inStages: true)
+    // Push C: the alert in the reader's own words, from what this iPhone just read.
+    await Alerts.rewriteBreaking(userInfo, pipeline: pipeline)
     return .newData
   }
 

@@ -42,7 +42,7 @@ nonisolated enum FeedFetcher {
   /// thumbnails already checked (link → picture), so only new videos are asked about.
   /// `progress` hears how many feeds have answered.
   static func articles(
-    _ feeds: [(outlet: String, feed: FeedSource)], pictures: [String: String],
+    _ feeds: [(outlet: String, feed: FeedSource)],
     progress: @escaping @Sendable (Int, Int) async -> Void
   ) async -> [FeedArticleDTO] {
     let all = await withTaskGroup(of: [FeedArticleDTO].self) { group in
@@ -64,26 +64,7 @@ nonisolated enum FeedFetcher {
       }
       return out
     }
-    var articles = capped(deduplicated(all))
-    // maxresdefault only exists for HD uploads; otherwise the 4:3 hqdefault (with bars).
-    await withTaskGroup(of: (Int, String).self) { group in
-      for (index, article) in articles.enumerated() {
-        guard let id = article.videoID else { continue }
-        if let known = pictures[article.url] {
-          articles[index].imageURL = known
-          continue
-        }
-        group.addTask {
-          let hd = "https://i.ytimg.com/vi/\(id)/maxresdefault.jpg"
-          var request = URLRequest(url: URL(string: hd)!, timeoutInterval: 6)
-          request.httpMethod = "HEAD"
-          let status = ((try? await session.data(for: request))?.1 as? HTTPURLResponse)?.statusCode
-          return (index, status == 200 ? hd : "https://i.ytimg.com/vi/\(id)/hqdefault.jpg")
-        }
-      }
-      for await (index, picture) in group { articles[index].imageURL = picture }
-    }
-    return articles
+    return capped(deduplicated(all))
   }
 
   // MARK: One feed
@@ -144,7 +125,8 @@ nonisolated enum FeedFetcher {
     case "video":
       guard let id = item.videoID, !link.contains("/shorts/") else { return nil }
       videoID = id
-      picture = "https://i.ytimg.com/vi/\(id)/maxresdefault.jpg"
+      // The thumbnail the channel's feed lists (hqdefault), never a larger one looked up.
+      picture = item.image ?? "https://i.ytimg.com/vi/\(id)/hqdefault.jpg"
     case "podcast":
       guard let url = item.audio else { return nil }
       audio = url
@@ -156,12 +138,15 @@ nonisolated enum FeedFetcher {
       title: feed.kind == "video" ? videoTitle(title, outlet: outlet) : title,
       snippet: truncate(CustomFeedReader.plain(item.summary), snippetLength),
       outlet: outlet, url: link,
-      imageURL: picture.flatMap { upgrade(absolute($0, base: link)) },
+      // The feed's own picture, as sent (2026-11-17): no larger rendition swapped in.
+      imageURL: picture.flatMap { absolute($0, base: link) },
       // Never in the future: some feeds stamp tomorrow's print date.
       publishedAt: min(date, .now),
       category: feed.category, country: feed.country, videoID: videoID,
       audioURL: audio, audioSeconds: audio == nil ? nil : item.seconds,
-      isChart: feed.kind == "chart" ? true : nil)
+      isChart: feed.kind == "chart" ? true : nil,
+      // What the feed says of its picture's size (YouTube's hqdefault is 480 wide).
+      imageWidth: videoID != nil ? 480 : (picture == item.image && item.imageWidth > 0 ? item.imageWidth : nil))
   }
 
   // MARK: The whole
@@ -238,15 +223,5 @@ nonisolated enum FeedFetcher {
 
   static func absolute(_ url: String, base: String) -> String? {
     URL(string: url.replacingOccurrences(of: "&amp;", with: "&"), relativeTo: URL(string: base))?.absoluteString
-  }
-
-  /// Feeds often carry a small thumbnail where a larger rendition exists at a known address.
-  static func upgrade(_ url: String?) -> String? {
-    guard let url else { return nil }
-    // Science X (Medical Xpress, Phys.org, Tech Xplore): /csz/news/tmb/… is 90 × 90, /800a/ 800 wide.
-    if url.contains("b-cdn.net/csz/news/tmb/") { return url.replacingOccurrences(of: "/csz/news/tmb/", with: "/csz/news/800a/") }
-    // BBC: ichef.bbci.co.uk/ace/standard/240/… → 976 wide.
-    guard url.contains("ichef.bbci.co.uk") else { return url }
-    return url.replacing(/\/(standard|branded_news|news)\/\d{2,4}\//) { "/\($0.output.1)/976/" }
   }
 }

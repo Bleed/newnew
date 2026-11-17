@@ -2,8 +2,8 @@ import SwiftUI
 
 /// A news picture that fills its frame, decoded at that size by `ImagePipeline`.
 ///
-/// With a feed picture it holds its space with a grey tile while loading. Without one it asks
-/// the page itself (LinkPresentation) and takes no space unless that finds something.
+/// With a feed picture it holds its space with a grey tile while loading. Without one, or with
+/// one too small for its frame, it takes no space.
 struct HeroImage: View {
   let remote: URL?
   let article: URL

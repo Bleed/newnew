@@ -9,6 +9,13 @@ import SwiftData
   var snippet: String
   var outlet: String
   var imageURL: String?
+  /// The feed picture's width in pixels when the feed says; 0 when it doesn't.
+  var imageWidth: Int = 0
+  /// A picture big enough for a card: the feed says it's at least `ArticleItem.cardPictureWidth`
+  /// wide, or doesn't say (the 2.5× rule still checks it when it loads).
+  var hasGoodPicture: Bool { imageURL != nil && (imageWidth == 0 || imageWidth >= Self.cardPictureWidth) }
+  /// A phone card is about 1,080 px wide; more than 2.5× smaller is skipped (`ImagePipeline`).
+  nonisolated static let cardPictureWidth = 440
   var category: String?
   var publishedAt: Date
   var fetchedAt: Date
@@ -37,6 +44,7 @@ import SwiftData
     snippet = dto.snippet
     outlet = dto.outlet
     imageURL = dto.imageURL
+    imageWidth = dto.imageWidth ?? 0
     category = dto.category
     country = dto.country
     videoID = dto.videoID
@@ -59,6 +67,7 @@ import SwiftData
       regionsRaw = RegionTagger.regions(title: dto.title, snippet: dto.snippet).map(\.rawValue).sorted().joined(separator: ",")
     }
     if imageURL != dto.imageURL { imageURL = dto.imageURL }
+    if imageWidth != (dto.imageWidth ?? 0) { imageWidth = dto.imageWidth ?? 0 }
     if category != dto.category { category = dto.category }
     if videoID != dto.videoID { videoID = dto.videoID }
     if audioURL != dto.audioURL { audioURL = dto.audioURL }
@@ -115,11 +124,14 @@ import SwiftData
   /// Newest first.
   var sortedArticles: [ArticleItem] { articles.sorted { $0.publishedAt > $1.publishedAt } }
 
-  /// The article that fronts the card: the newest written article with a picture (video and
-  /// podcast titles read less like headlines), then any with a picture, then the newest.
+  /// The article that fronts the card: the newest written article with a good picture (video
+  /// and podcast titles read less like headlines), then any with a good picture, then the same
+  /// with any picture, then the newest. The picture always stays with its own headline: a better
+  /// one from another outlet means that outlet fronts the card, never a swapped photo.
   var lead: ArticleItem? {
     let sorted = sortedArticles
-    return sorted.first { $0.imageURL != nil && !$0.isMedia } ?? sorted.first { $0.imageURL != nil } ?? sorted.first
+    return sorted.first { $0.hasGoodPicture && !$0.isMedia } ?? sorted.first { $0.hasGoodPicture }
+      ?? sorted.first { $0.imageURL != nil && !$0.isMedia } ?? sorted.first { $0.imageURL != nil } ?? sorted.first
   }
 
   /// The newest podcast episode and video in the story, for its Listen and Watch pills.
@@ -217,6 +229,8 @@ nonisolated struct FeedArticleDTO: Decodable {
   var audioURL: String?
   var audioSeconds: Int?
   var isChart: Bool?
+  /// The picture's width in pixels when the feed says (media:content / media:thumbnail).
+  var imageWidth: Int? = nil
 }
 
 /// What Apple Intelligence says about how outlets covered one story.

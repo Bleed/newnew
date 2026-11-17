@@ -135,6 +135,54 @@ import UserNotifications
     defaults.set("Breaking alerts couldn't be set up. " + failures.joined(separator: " · "), forKey: pushStatusKey)
   }
 
+  /// A breaking alert arrives with a few telling words, not a publisher's headline (push A,
+  /// 2026-11-17). When the push wakes the app and the sync has the story, the alert is put back
+  /// in the reader's words: Apple Intelligence's line from the headlines this iPhone read, else
+  /// the lead headline of the reader's own feed. Quietly (it has already sounded). If the app
+  /// isn't woken, or the alert is gone, it stays as it came.
+  static func rewriteBreaking(_ userInfo: [AnyHashable: Any], pipeline: FeedSyncPipeline) async {
+    guard let query = CKNotification(fromRemoteNotificationDictionary: userInfo) as? CKQueryNotification,
+      let recordID = query.recordID
+    else { return }
+    let fields = query.recordFields ?? [:]
+    let center = UNUserNotificationCenter.current()
+    guard let delivered = await center.deliveredNotifications().first(where: { note in
+      (CKNotification(fromRemoteNotificationDictionary: note.request.content.userInfo) as? CKQueryNotification)?.recordID == recordID
+    }) else { return }
+    guard let cluster = breakingStory(url: fields["url"] as? String, words: fields["headline"] as? String, in: pipeline.context)
+    else { return }
+    let sources = cluster.sortedArticles.prefix(6).map {
+      IntelligenceService.Source(outlet: $0.outlet, title: $0.title, snippet: $0.snippet)
+    }
+    guard let line = await IntelligenceService.alertSubject(Array(sources)) ?? cluster.lead?.title else { return }
+    let content = UNMutableNotificationContent()
+    content.title = "Breaking"
+    content.subtitle = "\(cluster.outlets.count) outlets"
+    content.body = line
+    content.userInfo = delivered.request.content.userInfo
+    content.threadIdentifier = delivered.request.content.threadIdentifier
+    content.interruptionLevel = .passive
+    center.removeDeliveredNotifications(withIdentifiers: [delivered.request.identifier])
+    try? await center.add(UNNotificationRequest(identifier: "breaking.\(recordID.recordName)", content: content, trigger: nil))
+  }
+
+  /// The story a breaking push is about: the one holding its lead article, else the recent one
+  /// whose articles use most of the alert's words (at least two).
+  static func breakingStory(url: String?, words: String?, in context: ModelContext) -> StoryCluster? {
+    let since = Date.now.addingTimeInterval(-6 * 3600)
+    let recent = ((try? context.fetch(FetchDescriptor<StoryCluster>())) ?? []).filter { $0.updatedAt > since }
+    if let url, let hit = recent.first(where: { $0.articles.contains { $0.url == url } }) { return hit }
+    let wanted = (words ?? "").split(separator: "·").first.map {
+      $0.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count >= 4 }
+    } ?? []
+    guard wanted.count >= 2 else { return nil }
+    let scored = recent.map { cluster -> (StoryCluster, Int) in
+      let text = cluster.articles.map { "\($0.title) \($0.snippet)".lowercased() }.joined(separator: " ")
+      return (cluster, wanted.filter { text.contains($0) }.count)
+    }
+    return scored.filter { $0.1 >= 2 }.max { ($0.1, $0.0.outlets.count) < ($1.1, $1.0.outlets.count) }?.0
+  }
+
   /// The alert, richest first.
   static func notificationVariants() -> [(String, CKSubscription.NotificationInfo)] {
     func headline(_ info: CKSubscription.NotificationInfo) {

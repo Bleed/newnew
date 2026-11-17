@@ -343,6 +343,42 @@ enum IntelligenceService {
       sourceCount: sources.count, isGenerated: false, createdAt: .now, mode: mode)
   }
 
+  // MARK: Breaking alerts
+
+  /// A breaking alert's line, from the headlines this iPhone read itself: what happened, in
+  /// under 80 characters, neutral, from facts the outlets share, no outlet named. The one use
+  /// that isn't a tap (2026-11-17): at most 6 breaking alerts a day, each once. Nil without
+  /// the model or when it declines; the alert keeps the words it came with.
+  static func alertSubject(_ sources: [Source]) async -> String? {
+    refreshAvailability()
+    #if canImport(FoundationModels)
+      guard isAvailable, !sources.isEmpty else { return nil }
+      let instructions = """
+        Write the one line of a breaking-news alert: what happened, as plain fact, under 80 \
+        characters. Use only what several of the headlines agree on. No outlet names, no \
+        quotation marks, no opinion, no question, no full stop at the end.
+        """
+      let prompt = sources.prefix(6).map { "\($0.title). \(cleanHTML($0.snippet))" }.joined(separator: "\n")
+      func tidy(_ text: String) -> String? {
+        var line = text.split(whereSeparator: \.isNewline).first.map(String.init) ?? ""
+        line = line.trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "\"“”.")))
+        guard line.count >= 12, line.count <= 110 else { return nil }
+        return line
+      }
+      if let response = try? await LanguageModelSession(instructions: instructions).respond(to: prompt),
+        let line = tidy(response.content)
+      {
+        return line
+      }
+      // Hard news often trips the default guardrails (war, attacks): the permissive ones.
+      let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+      if let response = try? await LanguageModelSession(model: model, instructions: instructions).respond(to: prompt) {
+        return tidy(response.content)
+      }
+    #endif
+    return nil
+  }
+
   // MARK: Topics
 
   /// A followed or muted topic as example headlines (compared with stories by meaning) and a

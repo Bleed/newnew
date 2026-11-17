@@ -63,14 +63,6 @@ actor SyncWorker {
     return true
   }
 
-  /// HD video thumbnails already checked (link → picture).
-  func pictures() -> [String: String] {
-    begin()
-    defer { end() }
-    let stored = (try? modelContext.fetch(FetchDescriptor<ArticleItem>(predicate: #Predicate { $0.videoID != nil }))) ?? []
-    return Dictionary(stored.compactMap { a in a.imageURL.map { (a.url, $0) } }, uniquingKeysWith: { a, _ in a })
-  }
-
   /// Everything after the download: store, embed, regroup, topics, one save. `inStages` (with
   /// the app closed, where iOS can stop the run at any moment): the articles are saved as soon as
   /// they're stored and the vectors as far as they got, so a run cut short still keeps what it

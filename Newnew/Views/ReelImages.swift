@@ -44,10 +44,10 @@ final class CatchupImagePreloader {
     return task
   }
 
-  /// (picture, article) pairs: articles with a feed picture, lead first; then the lead's page
-  /// with no picture, which `ImagePipeline` reads with LinkPresentation.
+  /// (picture, article) pairs: only the lead's own feed picture, so a photo never runs under
+  /// another outlet's headline (the lead already prefers an outlet with a good picture).
   private static func candidates(in cluster: StoryCluster) -> [(remote: URL?, article: URL)] {
-    let articles = ([cluster.lead].compactMap { $0 } + cluster.sortedArticles)
+    let articles = [cluster.lead].compactMap { $0 }
     var seen = Set<String>()
     var out: [(remote: URL?, article: URL)] = []
     for article in articles {
@@ -55,9 +55,6 @@ final class CatchupImagePreloader {
         let raw = article.imageURL, let remote = URL(string: raw), seen.insert(raw).inserted
       else { continue }
       out.append((remote, page))
-    }
-    if out.isEmpty, let page = cluster.lead.flatMap({ URL(string: $0.url) }) {
-      out.append((nil, page))
     }
     return Array(out.prefix(3))
   }

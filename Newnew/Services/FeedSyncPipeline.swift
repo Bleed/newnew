@@ -116,10 +116,8 @@ import SwiftData
     }
     let feeds = OutletStore.shared.chosenFeeds
     guard !feeds.isEmpty else { return [] }
-    // HD video thumbnails already checked.
-    let pictures = await worker.pictures()
     phase = .fetching(done: 0, total: feeds.count)
-    let articles = await FeedFetcher.articles(feeds, pictures: pictures) { done, total in
+    let articles = await FeedFetcher.articles(feeds) { done, total in
       await MainActor.run { self.phase = .fetching(done: done, total: total) }
     }
     // Every feed silent: most likely offline.

@@ -1,6 +1,5 @@
 import Foundation
 import ImageIO
-import LinkPresentation
 import UIKit
 import UniformTypeIdentifiers
 
@@ -8,8 +7,8 @@ import UniformTypeIdentifiers
 /// og:image; decoding one whole costs ~35 MB of GPU memory per row, so every picture goes
 /// through `CGImageSourceCreateThumbnailAtIndex` and never `UIImage(data:)` or `AsyncImage`.
 ///
-/// Where the feed has no picture (the publisher blocked the scraper), the page's own preview
-/// is fetched from this iPhone with LinkPresentation.
+/// Only the feed's own picture is shown (2026-11-17): none is looked up on the article's page,
+/// and one too small for its frame is skipped rather than blown up.
 @MainActor final class ImagePipeline {
   static let shared = ImagePipeline()
 
@@ -37,24 +36,15 @@ import UniformTypeIdentifiers
   nonisolated static let maxUpscale: CGFloat = 2.5
 
   /// `maxPixel` is the longest side in pixels (points × display scale). `frame` is the size it
-  /// fills, in pixels: a picture too small for it is skipped (`maxUpscale`), and a feed picture
-  /// that is gives way to the page's own preview, often the full-size one.
+  /// fills, in pixels: a picture too small for it is skipped (`maxUpscale`).
   func image(remote: URL?, article: URL, maxPixel: Int, frame: CGSize? = nil, fits: Bool = false) async -> CGImage? {
     let key = Self.key(remote: remote, article: article, maxPixel: maxPixel)
     if let hit = cached(key) { return hit }
     guard !failed.contains(key) else { return nil }
     if let running = inFlight[key] { return await running.value }
     let task = Task<CGImage?, Never> {
-      let data: Data?
-      if let remote {
-        data = await Self.download(remote)
-      } else {
-        data = await Self.previewImageData(for: article)
-      }
-      if let data, let image = await Self.decode(data, maxPixel: maxPixel, frame: frame, fits: fits) { return image }
-      // The feed's picture was missing or too small: the page's preview, if it's big enough.
-      guard remote != nil, frame != nil, let page = await Self.previewImageData(for: article) else { return nil }
-      return await Self.decode(page, maxPixel: maxPixel, frame: frame, fits: fits)
+      guard let remote, let data = await Self.download(remote) else { return nil }
+      return await Self.decode(data, maxPixel: maxPixel, frame: frame, fits: fits)
     }
     inFlight[key] = task
     let image = await task.value
@@ -72,18 +62,6 @@ import UniformTypeIdentifiers
       (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true
     else { return nil }
     return data
-  }
-
-  /// Tier 3: the page's preview image, fetched from the phone's own connection.
-  static func previewImageData(for article: URL) async -> Data? {
-    let provider = LPMetadataProvider()
-    provider.timeout = 8
-    guard let metadata = try? await provider.startFetchingMetadata(for: article),
-      let item = metadata.imageProvider
-    else { return nil }
-    return await withCheckedContinuation { continuation in
-      _ = item.loadDataRepresentation(for: .image) { data, _ in continuation.resume(returning: data) }
-    }
   }
 
   private static func decode(_ data: Data, maxPixel: Int, frame: CGSize?, fits: Bool) async -> CGImage? {

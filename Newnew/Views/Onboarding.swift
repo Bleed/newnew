@@ -101,7 +101,9 @@ struct OnboardingView: View {
   var outlets: some View {
     VStack(alignment: .leading, spacing: 0) {
       OnboardingHeadline("Choose what you read.")
-      OnboardingDeck("\(selection.count) of \(OutletStore.shared.catalog.count) outlets. Switch off a category you don't want. Change it any time in Settings.")
+      OnboardingDeck(selection.isEmpty
+        ? "Pick the outlets you want; nothing is chosen for you. Change it any time in Settings."
+        : "\(selection.count) of \(OutletStore.shared.catalog.count) outlets. Switch off a category you don't want. Change it any time in Settings.")
         .padding(.top, 8)
         .padding(.bottom, 14)
       OutletPicker(selection: $selection, hidden: $hidden)
@@ -148,8 +150,8 @@ struct OnboardingView: View {
       .scrollIndicators(.hidden)
       Button("Start reading") {
         next()
-        // Outlets left out go now; own feeds are read in the next sync.
-        Task { await pipeline.applyOutletChoice(added: !OutletStore.shared.customFeeds.isEmpty) }
+        // Nothing is read before the reader has chosen: the first sync starts here.
+        Task { await pipeline.applyOutletChoice(added: true) }
       }
       .buttonStyle(.swissPrimary)
       .padding(.vertical, 12)

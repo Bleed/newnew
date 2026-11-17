@@ -72,6 +72,7 @@ export function findStories(articles, now = Date.now()) {
     const recent = group.filter(d => now - Date.parse(d.a.publishedAt) < RECENT_WINDOW).length
     stories.push({
       headline: lead.title,
+      subject: subject(keywords, lead),
       snippet: lead.snippet,
       url: lead.url,
       outlets: outlets.size,
@@ -81,6 +82,27 @@ export function findStories(articles, now = Date.now()) {
     })
   }
   return stories.sort((a, b) => b.outlets - a.outlets)
+}
+
+/**
+ * The alert's words: no publisher's headline leaves this job (2026-11-17), only facts — the
+ * story's three most telling words, in the order the lead headline uses them, as written there
+ * ("Ukraine, Crimean, bridge"). The iPhone may rewrite it from its own feeds when the push
+ * wakes it.
+ */
+export function subject(keywords, lead) {
+  const text = `${lead.title} ${lead.snippet ?? ''}`
+  const lower = text.toLowerCase()
+  const at = w => { const i = lower.indexOf(w); return i < 0 ? Infinity : i }
+  const picked = keywords.slice(0, 3).sort((a, b) => at(a) - at(b))
+  // As the headline writes it (names keep their capitals); else capitalised.
+  const shown = picked.map(w => {
+    const i = at(w)
+    return i === Infinity ? w[0].toUpperCase() + w.slice(1) : text.slice(i, i + w.length)
+  })
+  if (!shown.length) return 'A developing story'
+  shown[0] = shown[0][0].toUpperCase() + shown[0].slice(1)
+  return shown.join(', ')
 }
 
 /** The breaking stories not sent before (by shared words), within today's limit. */
@@ -120,7 +142,8 @@ export async function sendToCloudKit(stories, config) {
       record: {
         recordType: 'Breaking',
         fields: {
-          headline: { value: s.headline },
+          // The field keeps its name (the app's subscription shows it), but holds the subject.
+          headline: { value: `${s.subject} · ${s.outlets} outlets` },
           url: { value: s.url },
           outlets: { value: s.outlets },
         },

@@ -54,12 +54,13 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
   items, through a URLSession whose cache revalidates (ETag / Last-Modified). Same rules the
   server had: last 48 h (charts 14 days), 30 per news feed, 8 per light-pillar feed, 15 per
   light category with outlets taking turns (Technology uncapped), deduped by link and by outlet
-  + headline, snippets ≤ 150 characters at a word, tracking parameters stripped, BBC
-  thumbnails upgraded to 976 wide, YouTube titles without
-  channel tags, HD thumbnail (`maxresdefault`, HEAD-checked once per video, else `hqdefault`),
+  + headline, snippets ≤ 150 characters at a word, tracking parameters stripped, the feed's
+  own picture as sent (no larger rendition swapped in: BBC's 976, Science X's 800 and YouTube's
+  maxresdefault were dropped 2026-11-17), YouTube titles without channel tags, the channel
+  feed's own thumbnail (`hqdefault`),
   podcasts with audio and length and no picture, for 7 days (most are weekly; the store keeps
-  episodes 7 days too). Megaphone episodes have no page: their audio URL is the link. Items with no picture get one from the page
-  later (LinkPresentation, as before).
+  episodes 7 days too). Megaphone episodes have no page: their audio URL is the link. Items with
+  no picture in the feed have none (nothing is taken from the article page since 2026-11-17).
 - Measured in the Simulator: 95+ default feeds answer in ~6 s. Podcasts are off by default
   (each chosen on its own); without them a full refresh is a few MB.
 - `FeedParser` (in Outlets.swift) is shared with own feeds (`CustomFeedReader`).
@@ -96,7 +97,10 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
 - Publishes only `outlets.json` (each outlet: categories, kinds, `feeds` [url, category, kind,
   country]), `status.json` (each feed's health) and `privacy.html`. No news.
 - Breaking push: reads the news feeds' headlines in memory (not light pillars, videos or
-  podcasts), finds stories many outlets report (alerts.mjs) and sends them via CloudKit.
+  podcasts), finds stories many outlets report (alerts.mjs) and sends them via CloudKit. No
+  publisher's headline leaves the job (2026-11-17): the record's `headline` field holds the
+  story's three most telling words and the outlet count (`subject`, "Ukraine, Crimean, bridge ·
+  7 outlets"). The iPhone may rewrite it (Alerts, push C).
   `alerts.json` keeps only the pushed stories' keywords and times (`PREVIOUS_ALERTS_URL`).
 - After changing `feeds.json`, copy `public/outlets.json` to `Newnew/Resources/outlets.json`
   (pretty-printed) so a first launch offline has it. The app ignores a published list without
@@ -151,8 +155,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   MarketWatch, Bloomberg and CNBC videos; added Fortune, Forbes, Financial Times). It is hard
   news like Briefing (`Pillar.isHardNews`): several outlets to reach the top on All, can be
   breaking, kept whole by `FeedFetcher`, MARKETS lens in the spectrum. Outlets new
-  to the list are switched on once for readers who had already chosen
-  (`OutletStore.adoptNewOutlets`, "outlets.seen"); podcasts stay off. After the Pillars
+  to the list are never switched on for anyone (since 2026-11-17; before, they were switched on
+  once for readers who had chosen): they wait, unchecked, in Settings › Outlets. After the Pillars
   comes the Podcasts & Video filter (`FeedFilter.media`): stories with an episode or a video,
   newest first, all as cards. A story's pillar is its articles'
   majority. On All, top stories are the pillars interleaved by share (smooth weighted
@@ -176,7 +180,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   board) is the masthead: large on the welcome, small and still beside the progress dots on
   the steps. Each step: a serif headline (`OnboardingHeadline`, the news serif) and a grey
   line (`OnboardingDeck`). Welcome (three points in one tile, Begin); choose outlets (grouped
-  by pillar, all checked to start except podcasts, a group's "All"/"None"; rows in a tile
+  by pillar, nothing checked to start (2026-11-17: the reader picks every outlet; Continue waits
+  for one), a group's "All"/"None"; rows in a tile
   apart by space, no dividers, here and in Settings › Outlets); your own feed (`AddFeedPanel`
   without its hint); topics to follow (`OnboardingTopics`: the Topics sheet's suggestions as
   pills, + to follow, outlined with a tick once followed, or typed); how Today begins
@@ -184,7 +189,9 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   (background refresh and alerts, the Settings tiles); then the first edition
   (`FirstEdition`: the board large, looping until the first sync is done and at least 2.5 s,
   "Your first edition is being made."), and only then `finishOnboarding`. `OutletStore` keeps the choice (`outlets.chosen`,
-  nil = not chosen yet = every outlet but the podcasts) and own feeds (`outlets.custom`) in UserDefaults.
+  nil = not chosen yet = nothing is read; a reader onboarded before choices were stored keeps
+  every outlet but the podcasts). No sync runs before onboarding's outlet choice: "Start
+  reading" starts the first one and own feeds (`outlets.custom`) in UserDefaults.
   The catalog is `outlets.json` (each outlet's categories, kinds and feeds), with a bundled
   copy in Resources for an offline first launch. Only chosen outlets' feeds are fetched;
   `applyOutletChoice` deletes articles of outlets dropped and syncs when outlets were added.
@@ -330,6 +337,12 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   2. Breaking push: the scraper (scripts/alerts.mjs) finds stories from ≥ 5 outlets with ≥ 3
      articles in 45 min and writes a `Breaking` record to the CloudKit public database; the app's
      subscription makes Apple push it. ≤ 2 per run, 6 a day; state in public/alerts.json.
+     The push carries words, not a headline (A). When it wakes the app (content-available), the
+     app syncs if allowed, finds the story (its lead link, else most of the words) and replaces
+     the delivered alert, quietly, with Apple Intelligence's line from the headlines this iPhone
+     read (`IntelligenceService.alertSubject`), else its own lead headline
+     (`Alerts.rewriteBreaking`, push C, 2026-11-17). Untested on a device: Simulator pushes need
+     notification permission, and Apple Intelligence and CloudKit pushes don't run there.
 - Push is on (set up 2026-10-24): container iCloud.com.svein.newnew (team W533Y4V578), the app
   builds with Newnew/App/Newnew-CloudKit.entitlements; `Breaking` (headline String, url String,
   outlets Int64) is deployed to Production. The scraper signs with a Production
@@ -352,9 +365,10 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 ## Rules
 
 1. No paid cloud or AI APIs. Apple frameworks only (`NaturalLanguage`, `Accelerate`,
-   `FoundationModels`, `SwiftData`, `ImageIO`, `LinkPresentation`).
+   `FoundationModels`, `SwiftData`, `ImageIO`).
 2. Bulk work (every article) uses only `NaturalLanguage` + `Accelerate`. `FoundationModels` runs
    on a tap, for one story or one topic, and its result is cached (`cachedPerspectiveBriefJSON`).
+   One exception: a breaking alert's line (≤ 6 a day), written when the push wakes the app.
 3. Apple's default guardrails refuse much hard news ("May contain sensitive content" on riots,
    war). Briefs then retry with `.permissiveContentTransformations` (plain text in a SUMMARY/
    AGREE/DIFFER/ANGLE line format, parsed), and only then fall back to the headline preview with
@@ -365,9 +379,12 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 6. News pictures go through `ImagePipeline` (`CGImageSourceCreateThumbnailAtIndex` at the shown
    size), never `AsyncImage` or `UIImage(data:)`. No blurs, shadows or live blend modes in rows.
    A picture that would be blown up more than 2.5× to fill its frame (read from its header,
-   `ImagePipeline.maxUpscale`) is skipped: a feed picture gives way to the page's preview,
-   else the card has no picture. Science X thumbnails (`/csz/news/tmb/`, 90 px: Medical
-   Xpress, Phys.org) are upgraded to `/800a/` in `FeedFetcher.upgrade`, like BBC's.
+   `ImagePipeline.maxUpscale`) is skipped and the card has no picture. Only the feed's own
+   picture, as sent (2026-11-17, from the feed-terms review in docs/): no larger rendition, no
+   picture from the article page. A picture stays with its own headline: a story is fronted by
+   the newest article whose feed says its picture is at least 440 px wide (or doesn't say,
+   `ArticleItem.hasGoodPicture`, `imageWidth` from media:content / media:thumbnail), never by
+   another outlet's photo under the lead's headline (the Top 10 reel uses the lead's only).
 
 ## Legal care (review 2026-10-29; not legal advice)
 
