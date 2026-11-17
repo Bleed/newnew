@@ -111,8 +111,6 @@ struct DotText: View {
     return max(1, (pitch * displayScale * 0.7).rounded()) / displayScale
   }
   @Environment(\.accessibilityReduceMotion) var reduceMotion
-  /// Settings › Look can draw the cells as LCD segments instead (`LCDFont`), same timing.
-  @Environment(\.boardFace) var face
   @State private var from: [Character] = []
   @State private var start: Date?
   /// The pixel entrance: when it began, nil before and after.
@@ -327,14 +325,6 @@ struct DotText: View {
       for row in 0..<7 {
         let shown = pixels.map { decodeGlyph(index, row: row, elapsed: $0, to: character) }
           ?? elapsed.map { glyph(index, row: row, elapsed: $0, to: character) } ?? character
-        if face == .lcd {
-          // A segment cell has no rows: the whole glyph changes at once, as row 0 does.
-          guard row == 0 else { break }
-          let faint = pixelsIn ? max(unlit, Self.boardUnlit) : unlit
-          LCDFont.draw(shown, in: &ctx, origin: CGPoint(x: x0, y: 0), width: pitch * 5 - pitch * 0.18,
-                       height: pitch * 7 - pitch * 0.18, unlit: faint * 0.8)
-          break
-        }
         for column in 0..<5 {
           let lit = DotFont.isLit(shown, row: row, column: column)
           let faint = pixelsIn ? max(unlit, Self.boardUnlit) : unlit
@@ -488,20 +478,29 @@ struct DotChip: View {
   /// Seconds before the entrance starts: in a sheet, so it plays once the sheet has landed
   /// instead of while it slides up.
   var decodeDelay: Double = 0
-  init(_ text: String, label: String? = nil, decodeDelay: Double = 0) {
+  /// The board's small size by default; Today's Mixed top uses the board's row size (1.8).
+  var pitch: CGFloat = 1.4
+  /// Grey dots, for a secondary chip on the page (never on a tile: grey vanishes there).
+  var muted = false
+  /// An ink chip with page-coloured dots, the rebus's filled number.
+  var ink = false
+  init(_ text: String, label: String? = nil, decodeDelay: Double = 0, pitch: CGFloat = 1.4, muted: Bool = false, ink: Bool = false) {
     self.text = text
     self.label = label
     self.decodeDelay = decodeDelay
+    self.pitch = pitch
+    self.muted = muted
+    self.ink = ink
   }
 
   var body: some View {
     // The board's small size (its message rows), so chips and the board read as one face.
-    DotText(text, pitch: 1.4, decodeDelay: decodeDelay)
+    DotText(text, pitch: pitch, unlit: ink ? 0.12 : 0.07, decodeDelay: decodeDelay, decodesOnChange: true)
       // Full-strength dots: grey ones vanish on tiles and in dark mode.
-      .foregroundStyle(Swiss.ink)
+      .foregroundStyle(ink ? Swiss.onInk : (muted ? Swiss.muted : Swiss.ink))
       .padding(.horizontal, 9)
       .pillHeight()
-      .background(Swiss.quietFill, in: Capsule())
+      .background(ink ? AnyShapeStyle(Swiss.ink) : AnyShapeStyle(Swiss.quietFill), in: Capsule())
       .fixedSize()
       .accessibilityLabel(label ?? text)
   }

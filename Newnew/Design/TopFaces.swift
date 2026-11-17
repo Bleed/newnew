@@ -1,6 +1,6 @@
 import SwiftUI
 
-// Today's top in other faces, chosen in Settings › Look (Figma: Explorations · LCD, P and V).
+// Today's top in other faces, chosen in Settings › Look (Figma: Explorations · LCD, V).
 // Blocks is the default.
 
 /// How Today's top is drawn.
@@ -10,142 +10,27 @@ enum TopLook: String, CaseIterable, Identifiable {
   case blocks
   /// The dot board on its tile (Figma: Explorations · header, C).
   case dots
-  /// The same board in a 14-segment LCD face, unlit segments showing (Figma P).
-  case lcd
+  /// The block kept, its rebus in dot chips and the board's message panel (Figma: Explorations ·
+  /// Dots top, B1).
+  case mixed
 
   static let key = "topLook"
   var id: String { rawValue }
+  /// The stored choice; LCD was removed (2026-11-17), so it reads as Dots, the board it drew.
+  static func stored(_ raw: String) -> TopLook { raw == "lcd" ? .dots : TopLook(rawValue: raw) ?? .blocks }
   var label: String {
     switch self {
     case .dots: "Dots"
-    case .lcd: "LCD"
+    case .mixed: "Mixed"
     case .blocks: "Blocks"
     }
   }
   var detail: String {
     switch self {
     case .dots: "A small departures board: the day, the count and what's new in dots."
-    case .lcd: "The same board as a liquid-crystal display, the unlit segments faintly showing."
+    case .mixed: "What's new in big blocks, the day, the counts and the messages in dots."
     case .blocks: "What's new in big blocks across the top, the rest as a rebus in mono."
     }
-  }
-}
-
-/// What `DotText` draws its cells as.
-enum BoardFace { case dots, lcd }
-
-extension EnvironmentValues {
-  @Entry var boardFace: BoardFace = .dots
-}
-
-// MARK: LCD
-
-/// A 14-segment LCD face drawn in the dot face's cells (5 × 7 pitches), so a board keeps its
-/// layout and its departures-board timing when it changes face. Segments: a top, b c right,
-/// d bottom, e f left, g1 g2 the middle, h j the upper diagonals, i l the centre verticals,
-/// k m the lower diagonals; U L the colon's dots, C a centre dot, P a full stop.
-enum LCDFont {
-  enum Segment: CaseIterable { case a, b, c, d, e, f, g1, g2, h, i, j, k, l, m, upper, lower, centre, stop }
-
-  static let bars: [Segment] = [.a, .b, .c, .d, .e, .f, .g1, .g2, .h, .i, .j, .k, .l, .m]
-
-  private static let source: [Character: String] = [
-    "0": "abcdefjk", "1": "bcj", "2": "abdeg1g2", "3": "abcdg2", "4": "bcfg1g2", "5": "acdfg1g2", "6": "acdefg1g2",
-    "7": "abc", "8": "abcdefg1g2", "9": "abcdfg1g2",
-    "A": "abcefg1g2", "B": "abcdg2il", "C": "adef", "D": "abcdil", "E": "adefg1", "F": "aefg1", "G": "acdefg2",
-    "H": "bcefg1g2", "I": "adil", "J": "bcde", "K": "efg1jm", "L": "def", "M": "bcefhj", "N": "bcefhm", "O": "abcdef",
-    "P": "abefg1g2", "Q": "abcdefm", "R": "abefg1g2m", "S": "acdfg1g2", "T": "ail", "U": "bcdef", "V": "efjk",
-    "W": "bcefkm", "X": "hjkm", "Y": "hjl", "Z": "adjk",
-    ":": "UL", "·": "C", ".": "P", ",": "k", "/": "jk", "%": "cfjk", "-": "g1g2", "+": "g1g2il", "?": "abg2l",
-    "!": "iP", "'": "i",
-  ]
-
-  static let glyphs: [Character: Set<Segment>] = source.mapValues { code in
-    var out: Set<Segment> = []
-    var chars = Array(code)[...]
-    while let first = chars.popFirst() {
-      switch first {
-      case "g": out.insert(chars.popFirst() == "1" ? .g1 : .g2)
-      case "U": out.insert(.upper)
-      case "L": out.insert(.lower)
-      case "C": out.insert(.centre)
-      case "P": out.insert(.stop)
-      default:
-        if let segment = Segment.allCases.first(where: { "\($0)" == String(first) }) { out.insert(segment) }
-      }
-    }
-    return out
-  }
-
-  static func segments(_ character: Character) -> Set<Segment> {
-    glyphs[character] ?? glyphs[Character(character.uppercased())] ?? []
-  }
-
-  /// One segment in a cell `width` × `height`, bars `t` thick, chamfered ends.
-  static func path(_ segment: Segment, width w: CGFloat, height h: CGFloat, thickness t: CGFloat) -> Path {
-    let g = t * 0.32
-    let xm = w / 2, ym = h / 2
-    func horizontal(_ y: CGFloat, _ x0: CGFloat, _ x1: CGFloat) -> Path {
-      Path { p in
-        p.addLines([CGPoint(x: x0, y: y), CGPoint(x: x0 + t / 2, y: y - t / 2), CGPoint(x: x1 - t / 2, y: y - t / 2),
-                    CGPoint(x: x1, y: y), CGPoint(x: x1 - t / 2, y: y + t / 2), CGPoint(x: x0 + t / 2, y: y + t / 2)])
-        p.closeSubpath()
-      }
-    }
-    func vertical(_ x: CGFloat, _ y0: CGFloat, _ y1: CGFloat) -> Path {
-      Path { p in
-        p.addLines([CGPoint(x: x, y: y0), CGPoint(x: x + t / 2, y: y0 + t / 2), CGPoint(x: x + t / 2, y: y1 - t / 2),
-                    CGPoint(x: x, y: y1), CGPoint(x: x - t / 2, y: y1 - t / 2), CGPoint(x: x - t / 2, y: y0 + t / 2)])
-        p.closeSubpath()
-      }
-    }
-    func diagonal(_ x0: CGFloat, _ y0: CGFloat, _ x1: CGFloat, _ y1: CGFloat) -> Path {
-      Path { p in p.move(to: CGPoint(x: x0, y: y0)); p.addLine(to: CGPoint(x: x1, y: y1)) }
-        .strokedPath(StrokeStyle(lineWidth: t * 0.8, lineCap: .butt))
-    }
-    func dot(_ y: CGFloat) -> Path { Path(CGRect(x: xm - t / 2, y: y - t / 2, width: t, height: t)) }
-    let left = t / 2, right = w - t / 2, top = t / 2, bottom = h - t / 2
-    let inner = t * 1.25
-    switch segment {
-    case .a: return horizontal(top, left + g, right - g)
-    case .d: return horizontal(bottom, left + g, right - g)
-    case .g1: return horizontal(ym, left + g, xm - g)
-    case .g2: return horizontal(ym, xm + g, right - g)
-    case .f: return vertical(left, top + g, ym - g)
-    case .e: return vertical(left, ym + g, bottom - g)
-    case .b: return vertical(right, top + g, ym - g)
-    case .c: return vertical(right, ym + g, bottom - g)
-    case .i: return vertical(xm, top + g, ym - g)
-    case .l: return vertical(xm, ym + g, bottom - g)
-    case .h: return diagonal(inner, inner, xm - t * 0.75, ym - t * 0.75)
-    case .j: return diagonal(w - inner, inner, xm + t * 0.75, ym - t * 0.75)
-    case .k: return diagonal(xm - t * 0.75, ym + t * 0.75, inner, h - inner)
-    case .m: return diagonal(xm + t * 0.75, ym + t * 0.75, w - inner, h - inner)
-    case .upper: return dot(h * 0.3)
-    case .lower: return dot(h * 0.7)
-    case .centre: return dot(ym)
-    case .stop: return dot(bottom)
-    }
-  }
-
-  /// One glyph's lit segments (and the unlit bars, faint), at `origin` in a cell.
-  static func draw(
-    _ character: Character, in ctx: inout GraphicsContext, origin: CGPoint, width: CGFloat, height: CGFloat, unlit: Double
-  ) {
-    let t = max(width * 0.17, 0.9)
-    let lit = segments(character)
-    var on = Path(), off = Path()
-    for segment in Segment.allCases {
-      let shape = path(segment, width: width, height: height, thickness: t)
-        .applying(CGAffineTransform(translationX: origin.x, y: origin.y))
-      if lit.contains(segment) { on.addPath(shape) } else if bars.contains(segment) { off.addPath(shape) }
-    }
-    if unlit > 0 {
-      var faint = ctx
-      faint.opacity = unlit
-      faint.fill(off, with: .foreground)
-    }
-    ctx.fill(on, with: .foreground)
   }
 }
 
@@ -762,7 +647,7 @@ struct BlockMessageRow: View {
 /// Settings › Look: how Today's top is drawn.
 struct LookSettings: View {
   @State private var raw = UserDefaults.standard.string(forKey: TopLook.key) ?? TopLook.blocks.rawValue
-  var look: TopLook { TopLook(rawValue: raw) ?? .blocks }
+  var look: TopLook { TopLook.stored(raw) }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {

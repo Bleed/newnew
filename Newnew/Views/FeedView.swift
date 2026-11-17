@@ -1007,7 +1007,7 @@ struct NewsTop: View {
   var showMutes: () -> Void
   var showRead: () -> Void = {}
   @AppStorage(TopLook.key) private var lookRaw = TopLook.blocks.rawValue
-  var look: TopLook { TopLook(rawValue: lookRaw) ?? .blocks }
+  var look: TopLook { TopLook.stored(lookRaw) }
 
   var articles: [ArticleItem] { visible.flatMap(\.articles) }
   /// New to you: reached this iPhone since you last looked, and published no more than two
@@ -1177,7 +1177,57 @@ struct NewsTop: View {
   }
 
   var body: some View {
-    if look == .blocks { blocks } else { board.environment(\.boardFace, look == .lcd ? .lcd : .dots) }
+    switch look {
+    case .blocks: blocks
+    case .dots: board
+    case .mixed: mixed
+    }
+  }
+
+  /// The count line as chips: what it counts in a quiet chip, everything on the page in ink.
+  var countChips: (quiet: String, ink: String?) {
+    if loading || ready != nil || articles.isEmpty {
+      return (countTokens.map(\.spoken).filter { !$0.isEmpty }.joined(separator: " ").uppercased(), nil)
+    }
+    let stories = fresh.isEmpty ? visible.count : Set(fresh.compactMap { $0.cluster?.id }).count
+    return ("\(fresh.isEmpty ? "ALL" : "IN") \(stories) \(stories == 1 ? "STORY" : "STORIES")", "\(articles.count) IN ALL")
+  }
+
+  /// Settings › Look › Mixed (Figma: Explorations · Dots top, B1): the block as in Blocks, the
+  /// rebus around it as dot chips (the day, the time in grey; what it counts, the total in
+  /// ink), and the Blocks messages in the board's message panel. Same order and delays as Blocks.
+  var mixed: some View {
+    TimelineView(.everyMinute) { context in
+      let date = Self.dateText(context.date)
+      let time = String(date.split(separator: " ").last ?? "")
+      let day = String(date.dropLast(time.count + 1))
+      let counts = countChips
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
+          HStack(spacing: 6) {
+            DotChip(day, pitch: 1.8)
+            DotChip(time, pitch: 1.8, muted: true)
+          }
+          BlockText(text: blockFigure, rolls: loading)
+            .foregroundStyle(Swiss.ink)
+          HStack(spacing: 6) {
+            DotChip(counts.quiet, decodeDelay: 0.3, pitch: 1.8)
+            if let ink = counts.ink { DotChip(ink, decodeDelay: 0.3, pitch: 1.8, ink: true) }
+          }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(context.date.formatted(date: .complete, time: .shortened)). \(blockFigure.lowercased()). \(counts.quiet.lowercased()), \(figure.lowercased())")
+        if !blockMessages.isEmpty {
+          BoardMessageRows(messages: blockMessages)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .tile(.plain)
+        }
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.vertical, 4)
+      .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
   }
 
   var board: some View {
@@ -1568,12 +1618,14 @@ struct BoardMessageRows: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+        // "Updated" only says when; it has nowhere to go.
         Image(systemName: "arrow.right")
           .font(.caption.weight(.semibold))
           .foregroundStyle(Swiss.onInk)
           .padding(.horizontal, 7)
           .frame(height: 20)
           .background(Swiss.ink, in: Capsule())
+          .opacity(message.id == "fresh" ? 0 : 1)
       }
       .contentShape(Rectangle())
     }

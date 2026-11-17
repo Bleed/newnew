@@ -179,7 +179,7 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   apart by space, no dividers, here and in Settings › Outlets); your own feed (`AddFeedPanel`
   without its hint); topics to follow (`OnboardingTopics`: the Topics sheet's suggestions as
   pills, + to follow, outlined with a tick once followed, or typed); how Today begins
-  (`LookChoice`: Blocks, Dots, LCD tiles with their real tops in small); staying up to date
+  (Blocks or Dots, their real tops in small); staying up to date
   (background refresh and alerts, the Settings tiles); then the first edition
   (`FirstEdition`: the board large, looping until the first sync is done and at least 2.5 s,
   "Your first edition is being made."), and only then `finishOnboarding`. `OutletStore` keeps the choice (`outlets.chosen`,
@@ -428,10 +428,13 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   ("You're caught up." and when the next edition comes). "Show everything instead" shows the
   feed for this visit. "Edition ready" schedules local notifications at both times; breaking
   alerts are off while Today opens as an edition (`Alerts.breakingOn`).
-- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Blocks
-  (the default, below), Dots (the board above), LCD (Figma: Explorations · LCD, P: the same board, its cells drawn as
-  14-segment glyphs by `LCDFont` through `\.boardFace`, unlit segments faint, same timing) or
-  Blocks (Figma V, with the rebus of AE: what's new, "32 NEWNEW" ("NEWNEW" when nothing arrived
+- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Dots (the board above),
+  Mixed (`NewsTop.mixed`, Figma › Explorations · Dots top, B1: the block as in Blocks; the day
+  and the time in grey as quiet dot chips over it, what it counts in a quiet chip and "219 IN
+  ALL" in an ink chip under it, pitch 1.8; the Blocks messages in the board's message panel,
+  `BoardMessageRows`, whose arrow hides for UPDATED) or Blocks (the default; LCD was removed 2026-11-17 and a stored "lcd" reads as Dots,
+  `TopLook.stored`; sketches for Dots with the Blocks messages and for the block with the dot
+  face around it: Figma › Explorations · Dots top) (Figma V, with the rebus of AE: what's new, "32 NEWNEW" ("NEWNEW" when nothing arrived
   since you last looked; without articles DONE NEWNEW when all is read, GET NEWNEW while
   syncing, ZZZ NEWNEW otherwise), in `BlockText`, always the same full block (a third taller
   than "00 NEW" across a phone column, 50 % taller again across a wide iPad column; longer
