@@ -14,6 +14,7 @@ struct OnboardingView: View {
   @State private var step = Step.welcome
   @State private var selection = OutletStore.shared.selection
   @State private var hidden = OutletStore.shared.hiddenPillars
+  @Environment(\.horizontalSizeClass) private var sizeClass
 
   enum Step: Int, CaseIterable { case welcome, outlets, own, topics, updates, firstEdition }
 
@@ -41,7 +42,14 @@ struct OnboardingView: View {
       .transition(.asymmetric(insertion: .move(edge: .trailing).combined(with: .opacity), removal: .opacity))
     }
     .padding(.horizontal, Swiss.pageInset)
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    // iPad: a column of reading width, centred, and no taller than a large phone, so the
+    // buttons stay with the words instead of at the foot of the screen.
+    .frame(
+      maxWidth: sizeClass == .regular ? 600 : .infinity,
+      maxHeight: sizeClass == .regular ? 880 : .infinity,
+      alignment: .topLeading
+    )
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: sizeClass == .regular ? .center : .topLeading)
     .swissCanvas()
     .animation(.snappy(duration: 0.3), value: step)
   }
@@ -62,7 +70,7 @@ struct OnboardingView: View {
         .padding(.bottom, 20)
       Eyebrow("Welcome to newnew")
       OnboardingHeadline("The news, from the outlets you choose.", size: 40)
-      OnboardingDeck("Every story told once, with all the outlets that cover it. Read on this iPhone, no account.")
+      OnboardingDeck("Every story told once, with all the outlets that cover it. Read on this \(UIDevice.current.model), no account.")
       VStack(alignment: .leading, spacing: 14) {
         ForEach(Array(["You choose the outlets.", "newnew puts their coverage of each story together.", "Every headline links to the publisher."].enumerated()), id: \.offset) { index, line in
           HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -79,8 +87,14 @@ struct OnboardingView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .tile(.plain)
       .accessibilityElement(children: .combine)
-      Spacer(minLength: 20)
-      Button("Begin", action: next).buttonStyle(.swissPrimary).padding(.bottom, 12)
+      // iPad: Begin follows the welcome; iPhone: at the foot of the screen, under the thumb.
+      if sizeClass == .regular {
+        Button("Begin", action: next).buttonStyle(.swissPrimary).padding(.top, Rhythm.section)
+        Spacer(minLength: 0)
+      } else {
+        Spacer(minLength: 20)
+        Button("Begin", action: next).buttonStyle(.swissPrimary).padding(.bottom, 12)
+      }
     }
   }
 
@@ -546,7 +560,7 @@ struct AddFeedPanel: View {
           }
         }
       }
-      Text("Every feed, yours too, is read by this iPhone directly from the publisher.")
+      Text("Every feed, yours too, is read by this \(UIDevice.current.model) directly from the publisher.")
         .font(.footnote)
         .foregroundStyle(Swiss.muted)
         .fixedSize(horizontal: false, vertical: true)

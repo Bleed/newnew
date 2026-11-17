@@ -111,8 +111,8 @@ nonisolated enum YouTubeSuggestions {
   private static let addedWithNewPillars: Set<String> = [
     "Skift", "The Points Guy", "STAT", "Medical Xpress", "Sky Sports", "Yahoo Sports", "CBS Sports", "ArchDaily",
     "designboom", "The Art Newspaper", "Hyperallergic", "Colossal", "Artnet News", "Wallpaper*",
-    // Music (build 56).
-    "Stereogum", "NME", "Consequence", "Billboard", "The Quietus",
+    // Music (build 56), Business (build 57).
+    "Stereogum", "NME", "Consequence", "Billboard", "The Quietus", "Fortune", "Forbes", "Financial Times",
   ]
 
   private(set) var catalog: [OutletInfo]

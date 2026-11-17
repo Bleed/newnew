@@ -3,13 +3,14 @@ import Foundation
 /// The editorial mix: news, and the lighter pillars that keep the page from reading like a wire
 /// terminal. The scraper's feed categories map onto them; Today mixes them by `share`.
 nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
-  case briefing, sports, tech, health, entertainment, music, fashion, design, travel, gaming, lifestyle
+  case briefing, business, sports, tech, health, entertainment, music, fashion, design, travel, gaming, lifestyle
 
   var id: String { rawValue }
 
   init(category: String?) {
     switch category {
     case "Technology": self = .tech
+    case "Business": self = .business
     case "Sport": self = .sports
     case "Health": self = .health
     case "Travel": self = .travel
@@ -19,7 +20,7 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
     case "Music": self = .music
     case "Gaming": self = .gaming
     case "Lifestyle & Food": self = .lifestyle
-    // World, Business, Science, Politics, US, Local, Data, the news podcasts.
+    // World, Science, Politics, US, Local, Data, the news podcasts.
     default: self = .briefing
     }
   }
@@ -27,6 +28,7 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
   var title: String {
     switch self {
     case .briefing: "Briefing"
+    case .business: "Business"
     case .sports: "Sports"
     case .health: "Health"
     case .travel: "Travel"
@@ -43,7 +45,8 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
   /// Its share of Today's top stories.
   var share: Double {
     switch self {
-    case .briefing: 0.20
+    case .briefing: 0.17
+    case .business: 0.08
     case .tech: 0.13
     case .sports: 0.11
     case .entertainment: 0.08
@@ -53,6 +56,10 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  /// Hard news: on All it reaches the top only when several outlets cover it, and its stories
+  /// can be breaking. The lighter pillars' single-outlet pieces count.
+  var isHardNews: Bool { self == .briefing || self == .business }
+
   /// Photography that is mostly portrait (runway, street style, editorial): taller pictures,
   /// cropped from the top so heads and shoes stay.
   var isPortrait: Bool { self == .fashion }
@@ -61,7 +68,7 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
   /// in Tech, Entertainment, and Gaming aren't misclassified as product/critic reviews.
   var briefMode: BriefMode {
     switch self {
-    case .briefing, .sports, .health, .tech, .entertainment, .music, .gaming: .perspective
+    case .briefing, .business, .sports, .health, .tech, .entertainment, .music, .gaming: .perspective
     case .fashion, .lifestyle, .travel, .design: .trend
     }
   }

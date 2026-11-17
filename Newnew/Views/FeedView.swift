@@ -505,14 +505,22 @@ struct FeedView: View {
         )
         .presentationSizing(.fitted)
       }
-      .fullScreenCover(item: $topDeck) { deck in
+      // iPhone: the whole screen. iPad: a phone-shaped card, centred over the front page.
+      .fullScreenCover(item: Binding(get: { sizeClass == .regular ? nil : topDeck }, set: { topDeck = $0 })) { deck in
+        TopTenReel(deck: deck) { path.append($0) }
+      }
+      .sheet(item: Binding(get: { sizeClass == .regular ? topDeck : nil }, set: { topDeck = $0 })) { deck in
+        let screen = DotText.screenSize
         TopTenReel(deck: deck) { chosenCluster in
-          if sizeClass == .regular {
+          // The story opens in the overlay once the card has gone.
+          Task {
+            try? await Task.sleep(for: .milliseconds(250))
             overlayStory = chosenCluster
-          } else {
-            path.append(chosenCluster)
           }
         }
+        .frame(idealWidth: 430, idealHeight: min(screen.height * 0.9, 900))
+        .presentationSizing(.fitted)
+        .presentationCornerRadius(36)
       }
     }
     .tint(Swiss.ink)
@@ -1382,15 +1390,15 @@ struct FeedSections {
     case .all:
       // News goes on top when several outlets cover it; a lighter pillar's single-outlet pieces
       // (a review, a lookbook) are its stories too.
-      let top = visible.filter { pillars[$0.id] != .briefing || outlets[$0.id, default: 0] > 1 }
+      let top = visible.filter { !(pillars[$0.id] ?? .briefing).isHardNews || outlets[$0.id, default: 0] > 1 }
       let queues = Dictionary(grouping: top) { pillars[$0.id] ?? .briefing }.mapValues { $0.sorted(by: byImportance) }
       // Breaking news leads, whatever the mix.
-      let breaking = (queues[.briefing] ?? []).filter(Alerts.isBreaking)
+      let breaking = ((queues[.briefing] ?? []) + (queues[.business] ?? [])).filter(Alerts.isBreaking)
       let breakingIDs = Set(breaking.map(\.id))
       wide = breaking + Self.balanced(queues.mapValues { $0.filter { !breakingIDs.contains($0.id) } })
       let shown = Set(wide.map(\.id))
       brief = visible.filter { !shown.contains($0.id) }.sorted(by: newestFirst)
-    case .pillar(let pillar) where pillar != .briefing:
+    case .pillar(let pillar) where !pillar.isHardNews:
       // Lighter pillars are mostly one outlet per piece: all of them as cards.
       wide = visible.sorted(by: byImportance)
     case .media:

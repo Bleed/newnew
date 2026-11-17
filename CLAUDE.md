@@ -134,7 +134,7 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   articles do; muting wins over following. Tested with a temporary launch-argument probe on
   the live feed (Apple news, Space, electric cars, Ukraine).
 - **Pillars** (`Pillar`, from the feed's category), in filter-bar order: Briefing (World,
-  Business, Science, Politics, US, Local, Data, news podcasts) 20 %, Sports ("Sport") 11 %,
+  Science, Politics, US, Local, Data, news podcasts) 17 %, Business 8 %, Sports ("Sport") 11 %,
   Tech & Gear 13 %, Health 8 %, Entertainment 8 %, Music 6 %, Fashion & Style 8 %, Art & Design (art,
   design and architecture; "Art & Design") 8 %, Travel 7 %, Gaming 8 %, Lifestyle & Food 7 %.
   Sports, Health, Travel and Art & Design were added 2026-11-16 with new feeds (Skift, The
@@ -146,7 +146,11 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   added 2026-11-17 (a light category; its read compares coverage, like Entertainment): Guardian Music, NPR Music,
   Stereogum, NME, Consequence, Billboard, The Quietus; Pitchfork and Switched on Pop moved there
   (Rolling Stone's music feed has no pictures, BrooklynVegan and FACT had gone quiet). The
-  scraper's `LIGHT_CATEGORIES` (kept out of breaking pushes) has every light category. Outlets new
+  scraper's `LIGHT_CATEGORIES` (kept out of breaking pushes) has every light category. Business
+  was split from Briefing 2026-11-17 (its feeds: BBC, Guardian, NPR and NYT business, CNBC,
+  MarketWatch, Bloomberg and CNBC videos; added Fortune, Forbes, Financial Times). It is hard
+  news like Briefing (`Pillar.isHardNews`): several outlets to reach the top on All, can be
+  breaking, kept whole by `FeedFetcher`, MARKETS lens in the spectrum. Outlets new
   to the list are switched on once for readers who had already chosen
   (`OutletStore.adoptNewOutlets`, "outlets.seen"); podcasts stay off. After the Pillars
   comes the Podcasts & Video filter (`FeedFilter.media`): stories with an episode or a video,
@@ -404,9 +408,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   each column a `LazyVStack`), In brief at the top of the last. A story opens over the page in
   an overlay (about 90 % of the screen, up to 1120 × 900) holding `StoryPagerView`, which on
   iPad has Close, previous and next buttons and the arrow keys; the toolbar's Top 10 button opens
-  the reel there too, and a reel story opens in the overlay. The story page is two columns on wide windows (54 %:
-  lead, updates, coverage spectrum; 46 %: media, the brief, the coverage list, each scrolling
-  on its own); a lens tapped in the spectrum filters the list, hovering an angle highlights its
+  the reel as a centred portrait card (a sheet, 430 wide, up to 900 tall; the reel gives its
+  timer 22 pt of room when it has no top safe area), and a reel story opens in the overlay. The story page is two equal halves on wide windows, as on the open Duo (Figma: iPad & Duo · v2): the story on the left (picture, headline, updates, videos and episodes), how it's covered on the right (coverage spectrum, the read, the coverage list), each scrolling on its own, no rule between them; a lens tapped in the spectrum filters the list, hovering an angle highlights its
   outlet, and a publisher's page opens full width in the same window.
 - The Apple Intelligence brief decodes HTML entities first, retries a declined story with the
   permissive guardrails (structured, then plain text with a forgiving parser) before the

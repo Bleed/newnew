@@ -124,6 +124,7 @@ extension Pillar {
   var rebusWord: String {
     switch self {
     case .briefing: "NEWS"
+    case .business: "BUSINESS"
     case .sports: "SPORTS"
     case .health: "HEALTH"
     case .travel: "TRAVEL"
@@ -189,14 +190,16 @@ struct TopTenReel: View {
 
   var body: some View {
     GeometryReader { geo in
+      // On iPad the reel is a card with no status bar above it: a little room for the timer.
+      let inCard = geo.safeAreaInsets.top < 1
       // The dot timer lies over the page: a story's picture runs up under it.
       ZStack(alignment: .top) {
-        Arrives { content(topInset: geo.safeAreaInsets.top) }
+        Arrives { content(topInset: inCard ? 22 : geo.safeAreaInsets.top) }
           .id(index)
           .transition(.opacity)
           .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         // Just under the Dynamic Island (the status bar is hidden), the top line close under it.
-        if timed.contains(page) { timer.padding(.horizontal, Swiss.pageInset).padding(.top, -6) }
+        if timed.contains(page) { timer.padding(.horizontal, Swiss.pageInset).padding(.top, inCard ? 12 : -6) }
       }
       .contentShape(Rectangle())
       .onTapGesture(coordinateSpace: .local) { location in

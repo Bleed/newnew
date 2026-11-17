@@ -512,6 +512,51 @@
       ]
     },
     {
+      "outlet": "Fortune",
+      "categories": [
+        "Business"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://fortune.com/feed/",
+          "category": "Business"
+        }
+      ]
+    },
+    {
+      "outlet": "Forbes",
+      "categories": [
+        "Business"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.forbes.com/business/feed/",
+          "category": "Business"
+        }
+      ]
+    },
+    {
+      "outlet": "Financial Times",
+      "categories": [
+        "Business"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.ft.com/rss/home",
+          "category": "Business"
+        }
+      ]
+    },
+    {
       "outlet": "The Verge",
       "categories": [
         "Technology"

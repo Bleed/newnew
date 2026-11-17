@@ -266,50 +266,42 @@ struct StoryDetailView: View {
     .padding(.bottom, 32)
   }
 
-  /// iPad / Wide two-column broadsheet layout with independent vertical scroll panes (54% / 46%).
+  /// Wide windows (iPad, an open Duo): two equal halves, each scrolling on its own, as on the
+  /// Duo sketch. The story on the left (picture, headline, updates, videos and episodes); how
+  /// it's covered on the right (the coverage spectrum, the read, every outlet's row). No rule
+  /// between them: the gap is two page insets.
   private func twoColumnEditorialLayout(totalWidth: CGFloat) -> some View {
-    let leftWidth = floor(totalWidth * 0.54)
-    let rightWidth = max(totalWidth - leftWidth - 1, 260)
+    let half = floor(totalWidth / 2)
 
     return HStack(alignment: .top, spacing: 0) {
-      // Left 54% Scroll Pane: Lead Story, Updates, and Interactive Coverage Spectrum
       ScrollView {
         VStack(alignment: .leading, spacing: Rhythm.beat) {
           leadSection
           updatesSection
-          spectrumSection(topPadding: Self.sectionGap)
+          mediaSection(topPadding: Self.sectionGap)
         }
         .padding(.leading, Swiss.pageInset)
-        .padding(.trailing, 20)
-        .padding(.bottom, 36)
+        .padding(.trailing, Swiss.pageInset)
+        .padding(.bottom, Rhythm.section)
       }
-      .frame(width: leftWidth)
+      .frame(width: half)
 
-      // Subtle vertical rule separating the story from the media, comparison & sources
-      Rectangle()
-        .fill(Swiss.ink.opacity(0.10))
-        .frame(width: 1)
-        .ignoresSafeArea(edges: .bottom)
-
-      // Right 46% Scroll Pane: Videos/Podcasts + Compare Coverage (AI Brief) + Outlet Coverage List
       ScrollView {
         VStack(alignment: .leading, spacing: Rhythm.beat) {
-          mediaSection(topPadding: 0)
-          perspectiveSection(topPadding: hasMedia ? Self.sectionGap : 0)
+          spectrumSection(topPadding: 0)
+          perspectiveSection(topPadding: cluster.outlets.count > 1 ? Self.sectionGap : 0)
           coverageSection(topPadding: Self.sectionGap)
         }
-        .padding(.leading, 20)
+        .padding(.leading, Swiss.pageInset)
         .padding(.trailing, Swiss.pageInset)
-        .padding(.bottom, 36)
+        .padding(.bottom, Rhythm.section)
       }
-      .frame(width: rightWidth)
+      .frame(width: totalWidth - half)
     }
   }
 
   /// Added to the stack's beat, a section break between sections.
   private static let sectionGap = Rhythm.section - Rhythm.beat
-
-  private var hasMedia: Bool { cluster.articles.contains(where: \.isMedia) }
 
   // MARK: - Modular Sections
 
@@ -637,6 +629,7 @@ enum EditorialLens: String, CaseIterable, Identifiable {
 
     switch pillar {
     case .briefing: return .wire
+    case .business: return .markets
     case .tech: return .tech
     default: return .culture
     }
