@@ -135,14 +135,18 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   the live feed (Apple news, Space, electric cars, Ukraine).
 - **Pillars** (`Pillar`, from the feed's category), in filter-bar order: Briefing (World,
   Business, Science, Politics, US, Local, Data, news podcasts) 20 %, Sports ("Sport") 11 %,
-  Tech & Gear 13 %, Health 8 %, Entertainment 10 %, Fashion & Style 8 %, Art & Design (art,
+  Tech & Gear 13 %, Health 8 %, Entertainment 8 %, Music 6 %, Fashion & Style 8 %, Art & Design (art,
   design and architecture; "Art & Design") 8 %, Travel 7 %, Gaming 8 %, Lifestyle & Food 7 %.
   Sports, Health, Travel and Art & Design were added 2026-11-16 with new feeds (Skift, The
   Points Guy, STAT, Medical Xpress, Sky Sports, Yahoo Sports, CBS Sports, ArchDaily,
   designboom, The Art Newspaper, Hyperallergic, Colossal, Artnet News, Wallpaper*, and
   sections of The Guardian, BBC News, NYT and NPR); Dezeen, AD, It's Nice That, Design Milk and
   99% Invisible moved to Art & Design, Condé Nast Traveler to Travel. Travel and Art & Design
-  are light categories in `FeedFetcher`; Sports and Health are news (kept whole). Outlets new
+  are light categories in `FeedFetcher`; Sports and Health are news (kept whole). Music was
+  added 2026-11-17 (a light category; its read compares coverage, like Entertainment): Guardian Music, NPR Music,
+  Stereogum, NME, Consequence, Billboard, The Quietus; Pitchfork and Switched on Pop moved there
+  (Rolling Stone's music feed has no pictures, BrooklynVegan and FACT had gone quiet). The
+  scraper's `LIGHT_CATEGORIES` (kept out of breaking pushes) has every light category. Outlets new
   to the list are switched on once for readers who had already chosen
   (`OutletStore.adoptNewOutlets`, "outlets.seen"); podcasts stay off. After the Pillars
   comes the Podcasts & Video filter (`FeedFilter.media`): stories with an episode or a video,
@@ -355,6 +359,10 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 5. Wrap FoundationModels in `#if canImport(FoundationModels)` with the plain preview fallback.
 6. News pictures go through `ImagePipeline` (`CGImageSourceCreateThumbnailAtIndex` at the shown
    size), never `AsyncImage` or `UIImage(data:)`. No blurs, shadows or live blend modes in rows.
+   A picture that would be blown up more than 2.5× to fill its frame (read from its header,
+   `ImagePipeline.maxUpscale`) is skipped: a feed picture gives way to the page's preview,
+   else the card has no picture. Science X thumbnails (`/csz/news/tmb/`, 90 px: Medical
+   Xpress, Phys.org) are upgraded to `/800a/` in `FeedFetcher.upgrade`, like BBC's.
 
 ## Legal care (review 2026-10-29; not legal advice)
 

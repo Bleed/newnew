@@ -3,7 +3,7 @@ import Foundation
 /// The editorial mix: news, and the lighter pillars that keep the page from reading like a wire
 /// terminal. The scraper's feed categories map onto them; Today mixes them by `share`.
 nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
-  case briefing, sports, tech, health, entertainment, fashion, design, travel, gaming, lifestyle
+  case briefing, sports, tech, health, entertainment, music, fashion, design, travel, gaming, lifestyle
 
   var id: String { rawValue }
 
@@ -16,6 +16,7 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
     case "Art & Design", "Design", "Architecture", "Art": self = .design
     case "Fashion & Style": self = .fashion
     case "Entertainment", "Culture": self = .entertainment
+    case "Music": self = .music
     case "Gaming": self = .gaming
     case "Lifestyle & Food": self = .lifestyle
     // World, Business, Science, Politics, US, Local, Data, the news podcasts.
@@ -33,6 +34,7 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
     case .tech: "Tech & Gear"
     case .fashion: "Fashion & Style"
     case .entertainment: "Entertainment"
+    case .music: "Music"
     case .gaming: "Gaming"
     case .lifestyle: "Lifestyle & Food"
     }
@@ -44,7 +46,8 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
     case .briefing: 0.20
     case .tech: 0.13
     case .sports: 0.11
-    case .entertainment: 0.10
+    case .entertainment: 0.08
+    case .music: 0.06
     case .health, .fashion, .design, .gaming: 0.08
     case .travel, .lifestyle: 0.07
     }
@@ -58,7 +61,7 @@ nonisolated enum Pillar: String, CaseIterable, Identifiable, Sendable {
   /// in Tech, Entertainment, and Gaming aren't misclassified as product/critic reviews.
   var briefMode: BriefMode {
     switch self {
-    case .briefing, .sports, .health, .tech, .entertainment, .gaming: .perspective
+    case .briefing, .sports, .health, .tech, .entertainment, .music, .gaming: .perspective
     case .fashion, .lifestyle, .travel, .design: .trend
     }
   }

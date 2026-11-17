@@ -78,8 +78,9 @@ nonisolated enum YouTubeSuggestions {
     case .pillar(.fashion):
       [feed("Vogue · YouTube", "UCRXiA3h1no_PFkb1JCP0yMA"), feed("Highsnobiety · YouTube", "UCNe161YMUykW264kFe5PWxA")]
     case .pillar(.entertainment):
-      [feed("Vanity Fair", "UCIsbLox_y9dCIMLd8tdC6qg"), feed("Pitchfork · YouTube", "UC7kI8WjpCfFoMSNDuRh_4lA"),
-       feed("Nerdwriter", "UCJkMlOu7faDgqh4PfzbpLdg")]
+      [feed("Vanity Fair", "UCIsbLox_y9dCIMLd8tdC6qg"), feed("Nerdwriter", "UCJkMlOu7faDgqh4PfzbpLdg")]
+    case .pillar(.music):
+      [feed("Pitchfork · YouTube", "UC7kI8WjpCfFoMSNDuRh_4lA")]
     case .pillar(.gaming):
       [feed("IGN", "UCKy1dAqELo0zrOtPkf0eTMw"), feed("Game Maker's Toolkit", "UCqJ-Xo29CKyLTjn6z2XwYAw"),
        feed("Noclip", "UC0fDG3byEcMtbOqPMymDNbw")]
@@ -110,6 +111,8 @@ nonisolated enum YouTubeSuggestions {
   private static let addedWithNewPillars: Set<String> = [
     "Skift", "The Points Guy", "STAT", "Medical Xpress", "Sky Sports", "Yahoo Sports", "CBS Sports", "ArchDaily",
     "designboom", "The Art Newspaper", "Hyperallergic", "Colossal", "Artnet News", "Wallpaper*",
+    // Music (build 56).
+    "Stereogum", "NME", "Consequence", "Billboard", "The Quietus",
   ]
 
   private(set) var catalog: [OutletInfo]

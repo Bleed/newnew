@@ -29,7 +29,7 @@ const USER_AGENT = 'NewnewBot/1.0 (feed health check; breaking-news alerts)'
 const MAX_AGE_HOURS = 48
 const PER_FEED = 30
 /// Light pillars, not news: no breaking alerts from them.
-const LIGHT_CATEGORIES = new Set(['Technology', 'Entertainment', 'Fashion & Style', 'Gaming', 'Lifestyle & Food'])
+const LIGHT_CATEGORIES = new Set(['Technology', 'Entertainment', 'Music', 'Fashion & Style', 'Gaming', 'Lifestyle & Food', 'Travel', 'Art & Design'])
 /// Breaking detection reads the headline and the start of the extract.
 const SNIPPET_LENGTH = 150
 const FEED_TIMEOUT = 15_000

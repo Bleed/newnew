@@ -32,8 +32,14 @@ import UniformTypeIdentifiers
     "\((remote ?? article).absoluteString)@\(maxPixel)"
   }
 
-  /// `maxPixel` is the longest side in pixels (points × display scale).
-  func image(remote: URL?, article: URL, maxPixel: Int) async -> CGImage? {
+  /// How far a picture may be blown up to fill its frame. Past this it's a smudge (a feed's
+  /// 90 px thumbnail across a card), and no picture reads better.
+  nonisolated static let maxUpscale: CGFloat = 2.5
+
+  /// `maxPixel` is the longest side in pixels (points × display scale). `frame` is the size it
+  /// fills, in pixels: a picture too small for it is skipped (`maxUpscale`), and a feed picture
+  /// that is gives way to the page's own preview, often the full-size one.
+  func image(remote: URL?, article: URL, maxPixel: Int, frame: CGSize? = nil, fits: Bool = false) async -> CGImage? {
     let key = Self.key(remote: remote, article: article, maxPixel: maxPixel)
     if let hit = cached(key) { return hit }
     guard !failed.contains(key) else { return nil }
@@ -45,8 +51,10 @@ import UniformTypeIdentifiers
       } else {
         data = await Self.previewImageData(for: article)
       }
-      guard let data else { return nil }
-      return await Task.detached(priority: .utility) { Self.downsample(data, maxPixel: maxPixel) }.value
+      if let data, let image = await Self.decode(data, maxPixel: maxPixel, frame: frame, fits: fits) { return image }
+      // The feed's picture was missing or too small: the page's preview, if it's big enough.
+      guard remote != nil, frame != nil, let page = await Self.previewImageData(for: article) else { return nil }
+      return await Self.decode(page, maxPixel: maxPixel, frame: frame, fits: fits)
     }
     inFlight[key] = task
     let image = await task.value
@@ -78,10 +86,20 @@ import UniformTypeIdentifiers
     }
   }
 
-  /// Decodes straight to a thumbnail no larger than `maxPixel` on its longest side.
-  nonisolated static func downsample(_ data: Data, maxPixel: Int) -> CGImage? {
+  private static func decode(_ data: Data, maxPixel: Int, frame: CGSize?, fits: Bool) async -> CGImage? {
+    await Task.detached(priority: .utility) { downsample(data, maxPixel: maxPixel, frame: frame, fits: fits) }.value
+  }
+
+  /// Decodes straight to a thumbnail no larger than `maxPixel` on its longest side; nil when
+  /// the picture would have to be blown up more than `maxUpscale` to fill `frame`.
+  nonisolated static func downsample(_ data: Data, maxPixel: Int, frame: CGSize? = nil, fits: Bool = false) -> CGImage? {
     let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
     guard let source = CGImageSourceCreateWithData(data as CFData, sourceOptions) else { return nil }
+    if let frame, let size = pixelSize(source), size.width > 0, size.height > 0 {
+      // Filling the frame takes the larger scale; shown whole (charts), the smaller.
+      let across = frame.width / size.width, down = frame.height / size.height
+      if (fits ? min(across, down) : max(across, down)) > maxUpscale { return nil }
+    }
     let options =
       [
         kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -90,5 +108,15 @@ import UniformTypeIdentifiers
         kCGImageSourceThumbnailMaxPixelSize: maxPixel,
       ] as CFDictionary
     return CGImageSourceCreateThumbnailAtIndex(source, 0, options)
+  }
+
+  /// The picture's own size, read from its header without decoding it.
+  nonisolated static func pixelSize(_ source: CGImageSource) -> CGSize? {
+    guard let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+      let width = props[kCGImagePropertyPixelWidth] as? CGFloat, let height = props[kCGImagePropertyPixelHeight] as? CGFloat
+    else { return nil }
+    // Rotated by EXIF: width and height swap.
+    let orientation = props[kCGImagePropertyOrientation] as? Int ?? 1
+    return orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
   }
 }

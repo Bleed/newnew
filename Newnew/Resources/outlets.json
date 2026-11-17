@@ -65,6 +65,7 @@
         "Science",
         "Sport",
         "Entertainment",
+        "Music",
         "Travel",
         "Health",
         "Art & Design"
@@ -98,6 +99,10 @@
           "category": "Entertainment"
         },
         {
+          "url": "https://www.theguardian.com/music/rss",
+          "category": "Music"
+        },
+        {
           "url": "https://www.theguardian.com/travel/rss",
           "category": "Travel"
         },
@@ -118,6 +123,7 @@
         "Business",
         "Science",
         "US",
+        "Music",
         "Health"
       ],
       "kinds": [
@@ -139,6 +145,10 @@
         {
           "url": "https://feeds.npr.org/1003/rss.xml",
           "category": "US"
+        },
+        {
+          "url": "https://feeds.npr.org/1039/rss.xml",
+          "category": "Music"
         },
         {
           "url": "https://feeds.npr.org/1128/rss.xml",
@@ -996,7 +1006,7 @@
     {
       "outlet": "Pitchfork",
       "categories": [
-        "Entertainment"
+        "Music"
       ],
       "kinds": [
         "article"
@@ -1004,7 +1014,82 @@
       "feeds": [
         {
           "url": "https://pitchfork.com/rss/news/",
-          "category": "Entertainment"
+          "category": "Music"
+        }
+      ]
+    },
+    {
+      "outlet": "Stereogum",
+      "categories": [
+        "Music"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.stereogum.com/feed/",
+          "category": "Music"
+        }
+      ]
+    },
+    {
+      "outlet": "NME",
+      "categories": [
+        "Music"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.nme.com/news/music/feed",
+          "category": "Music"
+        }
+      ]
+    },
+    {
+      "outlet": "Consequence",
+      "categories": [
+        "Music"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://consequence.net/feed/",
+          "category": "Music"
+        }
+      ]
+    },
+    {
+      "outlet": "Billboard",
+      "categories": [
+        "Music"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://www.billboard.com/feed/",
+          "category": "Music"
+        }
+      ]
+    },
+    {
+      "outlet": "The Quietus",
+      "categories": [
+        "Music"
+      ],
+      "kinds": [
+        "article"
+      ],
+      "feeds": [
+        {
+          "url": "https://thequietus.com/feed",
+          "category": "Music"
         }
       ]
     },
@@ -1463,7 +1548,7 @@
     {
       "outlet": "Switched on Pop",
       "categories": [
-        "Entertainment"
+        "Music"
       ],
       "kinds": [
         "podcast"
@@ -1471,7 +1556,7 @@
       "feeds": [
         {
           "url": "https://feeds.megaphone.fm/switchedonpop",
-          "category": "Entertainment",
+          "category": "Music",
           "kind": "podcast"
         }
       ]

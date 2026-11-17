@@ -20,7 +20,7 @@ nonisolated enum FeedFetcher {
   /// Most podcasts come weekly.
   static let podcastMaxAge: TimeInterval = 7 * 24 * 3600
   static let perFeed = 30
-  static let lightCategories: Set<String> = ["Technology", "Entertainment", "Fashion & Style", "Gaming", "Lifestyle & Food", "Travel", "Art & Design"]
+  static let lightCategories: Set<String> = ["Technology", "Entertainment", "Music", "Fashion & Style", "Gaming", "Lifestyle & Food", "Travel", "Art & Design"]
   static let lightPerFeed = 8
   static let lightPerCategory = 15
   static let uncappedCategories: Set<String> = ["Technology"]
@@ -244,8 +244,11 @@ nonisolated enum FeedFetcher {
 
   /// Feeds often carry a small thumbnail where a larger rendition exists at a known address.
   static func upgrade(_ url: String?) -> String? {
+    guard let url else { return nil }
+    // Science X (Medical Xpress, Phys.org, Tech Xplore): /csz/news/tmb/… is 90 × 90, /800a/ 800 wide.
+    if url.contains("b-cdn.net/csz/news/tmb/") { return url.replacingOccurrences(of: "/csz/news/tmb/", with: "/csz/news/800a/") }
     // BBC: ichef.bbci.co.uk/ace/standard/240/… → 976 wide.
-    guard let url, url.contains("ichef.bbci.co.uk") else { return url }
+    guard url.contains("ichef.bbci.co.uk") else { return url }
     return url.replacing(/\/(standard|branded_news|news)\/\d{2,4}\//) { "/\($0.output.1)/976/" }
   }
 

@@ -761,6 +761,7 @@ struct CoverageSpectrumCard: View {
               .font(.caption2.monospaced())
               .foregroundStyle(Swiss.muted)
           }
+          .fixedSize()
         }
         Spacer(minLength: 4)
         if let badge = spectrum.blindspotBadge {
@@ -784,7 +785,8 @@ struct CoverageSpectrumCard: View {
 
       spectrumStrip(height: 12)
 
-      HStack(spacing: 8) {
+      // Whole labels wrap onto a second row; a label never breaks ("WIRE" over "· 16").
+      FlowLayout(spacing: 8) {
         ForEach(Array(spectrum.segments.enumerated()), id: \.element.id) { index, seg in
           let isSelected = selectedLens == seg.lens
           Button {
@@ -816,8 +818,8 @@ struct CoverageSpectrumCard: View {
           .opacity(shown ? (selectedLens == nil || isSelected ? 1 : 0.45) : 0)
           .offset(y: shown ? 0 : 4)
           .animation(reveal(index + 1), value: shown)
+          .fixedSize()
         }
-        Spacer(minLength: 0)
       }
 
       if !spectrum.insightLine.isEmpty {

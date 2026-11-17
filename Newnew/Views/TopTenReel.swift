@@ -131,6 +131,7 @@ extension Pillar {
     case .tech: "TECH"
     case .fashion: "FASHION"
     case .entertainment: "CULTURE"
+    case .music: "MUSIC"
     case .gaming: "GAMING"
     case .lifestyle: "LIFESTYLE"
     }

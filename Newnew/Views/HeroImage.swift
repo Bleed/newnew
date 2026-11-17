@@ -80,7 +80,9 @@ struct HeroImage: View {
       image = hit
       return
     }
-    let loaded = await ImagePipeline.shared.image(remote: remote, article: article, maxPixel: maxPixel)
+    // The frame it fills, in pixels: a picture far smaller is skipped (no picture beats a smudge).
+    let frame = CGSize(width: width * displayScale, height: frameHeight * displayScale)
+    let loaded = await ImagePipeline.shared.image(remote: remote, article: article, maxPixel: maxPixel, frame: frame, fits: fits)
     withAnimation(.easeOut(duration: 0.2)) {
       image = loaded
       failed = loaded == nil

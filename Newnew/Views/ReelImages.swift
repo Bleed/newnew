@@ -65,8 +65,10 @@ final class CatchupImagePreloader {
   private static func firstImage(_ candidates: [(remote: URL?, article: URL)]) async -> UIImage? {
     // A full-screen slide: an iPhone screen's longest side in pixels (2,868 on a Pro Max).
     let maxPixel = 2_868
+    // Across the full width of a phone (1,320 px on a Pro Max): a smaller picture tries the next.
+    let frame = CGSize(width: 1_206, height: 0)
     for candidate in candidates {
-      if let image = await ImagePipeline.shared.image(remote: candidate.remote, article: candidate.article, maxPixel: maxPixel) {
+      if let image = await ImagePipeline.shared.image(remote: candidate.remote, article: candidate.article, maxPixel: maxPixel, frame: frame) {
         return UIImage(cgImage: image)
       }
     }
