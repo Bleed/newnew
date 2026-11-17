@@ -25,8 +25,6 @@ import SwiftData
   var audioSeconds: Int?
   /// The picture is a chart: shown whole, never cropped.
   var isChart = false
-  /// Up to 6 pictures from the item (lookbooks, interiors, recipes), for the lighter pillars.
-  var galleryURLs: [String] = []
   /// `Region` raw values, comma-separated (see `RegionTagger`).
   var regionsRaw: String = ""
   /// `StoryClusterer.terms` of the text, one per line: worked out once, not on every regroup.
@@ -45,7 +43,6 @@ import SwiftData
     audioURL = dto.audioURL
     audioSeconds = dto.audioSeconds
     isChart = dto.isChart ?? false
-    galleryURLs = dto.galleryURLs ?? []
     publishedAt = dto.publishedAt
     self.fetchedAt = fetchedAt
   }
@@ -67,7 +64,6 @@ import SwiftData
     if audioURL != dto.audioURL { audioURL = dto.audioURL }
     if audioSeconds != dto.audioSeconds { audioSeconds = dto.audioSeconds }
     if isChart != (dto.isChart ?? false) { isChart = dto.isChart ?? false }
-    if galleryURLs != (dto.galleryURLs ?? []) { galleryURLs = dto.galleryURLs ?? [] }
   }
 
   var pillar: Pillar { Pillar(category: category) }
@@ -221,7 +217,6 @@ nonisolated struct FeedArticleDTO: Decodable {
   var audioURL: String?
   var audioSeconds: Int?
   var isChart: Bool?
-  var galleryURLs: [String]?
 }
 
 /// What Apple Intelligence says about how outlets covered one story.

@@ -55,7 +55,7 @@ group "Team" gets every upload automatically. The icon must stay opaque (no alph
   server had: last 48 h (charts 14 days), 30 per news feed, 8 per light-pillar feed, 15 per
   light category with outlets taking turns (Technology uncapped), deduped by link and by outlet
   + headline, snippets ≤ 150 characters at a word, tracking parameters stripped, BBC
-  thumbnails upgraded to 976 wide, galleries from light-pillar items, YouTube titles without
+  thumbnails upgraded to 976 wide, YouTube titles without
   channel tags, HD thumbnail (`maxresdefault`, HEAD-checked once per video, else `hqdefault`),
   podcasts with audio and length and no picture, for 7 days (most are weekly; the store keeps
   episodes 7 days too). Megaphone episodes have no page: their audio URL is the link. Items with no picture get one from the page
@@ -160,7 +160,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   (`Alerts.isBreaking`) leads regardless. News reaches the top only with several outlets; a
   lighter pillar's single-outlet piece counts. Asked for "balanced by importance" over a strict
   round-robin (2026-10-25), since the user earlier wanted importance order. Fashion pictures
-  are 4:5, cropped from the top; an item with `galleryURLs` swipes as a gallery. The story
+  are 4:5, cropped from the top; one picture per item, no galleries (removed, and the
+  phone no longer collects gallery pictures, 2026-11-17). The story
   page's Apple Intelligence read follows `Pillar.briefMode`: perspective (news, needs several
   outlets), verdict (tech, entertainment, gaming: praised / criticised) or trend (fashion,
   lifestyle: the shift, names, why it matters, takeaways); the last two also run on one

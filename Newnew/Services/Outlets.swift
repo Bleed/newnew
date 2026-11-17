@@ -541,7 +541,7 @@ nonisolated enum CustomFeedReader {
       return FeedArticleDTO(
         title: headline, snippet: FeedFetcher.truncate(plain(item.summary), FeedFetcher.snippetLength), outlet: title, url: item.link,
         imageURL: image, publishedAt: min(date, .now), category: nil, country: nil, videoID: item.videoID,
-        audioURL: nil, audioSeconds: nil, isChart: nil, galleryURLs: nil)
+        audioURL: nil, audioSeconds: nil, isChart: nil)
     }
     return Found(feed: CustomFeed(url: feedURL, title: title), articles: Array(articles.prefix(40)))
   }
@@ -585,9 +585,6 @@ nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchecked Send
     var seconds: Int?
     /// The first picture in the item's HTML, if it offers no other.
     var inlineImage: String?
-    /// Every picture it offers as media (for galleries) and its full HTML.
-    var pictures: [String] = []
-    var html = ""
     var guid = ""
   }
 
@@ -620,7 +617,6 @@ nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchecked Send
       if let medium = attributes["medium"], medium != "image" { break }
       if let type = attributes["type"], !type.hasPrefix("image") { break }
       let width = Int(attributes["width"] ?? "") ?? 0
-      if name == "media:content" { current?.pictures.append(url) }
       if current?.image == nil || width > current?.imageWidth ?? 0 {
         current?.image = url
         current?.imageWidth = width
@@ -645,7 +641,6 @@ nonisolated final class FeedParser: NSObject, XMLParserDelegate, @unchecked Send
     case "title": current?.title = CustomFeedReader.plain(value)
     case "link": if current?.link.isEmpty == true { current?.link = value }
     case "description", "summary", "content:encoded", "media:description", "content":
-      if name == "content:encoded" || name == "content" { current?.html = value }
       if current?.inlineImage == nil, let src = value.firstMatch(of: /<img[^>]+src=["']([^"']+)["']/)?.output.1 {
         current?.inlineImage = String(src)
       }

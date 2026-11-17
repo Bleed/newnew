@@ -8,7 +8,7 @@ import Foundation
 /// - News feeds give their newest 30 of the last 48 hours. The lighter pillars (Technology,
 ///   Entertainment, Fashion & Style, Gaming, Lifestyle & Food) publish many small items, so each
 ///   of their feeds gives its newest 8, and each of those categories but Technology at most 15
-///   in all, the outlets taking turns. Their articles carry a few pictures (`galleryURLs`).
+///   in all, the outlets taking turns.
 /// - "video" feeds (YouTube) give the video and its HD thumbnail, Shorts skipped; "podcast"
 ///   feeds the episode's audio and length, no picture, for 7 days; "chart" feeds a chart kept
 ///   for 14 days.
@@ -25,7 +25,6 @@ nonisolated enum FeedFetcher {
   static let lightPerCategory = 15
   static let uncappedCategories: Set<String> = ["Technology"]
   static let snippetLength = 150
-  static let galleryLimit = 6
   static let maxBytes = 1_500_000
   static let concurrency = 24
   static let userAgent = "newnew/1.0 (RSS reader on iPhone)"
@@ -102,7 +101,7 @@ nonisolated enum FeedFetcher {
     let cutoff = Date.now.addingTimeInterval(-(feed.kind == "chart" ? chartMaxAge : feed.kind == "podcast" ? podcastMaxAge : maxAge))
     var out: [FeedArticleDTO] = []
     for item in parser.items {
-      guard let article = article(item, feed: feed, outlet: outlet, light: light), article.publishedAt >= cutoff else { continue }
+      guard let article = article(item, feed: feed, outlet: outlet), article.publishedAt >= cutoff else { continue }
       out.append(article)
       if out.count >= (light ? lightPerFeed : perFeed) { break }
     }
@@ -132,7 +131,7 @@ nonisolated enum FeedFetcher {
     return data
   }
 
-  static func article(_ item: FeedParser.Item, feed: FeedSource, outlet: String, light: Bool) -> FeedArticleDTO? {
+  static func article(_ item: FeedParser.Item, feed: FeedSource, outlet: String) -> FeedArticleDTO? {
     // Titles too can carry entities a feed encoded twice ("Google&#8217;s").
     let title = CustomFeedReader.plain(item.title)
     // Podcast episodes often have no page (Megaphone): their audio is the link.
@@ -162,8 +161,7 @@ nonisolated enum FeedFetcher {
       publishedAt: min(date, .now),
       category: feed.category, country: feed.country, videoID: videoID,
       audioURL: audio, audioSeconds: audio == nil ? nil : item.seconds,
-      isChart: feed.kind == "chart" ? true : nil,
-      galleryURLs: light && feed.kind == nil ? gallery(item, base: link) : nil)
+      isChart: feed.kind == "chart" ? true : nil)
   }
 
   // MARK: The whole
@@ -250,34 +248,5 @@ nonisolated enum FeedFetcher {
     // BBC: ichef.bbci.co.uk/ace/standard/240/… → 976 wide.
     guard url.contains("ichef.bbci.co.uk") else { return url }
     return url.replacing(/\/(standard|branded_news|news)\/\d{2,4}\//) { "/\($0.output.1)/976/" }
-  }
-
-  /// Up to 6 distinct pictures from the item, for a lookbook or a recipe's steps; nil for fewer
-  /// than two. Tracking pixels, icons and avatars are skipped, and renditions of one picture
-  /// (the same path with other sizes) count once.
-  static func gallery(_ item: FeedParser.Item, base: String) -> [String]? {
-    var candidates = item.pictures
-    for tag in item.html.matches(of: /<img\b[^>]*>/.ignoresCase()) {
-      let text = String(tag.output)
-      guard let src = text.firstMatch(of: /\ssrc=["']([^"']+)["']/.ignoresCase())?.output.1 else { continue }
-      let width = text.firstMatch(of: /\swidth=["']?(\d+)/.ignoresCase()).flatMap { Int($0.output.1) } ?? 0
-      if width == 0 || width >= 300 { candidates.append(String(src)) }
-    }
-    var seen = Set<String>()
-    var out: [String] = []
-    for raw in candidates {
-      guard let url = upgrade(absolute(raw, base: base)), url.hasPrefix("https:"),
-        url.firstMatch(of: /pixel|feedburner|gravatar|emoji|avatar|logo|icon|\.gif(\?|$)|\.svg(\?|$)/.ignoresCase()) == nil
-      else { continue }
-      let path = url.replacing(/\?.*$/, with: "")
-      // WordPress thumbnails name their size: "-300x200.jpg" is too small to swipe through.
-      if let named = path.firstMatch(of: /-(\d+)x\d+\.\w+$/), let width = Int(named.output.1), width < 600 { continue }
-      // One picture, many sizes: "photo-1024x683.jpg", "…/w_640/…", "?w=…" all key to the same.
-      let key = path.replacing(/-\d+x\d+(?=\.\w+$)/, with: "").replacing(/\/(w|h|c)_[^\/]+/, with: "").lowercased()
-      guard seen.insert(key).inserted else { continue }
-      out.append(url)
-      if out.count >= galleryLimit { break }
-    }
-    return out.count > 1 ? out : nil
   }
 }
