@@ -93,6 +93,39 @@ nonisolated enum YouTubeSuggestions {
   }
 }
 
+/// Care for particular outlets, from their published terms (docs/feed-terms-review-2026-11-17.md).
+/// The server's breaking detection keeps its own copy of `noAI` (alerts.mjs, `NO_MINING`).
+nonisolated enum OutletRules {
+  /// RSS terms that let a reader show the feed but not modify it: no description, since a cut
+  /// one would be modified (Fox News, ESPN, ScienceDaily, Yahoo, TechCrunch).
+  static let verbatim: Set<String> = [
+    "Fox News", "ESPN", "ScienceDaily", "Yahoo Sports", "Engadget", "TechCrunch", "The Washington Post",
+  ]
+  /// Terms that reserve AI use or text and data mining: left out of what Apple Intelligence
+  /// reads (story reads, breaking-alert lines). Their headlines still show, and still group.
+  static let noAI: Set<String> = [
+    "The Guardian", "Today in Focus", "France 24", "Al Jazeera", "The New York Times", "The Daily", "Hard Fork",
+    "South China Morning Post", "Skift", "The Points Guy", "PC Gamer", "Wallpaper*",
+    // Read in a browser 2026-11-17: Condé Nast, Penske, Hearst, Vox, Politico, Sky, Nexstar, New
+    // Scientist and the FT reserve AI use or data mining.
+    "Vogue", "GQ", "Wired", "Pitchfork", "Architectural Digest", "Bon Appétit", "Condé Nast Traveler", "Ars Technica",
+    "Variety", "WWD", "IndieWire", "The Hollywood Reporter", "Billboard", "Harper's Bazaar",
+    "The Verge", "Polygon", "Eater", "The Cut", "Decoder with Nilay Patel", "The Vergecast",
+    "Politico", "Politico Europe", "Sky News", "Sky Sports", "The Hill", "New Scientist", "Financial Times",
+  ]
+  /// RSS terms that leave pictures out: their items show none (their YouTube videos keep theirs).
+  /// (The Washington Post allows 60 × 60 at most, too small for any card: none.)
+  static let noPictures: Set<String> = ["BBC News", "BBC Sport", "ScienceDaily", "The Washington Post"]
+  /// Terms against showing their pages inside another app: links open in Safari (or their app).
+  static let safariHosts: [String] = ["aljazeera.com"]
+
+  static func allowsAI(_ outlet: String) -> Bool { !noAI.contains(outlet) }
+  static func opensInSafari(_ url: URL) -> Bool {
+    guard let host = url.host()?.lowercased() else { return false }
+    return safariHosts.contains { host == $0 || host.hasSuffix("." + $0) }
+  }
+}
+
 /// Which outlets newnew reads: the reader's choice (onboarding, Settings › Outlets) and their
 /// own feeds. Articles from an outlet not chosen are never stored. Kept in UserDefaults.
 @MainActor @Observable final class OutletStore {

@@ -52,6 +52,11 @@ enum IntelligenceService {
   /// reviewers make of a release (verdict), or the look and why it matters (trend). The three
   /// share one shape: a summary, two lists, each outlet's angle, and for trends the takeaways.
   static func brief(for sources: [Source], mode: BriefMode = .perspective) async throws -> ClusterPerspectiveBrief {
+    // Outlets whose terms reserve AI use aren't read by the model; with none left, the
+    // headline preview (no model) stands in.
+    let allowed = sources.filter { OutletRules.allowsAI($0.outlet) }
+    guard !allowed.isEmpty else { return previewBrief(sources, mode: mode) }
+    let sources = allowed
     let cleanedSources = sources.map {
       Source(outlet: $0.outlet, title: cleanHTML($0.title), snippet: cleanHTML($0.snippet))
     }
@@ -352,6 +357,7 @@ enum IntelligenceService {
   static func alertSubject(_ sources: [Source]) async -> String? {
     refreshAvailability()
     #if canImport(FoundationModels)
+      let sources = sources.filter { OutletRules.allowsAI($0.outlet) }
       guard isAvailable, !sources.isEmpty else { return nil }
       let instructions = """
         Write the one line of a breaking-news alert: what happened, as plain fact, under 80 \

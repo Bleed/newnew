@@ -37,9 +37,20 @@ function words(text) {
   return (text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []).filter(w => w.length >= 4 && !STOPWORDS.has(w) && !/^\d+$/.test(w))
 }
 
+/// Outlets whose terms reserve AI use or text and data mining (docs/feed-terms-review-2026-11-17.md):
+/// left out of this job's analysis. Same list as the app's `OutletRules.noAI`.
+export const NO_MINING = new Set([
+  'The Guardian', 'Today in Focus', 'France 24', 'Al Jazeera', 'The New York Times', 'The Daily', 'Hard Fork',
+  'South China Morning Post', 'Skift', 'The Points Guy', 'PC Gamer', 'Wallpaper*',
+  'Vogue', 'GQ', 'Wired', 'Pitchfork', 'Architectural Digest', 'Bon Appétit', 'Condé Nast Traveler', 'Ars Technica',
+  'Variety', 'WWD', 'IndieWire', 'The Hollywood Reporter', 'Billboard', "Harper's Bazaar",
+  'The Verge', 'Polygon', 'Eater', 'The Cut', 'Decoder with Nilay Patel', 'The Vergecast',
+  'Politico', 'Politico Europe', 'Sky News', 'Sky Sports', 'The Hill', 'New Scientist', 'Financial Times',
+])
+
 /** Groups the run's fresh articles into stories covered by several outlets. */
 export function findStories(articles, now = Date.now()) {
-  const docs = articles.map(a => ({ a, all: new Set(words(`${a.title} ${a.snippet}`)), title: new Set(words(a.title)) }))
+  const docs = articles.filter(a => !NO_MINING.has(a.outlet)).map(a => ({ a, all: new Set(words(`${a.title} ${a.snippet}`)), title: new Set(words(a.title)) }))
   const df = new Map()
   for (const d of docs) for (const w of d.all) df.set(w, (df.get(w) ?? 0) + 1)
   const rare = w => { const n = df.get(w) ?? 0; return n >= 2 && n <= 15 }

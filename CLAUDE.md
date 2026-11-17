@@ -388,6 +388,19 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 
 ## Legal care (review 2026-10-29; not legal advice)
 
+- Per-outlet care from the feed-terms review (docs/feed-terms-review-2026-11-17.md), in
+  `OutletRules` (Outlets.swift), 2026-11-17: `verbatim` outlets (Fox News, ESPN, ScienceDaily,
+  Yahoo Sports, Engadget, TechCrunch, the Washington Post; their RSS terms forbid modifying the
+  feed) show no description rather than a cut one; `noAI` outlets (Guardian, France 24, Al
+  Jazeera, NYT and its podcasts, SCMP, Skift, The Points Guy, Future, Condé Nast, Penske,
+  Hearst, Vox, Politico, Sky, The Hill, New Scientist, FT: 39 names) are left out of what Apple
+  Intelligence reads (a story with only those gets the headline preview) and, as `NO_MINING`
+  in alerts.mjs, out of the server's breaking detection; `noPictures` (BBC News, BBC Sport,
+  ScienceDaily, the Washington Post) show no feed picture (their YouTube videos keep theirs); Al Jazeera links open
+  in its app or Safari, never inside newnew (`safariHosts`). Keep the two lists in step.
+- The privacy page (github-scraper/site/privacy.html) has a "For publishers" section: removal
+  within 48 hours of a request to publishers@newnew.news, through `feeds.json`.
+
 - newnew publishes no news: each iPhone reads the publishers' public feeds itself, like any RSS
   reader, and keeps extracts to 150 characters. Pictures are the publisher's own files.
 - Photos are never full screen: the Top 10 reel's picture runs full width at the top of a story

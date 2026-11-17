@@ -44,6 +44,11 @@ enum LinkOpener {
   /// (with or without "www", and bbc.co.uk ↔ bbc.com: the international BBC News app may
   /// claim only one); `otherwise` when none does.
   static func open(_ url: URL, otherwise: @escaping @MainActor () -> Void) {
+    // Publishers whose terms bar showing their pages inside another app: their app, else Safari.
+    if OutletRules.opensInSafari(url) {
+      attempt([url] + alternates(url)) { UIApplication.shared.open(url) }
+      return
+    }
     attempt([url] + alternates(url), otherwise: otherwise)
   }
 

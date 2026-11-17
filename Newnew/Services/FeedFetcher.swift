@@ -134,9 +134,12 @@ nonisolated enum FeedFetcher {
       picture = nil
     default: break
     }
+    // Outlets whose RSS terms leave pictures out: none from the feed either.
+    if OutletRules.noPictures.contains(outlet), feed.kind != "video" { picture = nil }
     return FeedArticleDTO(
       title: feed.kind == "video" ? videoTitle(title, outlet: outlet) : title,
-      snippet: truncate(CustomFeedReader.plain(item.summary), snippetLength),
+      // Outlets whose terms forbid modifying the feed show no description rather than a cut one.
+      snippet: OutletRules.verbatim.contains(outlet) ? "" : truncate(CustomFeedReader.plain(item.summary), snippetLength),
       outlet: outlet, url: link,
       // The feed's own picture, as sent (2026-11-17): no larger rendition swapped in.
       imageURL: picture.flatMap { absolute($0, base: link) },

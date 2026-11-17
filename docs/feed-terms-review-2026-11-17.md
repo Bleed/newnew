@@ -141,6 +141,42 @@ A paid app makes the "personal, non-commercial" clauses bite. Ways to charge wit
   - Everything else only when the reader adds it.
 - **Or stay free**, which keeps newnew closest to the personal-use side.
 
+## Read in a browser (17 Nov, later)
+
+The pages that refused automated reading, read in Chrome:
+
+| Owner | What the terms say | Now in newnew |
+| --- | --- | --- |
+| Condé Nast (Vogue, GQ, Wired, Pitchfork, AD, Bon Appétit, CN Traveler, Ars Technica), updated Oct 2024 | Content delivered by RSS falls under the same terms: personal, non-commercial use; no aggregating or scraping; no use for AI (training, fine-tuning, RAG) | No AI |
+| Penske (Variety, WWD, IndieWire, THR, Billboard), Aug 2026 | Personal, non-commercial; no AI tools, robots or scraping | No AI |
+| Hearst US (Harper's Bazaar), Oct 2025 | Personal, non-commercial; no AI or RAG; no tools to aggregate | No AI |
+| Vox Media (Verge, Polygon, Eater, The Cut), Jul 2026 | Non-commercial; no robots or data-mining technology to cache, frame or extract | No AI |
+| Washington Post (RSS terms) | Feeds allowed in a news reader; no more text than the feed gives; no editing or reformatting; keep links and by-line; credit the Post; pictures at most 60 × 60; on a mobile device only for one's own personal use | Verbatim, no pictures |
+| Politico | Personal, non-commercial; nothing supplied to AI; no scraping or framing | No AI |
+| Sky (News, Sports) | Personal, non-commercial home use; no aggregating or data mining; no AI tools | No AI |
+| The Hill (Nexstar) | Personal, non-commercial; no use in any AI product | No AI |
+| New Scientist | RSS for personal, non-commercial use; in a reader app the user must enable the feed themselves; no AI or text and data mining | No AI |
+| Financial Times | No machine learning or AI use of content | No AI |
+| ABC Australia | Personal, non-commercial; nothing on AI | — |
+| DW | Only a legal notice; its RSS page sets no limits | — |
+
+New Scientist's RSS page names a reader app and says the feeds may be used there when the
+user enables them: support for readers choosing their outlets (done 17 Nov).
+
+Still unread: Times of India (Chrome's extension refuses the site), STAT, The Hindu, Straits
+Times, Korea Herald, Japan Times, The Independent (no terms link found), Eurogamer, NME,
+Design Milk.
+
+## Done in the app (17 Nov)
+
+- Readers choose every outlet; new outlets are never switched on.
+- Only the feed's own picture; none from article pages; a picture stays with its headline.
+- `OutletRules`: verbatim outlets show no description; no-AI outlets are left out of Apple
+  Intelligence's reads and of the server's breaking detection (`NO_MINING`); BBC,
+  ScienceDaily and the Washington Post show no pictures; Al Jazeera opens outside newnew.
+- The breaking push carries words, not a headline.
+- The privacy page promises removal within 48 hours.
+
 ## How this was done
 
 Four research passes read each publisher's RSS page and terms of use, or the owner's terms
