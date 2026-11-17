@@ -43,7 +43,7 @@ import UserNotifications
   /// that is checked for the container; TestFlight and App Store installs have the profile
   /// stripped and are always signed with the entitlement, so a missing profile means yes.
   /// (Not `ubiquityIdentityToken`: that needs iCloud Drive, which public-database pushes don't.)
-  private static let isCloudKitAvailable: Bool = {
+  static let isCloudKitAvailable: Bool = {
     guard let container = cloudKitContainer else { return false }
     #if targetEnvironment(simulator)
       return false

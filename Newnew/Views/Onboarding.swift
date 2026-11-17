@@ -87,6 +87,23 @@ struct OnboardingView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .tile(.plain)
       .accessibilityElement(children: .combine)
+      // Set up on another iPhone or iPad: offer what's in iCloud, never take it unasked.
+      if let waiting = CloudSync.shared.waiting {
+        VStack(alignment: .leading, spacing: 12) {
+          VStack(alignment: .leading, spacing: 3) {
+            Text("Your choices are in iCloud").font(.body.weight(.medium))
+            Text("\(waiting.outlets) outlets\(waiting.topics > 0 ? " and \(waiting.topics) topics" : ""), from your other iPhone or iPad.")
+              .font(.footnote)
+              .tileSecondary()
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          Button("Use them") { CloudSync.shared.adoptFromCloud() }
+            .buttonStyle(.swissSecondary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tile(.plain)
+      }
       // iPad: Begin follows the welcome; iPhone: at the foot of the screen, under the thumb.
       if sizeClass == .regular {
         Button("Begin", action: next).buttonStyle(.swissPrimary).padding(.top, Rhythm.section)
@@ -145,6 +162,7 @@ struct OnboardingView: View {
           OnboardingDeck("Both optional. Both can be changed in Settings.")
           BackgroundRefreshSettings()
           AlertSettings()
+          ICloudSettings()
         }
       }
       .scrollIndicators(.hidden)

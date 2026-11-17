@@ -1062,7 +1062,7 @@ struct BriefPanel: View {
 
   var footnote: String {
     brief.isGenerated
-      ? "Written on this iPhone by Apple Intelligence from \(brief.sourceCount) headlines and short extracts. Automated summaries can be wrong; always verify at each publisher."
+      ? "Written on this \(UIDevice.current.model) by Apple Intelligence from \(brief.sourceCount) headlines and short extracts. Automated summaries can be wrong; always verify at each publisher."
       : brief.note ?? "\(IntelligenceService.unavailableReason), so this preview just lists each outlet's headline."
   }
 

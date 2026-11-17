@@ -84,6 +84,8 @@ struct TopicsSheet: View {
 
           AlertSettings().padding(.top, 10)
 
+          ICloudSettings().padding(.top, 10)
+
           Text(explanation)
             .font(.footnote)
             .foregroundStyle(Swiss.muted)
@@ -134,7 +136,7 @@ struct TopicsSheet: View {
     let effect = kind == .follow ? "raised to the top of Today" : "hidden"
     let action = kind == .follow ? "follow" : "mute"
     return IntelligenceService.isAvailable
-      ? "Each topic is turned into a few example headlines and telling words on this iPhone. Stories that use those words and read like the examples are \(effect). Long-press a story to \(action) stories like it."
+      ? "Each topic is turned into a few example headlines and telling words on this \(UIDevice.current.model). Stories that use those words and read like the examples are \(effect). Long-press a story to \(action) stories like it."
       : "\(IntelligenceService.unavailableReason), so topics match stories that use their own words. Long-press a story to \(action) stories like it."
   }
 
@@ -240,7 +242,7 @@ struct OutletSettings: View {
               .font(.footnote.weight(.medium))
               .foregroundStyle(Swiss.ink)
           }
-          Text("Change which outlets and categories newnew reads at any time. Removing one clears its articles from this iPhone.")
+          Text("Change which outlets and categories newnew reads at any time. Removing one clears its articles from this \(UIDevice.current.model).")
             .font(.footnote)
             .tileSecondary()
             .fixedSize(horizontal: false, vertical: true)
@@ -296,6 +298,28 @@ struct ReadStoriesSettings: View {
 }
 
 /// Reading the news while the app is closed: Wi-Fi only (the default), Wi-Fi and mobile, or off.
+/// Whether newnew keeps this device the same as the reader's others (`CloudSync`).
+struct ICloudSettings: View {
+  var body: some View {
+    let on = CloudSync.shared.isAvailable
+    VStack(alignment: .leading, spacing: 10) {
+      Eyebrow("iCloud")
+      VStack(alignment: .leading, spacing: 3) {
+        Text(on ? "Same on every iPhone and iPad" : "Only on this \(UIDevice.current.model)").font(.body.weight(.medium))
+        Text(on
+          ? "Your outlets, own feeds, categories, topics, what you've read and the look follow you to every device signed in to your Apple Account."
+          : "Sign in to iCloud in the Settings app to keep newnew the same on your iPhone and iPad.")
+          .font(.footnote)
+          .tileSecondary()
+          .fixedSize(horizontal: false, vertical: true)
+      }
+      .padding(14)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .tile(.plain, radius: 16)
+    }
+  }
+}
+
 struct BackgroundRefreshSettings: View {
   // Own state, saved by hand: @AppStorage with this dotted key ("refresh.background") left the
   // pills out of date after a tap.
@@ -393,7 +417,7 @@ struct AlertSettings: View {
           .textSelection(.enabled)
           .fixedSize(horizontal: false, vertical: true)
       }
-      row("Topics you follow", detail: "A new story on something you follow. Decided on this iPhone; your topics never leave it.", isOn: $following)
+      row("Topics you follow", detail: "A new story on something you follow. Decided on this \(UIDevice.current.model); your topics stay on your devices and in your iCloud.", isOn: $following)
       if denied {
         Text("Notifications are off for newnew. Turn them on in Settings › Notifications.")
           .font(.footnote)
@@ -442,7 +466,7 @@ struct LegalFooterSection: View {
           .tileSecondary()
           .fixedSize(horizontal: false, vertical: true)
 
-        Text("Your topics, reading history, own feeds and Apple Intelligence summaries stay on this iPhone. newnew collects nothing about you.")
+        Text("Your topics, reading history and own feeds stay on your devices and in your own iCloud; Apple Intelligence reads stay on this \(UIDevice.current.model). newnew collects nothing about you.")
           .font(.caption)
           .tileSecondary()
           .fixedSize(horizontal: false, vertical: true)

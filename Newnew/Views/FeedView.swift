@@ -304,6 +304,9 @@ struct FeedView: View {
             topics: followedTopics
           )
         }
+        // A story or Top 10 open over it: the front page ghosts down, so the card stands apart.
+        .opacity(overlayStory != nil || topDeck != nil ? 0.25 : 1)
+        .animation(.easeOut(duration: 0.25), value: overlayStory != nil || topDeck != nil)
       } else {
       ScrollViewReader { _ in
         ScrollView {
@@ -500,10 +503,13 @@ struct FeedView: View {
         .frame(
           idealWidth: min(max(screen.width * 0.90, 760), 1120),
           maxWidth: 1120,
-          idealHeight: min(max(screen.height * 0.90, 640), 880),
-          maxHeight: 900
+          // Portrait is taller than it is wide: let the overlay use that height too.
+          idealHeight: min(max(screen.height * 0.90, 640), 1180),
+          maxHeight: 1200
         )
         .presentationSizing(.fitted)
+        // The page's own colour to the sheet's edges: no grey bands where the sheet is taller.
+        .presentationBackground(Swiss.canvas)
       }
       // iPhone: the whole screen. iPad: a phone-shaped card, centred over the front page.
       .fullScreenCover(item: Binding(get: { sizeClass == .regular ? nil : topDeck }, set: { topDeck = $0 })) { deck in
@@ -521,6 +527,8 @@ struct FeedView: View {
         .frame(idealWidth: 430, idealHeight: min(screen.height * 0.9, 900))
         .presentationSizing(.fitted)
         .presentationCornerRadius(36)
+        // The card is the reel's own page, edge to edge: no sheet grey above or below it.
+        .presentationBackground(Swiss.canvas)
       }
     }
     .tint(Swiss.ink)

@@ -357,6 +357,13 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   CKSubscription docs. A Queryable index on `Breaking.recordName` was added on the way (harmless).
   Any new subscription type needs the same Development-first step. The app shows CloudKit's
   reason under the Breaking switch if a subscription fails (`Alerts.pushStatusKey`).
+- iCloud sync (`CloudSync`, key-value store): a device not yet set up neither takes nor writes
+  the outlet keys (chosen, own feeds, categories, onboarded); onboarding's welcome offers what
+  another device left ("Your choices are in iCloud: N outlets…", "Use them" →
+  `adoptFromCloud`, which also takes topics, reads and the look and skips onboarding).
+  Settings and onboarding's last step show an iCloud tile (`ICloudSettings`); whether iCloud is
+  on comes from CloudKit's account status (iCloud Drive's token said no with Drive off), or in
+  the Simulator from the store having data. Tested 2026-11-17 on a fresh iPad install.
 - SwiftData stays local (`ModelConfiguration(cloudKitDatabase: .none)`): with the iCloud
   entitlement it would otherwise try to sync and crash on launch (unique attributes).
 - Feed performance: `FeedSections` works the sections out once per render. Computed
@@ -437,7 +444,9 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   overlay): the top across two columns, the filter bar, then waterfall columns (three in
   landscape, two in portrait; each story goes to the shortest column by an estimated height,
   each column a `LazyVStack`), In brief at the top of the last. A story opens over the page in
-  an overlay (about 90 % of the screen, up to 1120 × 900) holding `StoryPagerView`, which on
+  an overlay (about 90 % of the screen, up to 1120 × 1180 so portrait uses its height; the
+  page colour to the sheet's edges, `presentationBackground`, no grey bands; the front page
+  ghosts to 25 % behind it and behind the Top 10 card) holding `StoryPagerView`, which on
   iPad has Close, previous and next buttons and the arrow keys; the toolbar's Top 10 button opens
   the reel as a centred portrait card (a sheet, 430 wide, up to 900 tall; the reel gives its
   timer 22 pt of room when it has no top safe area), and a reel story opens in the overlay. The story page is two equal halves on wide windows, as on the open Duo (Figma: iPad & Duo · v2): the story on the left (picture, headline, updates, videos and episodes), how it's covered on the right (coverage spectrum, the read, the coverage list), each scrolling on its own, no rule between them; a lens tapped in the spectrum filters the list, hovering an angle highlights its

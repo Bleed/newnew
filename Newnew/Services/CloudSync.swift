@@ -1,5 +1,7 @@
+import CloudKit
 import CryptoKit
 import Foundation
+import Observation
 import SwiftData
 
 /// What the reader chose, kept the same on their iPhone and iPad through iCloud's key-value store
@@ -11,11 +13,31 @@ import SwiftData
 /// Each change is written to iCloud as it's made; changes from another device arrive as
 /// `didChangeExternallyNotification` and are applied here. Without iCloud nothing syncs and
 /// everything works as before.
-@MainActor final class CloudSync {
+@MainActor @Observable final class CloudSync {
   static let shared = CloudSync()
 
-  private let cloud = NSUbiquitousKeyValueStore.default
-  private weak var pipeline: FeedSyncPipeline?
+  @ObservationIgnored private let cloud = NSUbiquitousKeyValueStore.default
+  @ObservationIgnored private weak var pipeline: FeedSyncPipeline?
+
+  /// Another device's choice waiting in iCloud while this one isn't set up yet: onboarding offers
+  /// it ("Use them") instead of taking it over the reader's head or writing over it.
+  private(set) var waiting: (outlets: Int, topics: Int)?
+  /// The iCloud account's status from CloudKit, once asked (not in the Simulator, where
+  /// CloudKit isn't safe to touch: see `Alerts.isCloudKitAvailable`).
+  private(set) var accountAvailable: Bool?
+  /// Signed in to iCloud on this device. iCloud Drive's token alone said no on a device with
+  /// iCloud Drive off, though the key-value store (what syncs here) works without it.
+  var isAvailable: Bool {
+    accountAvailable ?? (FileManager.default.ubiquityIdentityToken != nil || !cloud.dictionaryRepresentation.isEmpty)
+  }
+
+  func refreshAccount() async {
+    guard let id = Alerts.cloudKitContainer, Alerts.isCloudKitAvailable else { return }
+    accountAvailable = (try? await CKContainer(identifier: id).accountStatus()) == .available
+  }
+  /// The outlet keys, held back until this device is set up (onboarding), both ways.
+  static let outletKeys: Set<String> = [chosenKey, customKey, onboardedKey, hiddenKey]
+  private var isSetUp: Bool { UserDefaults.standard.bool(forKey: Self.onboardedKey) }
 
   /// Kept as they are on both devices.
   static let settingKeys = ["topLook", "readStories", "newsWindowHours"]
@@ -33,7 +55,7 @@ import SwiftData
   static let keepReads: TimeInterval = 4 * 24 * 3600
 
   /// Link → fingerprint, so stored articles aren't hashed again on every change.
-  private var fingerprints: [String: String] = [:]
+  @ObservationIgnored private var fingerprints: [String: String] = [:]
 
   func start(_ pipeline: FeedSyncPipeline) {
     self.pipeline = pipeline
@@ -47,6 +69,29 @@ import SwiftData
     }
     cloud.synchronize()
     join()
+    refreshWaiting()
+    Task { await refreshAccount() }
+  }
+
+  /// What another device left in iCloud, counted for onboarding's offer.
+  func refreshWaiting() {
+    guard !isSetUp, cloud.bool(forKey: Self.onboardedKey),
+      let chosen = cloud.array(forKey: Self.chosenKey) as? [String], !chosen.isEmpty
+    else { waiting = nil; return }
+    waiting = (chosen.count, Self.topics(cloud.data(forKey: Self.topicsKey)).count)
+  }
+
+  /// Onboarding's "Use them": this device takes the outlets, own feeds, categories, topics, look
+  /// and reads from iCloud, and is set up.
+  func adoptFromCloud() {
+    let defaults = UserDefaults.standard
+    for key in Self.mirroredKeys {
+      if let value = cloud.object(forKey: key) { defaults.set(value, forKey: key) }
+    }
+    waiting = nil
+    if let pipeline { pipeline.replaceTopics(with: Self.topics(cloud.data(forKey: Self.topicsKey))) }
+    outletsArrived(force: true)
+    applyReads()
   }
 
   // MARK: Joining
@@ -63,6 +108,8 @@ import SwiftData
     // device's. Own feeds from both.
     var outletsChanged = false
     for key in Self.mirroredKeys {
+      // Not set up yet: outlets wait for onboarding's offer.
+      if !isSetUp, Self.outletKeys.contains(key) { continue }
       if key == Self.customKey {
         let merged = Self.feeds(cloud.data(forKey: key)) + Self.feeds(defaults.data(forKey: key))
         var seen = Set<String>()
@@ -101,6 +148,8 @@ import SwiftData
   func pushSettings() {
     let defaults = UserDefaults.standard
     for key in Self.mirroredKeys {
+      // Not set up yet: nothing chosen here may write over another device's choice.
+      if !isSetUp, Self.outletKeys.contains(key) { continue }
       let local = defaults.object(forKey: key)
       guard !Self.same(local, cloud.object(forKey: key)) else { continue }
       if let local { cloud.set(local, forKey: key) } else { cloud.removeObject(forKey: key) }
@@ -130,6 +179,8 @@ import SwiftData
     let defaults = UserDefaults.standard
     var outletsChanged = false
     for key in keys where Self.mirroredKeys.contains(key) {
+      // Not set up yet: onboarding offers them instead (`waiting`).
+      if !isSetUp, Self.outletKeys.contains(key) { continue }
       let value = cloud.object(forKey: key)
       guard !Self.same(value, defaults.object(forKey: key)) else { continue }
       // A device that has been set up stays set up.
@@ -138,19 +189,21 @@ import SwiftData
       if [Self.chosenKey, Self.customKey, Self.onboardedKey, Self.hiddenKey].contains(key) { outletsChanged = true }
     }
     if outletsChanged { outletsArrived() }
+    refreshWaiting()
     if keys.contains(Self.readKey) { applyReads() }
     if keys.contains(Self.topicsKey), let pipeline {
       pipeline.replaceTopics(with: Self.topics(cloud.data(forKey: Self.topicsKey)))
     }
   }
 
-  private func outletsArrived() {
+  private func outletsArrived(force: Bool = false) {
     let store = OutletStore.shared
     let before = store.selection.union(store.customFeeds.map(\.title))
     let hiddenBefore = store.hiddenPillars
     store.reload()
     let after = store.selection.union(store.customFeeds.map(\.title))
-    guard before != after || hiddenBefore != store.hiddenPillars, let pipeline else { return }
+    guard force || before != after || hiddenBefore != store.hiddenPillars, let pipeline else { return }
+    if force { Task { await pipeline.applyOutletChoice(added: true) }; return }
     let added = !after.subtracting(before).isEmpty || !hiddenBefore.subtracting(store.hiddenPillars).isEmpty
     Task { await pipeline.applyOutletChoice(added: added) }
   }
