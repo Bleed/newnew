@@ -479,12 +479,6 @@ extension Date {
 }
 
 /// The rebus's date line, as on Today: MON [16] (NOV) clock 18:11.
-private func dateTokens(_ date: Date) -> [BlockToken] {
-  let weekday = date.formatted(.dateTime.weekday(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
-  let month = date.formatted(.dateTime.month(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
-  let time = date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
-  return [.word(weekday), .filled(date.formatted(.dateTime.day())), .outline(month), .clock, .word(time)]
-}
 
 /// Slide elements rise in one after another, `Entrance.step`-ish apart, each time a slide shows.
 private extension View {
@@ -504,15 +498,8 @@ private struct TopCoverPage: View {
     VStack(alignment: .leading, spacing: 10) {
       HStack { Spacer(); CloseButton(close: close) }
       // Today's header, the same sizes and order: the day, the block, what it counts.
-      BlockRebusLine(tokens: dateTokens(deck.made), size: rebusSize)
-      BlockText(text: "TOP10TOP10", rollsFrom: "NEWNEW").foregroundStyle(Swiss.ink)
-      BlockRebusLine(tokens: countTokens, size: rebusSize, delay: 0.3)
-      if !deck.quiet.isEmpty {
-        BlockRebusLine(tokens: [.word("QUIET")] + deck.quiet.map { .outline($0.rebusWord) }, size: rebusSize, delay: 0.45)
-      }
-      if deck.updateCount > 0 {
-        BlockRebusLine(tokens: [.word("+"), .filled("\(deck.updateCount)"), .word("UPDATES"), .word("AT"), .word("THE"), .word("END"), .go], size: rebusSize, delay: 0.6)
-      }
+      // In the reader's look (Settings › Look), like Today's top.
+      LookTop(date: deck.made, block: "TOP10TOP10", rollsFrom: "NEWNEW", figure: "TOP 10", lines: coverLines)
       if deck.entries.isEmpty {
         Text("Nothing is big enough yet. Pull to refresh Today, or come back in a while.")
           .font(.body).foregroundStyle(Swiss.muted).padding(.top, Rhythm.section).slideIn(4)
@@ -531,6 +518,17 @@ private struct TopCoverPage: View {
     .padding(.horizontal, Swiss.pageInset)
     .padding(.bottom, 12)
     .accessibilityElement(children: .contain)
+  }
+
+  var coverLines: [LookLine] {
+    var out = [LookLine(tokens: countTokens, delay: 0.3)]
+    if !deck.quiet.isEmpty {
+      out.append(LookLine(tokens: [.word("QUIET")] + deck.quiet.map { .outline($0.rebusWord) }, delay: 0.45))
+    }
+    if deck.updateCount > 0 {
+      out.append(LookLine(tokens: [.word("+"), .filled("\(deck.updateCount)"), .word("UPDATES"), .word("AT"), .word("THE"), .word("END"), .go], delay: 0.6))
+    }
+    return out
   }
 
   var countTokens: [BlockToken] {
@@ -1073,6 +1071,14 @@ private struct TopDonePage: View {
   var close: () -> Void
   @ScaledMetric(relativeTo: .body) private var rebusSize: CGFloat = 19
 
+  var doneLines: [LookLine] {
+    var out = [LookLine(tokens: [.filled("\(deck.entries.count)"), .word(deck.entries.count == 1 ? "STORY" : "STORIES"), .word("IN"), .filled("\(minutes)"), .word("MIN")], delay: 0.3)]
+    if deck.updateCount > 0 {
+      out.append(LookLine(tokens: [.filled("\(deck.updateCount)"), .word(deck.updateCount == 1 ? "UPDATE" : "UPDATES"), .word("ALL"), .word("SEEN")], delay: 0.45))
+    }
+    return out
+  }
+
   /// Still moving: two outlets or more in the last two hours.
   var developing: [TopTen.Entry] {
     Array(deck.entries.filter { entry in
@@ -1083,12 +1089,7 @@ private struct TopDonePage: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack { Spacer(); CloseButton(close: close) }
-      BlockRebusLine(tokens: dateTokens(.now), size: rebusSize)
-      BlockText(text: "DONEDONE", rollsFrom: "TOP10TOP10").foregroundStyle(Swiss.ink)
-      BlockRebusLine(tokens: [.filled("\(deck.entries.count)"), .word(deck.entries.count == 1 ? "STORY" : "STORIES"), .word("IN"), .filled("\(minutes)"), .word("MIN")], size: rebusSize, delay: 0.3)
-      if deck.updateCount > 0 {
-        BlockRebusLine(tokens: [.filled("\(deck.updateCount)"), .word(deck.updateCount == 1 ? "UPDATE" : "UPDATES"), .word("ALL"), .word("SEEN")], size: rebusSize, delay: 0.45)
-      }
+      LookTop(date: .now, block: "DONEDONE", rollsFrom: "TOP10TOP10", figure: "DONE", lines: doneLines)
       if !developing.isEmpty {
         VStack(alignment: .leading, spacing: 0) {
           Eyebrow("Still developing").slideIn(4)

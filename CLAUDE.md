@@ -428,12 +428,17 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   ("You're caught up." and when the next edition comes). "Show everything instead" shows the
   feed for this visit. "Edition ready" schedules local notifications at both times; breaking
   alerts are off while Today opens as an edition (`Alerts.breakingOn`).
-- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Dots (the board above),
-  Mixed (`NewsTop.mixed`, Figma › Explorations · Dots top, B1: the block as in Blocks; the day
+- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Blocks or Mixed (`TopLook.offered`;
+  Dots, the board above, is kept in code but no longer offered, and a stored "dots" or "lcd"
+  reads as Mixed, 2026-11-17). Mixed (`NewsTop.mixed`, Figma › Explorations · Dots top, B1: the block as in Blocks; the day
   and the time in grey as quiet dot chips over it, what it counts in a quiet chip and "219 IN
   ALL" in an ink chip under it, pitch 1.8; the Blocks messages in the board's message panel,
-  `BoardMessageRows`, whose arrow hides for UPDATED) or Blocks (the default; LCD was removed 2026-11-17 and a stored "lcd" reads as Dots,
-  `TopLook.stored`; sketches for Dots with the Blocks messages and for the block with the dot
+  `BoardMessageRows`, whose arrow hides for UPDATED) or Blocks (the default;
+  every page with Today's kind of top follows the look through `LookTop`: the Top 10 cover and
+  Done, and the full-screen loader; Mixed sets the first rebus line as quiet dot chips and
+  the rest as small dot rows in one panel, like Today's message panel (a list such as QUIET
+  in grey); Dots puts it all on one board tile, figure
+  "TOP 10" / "DONE"; sketches for Dots with the Blocks messages and for the block with the dot
   face around it: Figma › Explorations · Dots top) (Figma V, with the rebus of AE: what's new, "32 NEWNEW" ("NEWNEW" when nothing arrived
   since you last looked; without articles DONE NEWNEW when all is read, GET NEWNEW while
   syncing, ZZZ NEWNEW otherwise), in `BlockText`, always the same full block (a third taller

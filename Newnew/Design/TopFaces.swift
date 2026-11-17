@@ -16,8 +16,14 @@ enum TopLook: String, CaseIterable, Identifiable {
 
   static let key = "topLook"
   var id: String { rawValue }
-  /// The stored choice; LCD was removed (2026-11-17), so it reads as Dots, the board it drew.
-  static func stored(_ raw: String) -> TopLook { raw == "lcd" ? .dots : TopLook(rawValue: raw) ?? .blocks }
+  /// The looks Settings offers. Dots is kept in code but not offered (2026-11-17).
+  static let offered: [TopLook] = [.blocks, .mixed]
+  /// The stored choice. LCD was removed and Dots taken off the list (2026-11-17): both read as
+  /// Mixed, the nearest offered look.
+  static func stored(_ raw: String) -> TopLook {
+    let look = raw == "lcd" ? .dots : TopLook(rawValue: raw) ?? .blocks
+    return offered.contains(look) ? look : .mixed
+  }
   var label: String {
     switch self {
     case .dots: "Dots"
@@ -661,8 +667,8 @@ struct LookSettings: View {
             .fixedSize(horizontal: false, vertical: true)
         }
         HStack(spacing: 8) {
-          ForEach(TopLook.allCases) { option in
-            let isSelected = raw == option.rawValue
+          ForEach(TopLook.offered) { option in
+            let isSelected = look == option
             Button(option.label) {
               withAnimation(.snappy(duration: 0.2)) { raw = option.rawValue }
             }
@@ -702,18 +708,29 @@ struct BlockLoader: View {
     }
   }
 
+  @AppStorage(TopLook.key) private var lookRaw = TopLook.blocks.rawValue
+
   var body: some View {
     let (line, detail) = lines
-    VStack(alignment: .leading, spacing: 18) {
-      BlockText(text: "NEWNEW", rolls: !landed)
-        .foregroundStyle(Swiss.ink)
-      VStack(alignment: .leading, spacing: 4) {
-        Text(line.isEmpty ? " " : line).foregroundStyle(Swiss.ink)
-        Text(detail.isEmpty ? " " : detail).foregroundStyle(Swiss.muted)
+    Group {
+      if TopLook.stored(lookRaw) == .blocks {
+        VStack(alignment: .leading, spacing: 18) {
+          BlockText(text: "NEWNEW", rolls: !landed)
+            .foregroundStyle(Swiss.ink)
+          VStack(alignment: .leading, spacing: 4) {
+            Text(line.isEmpty ? " " : line).foregroundStyle(Swiss.ink)
+            Text(detail.isEmpty ? " " : detail).foregroundStyle(Swiss.muted)
+          }
+          .font(Swiss.figure(15))
+          .contentTransition(.numericText())
+          .animation(.snappy(duration: 0.2), value: line + detail)
+        }
+      } else {
+        // Mixed: the block rolling, what it's doing in dot chips; Dots: the same on a board.
+        LookTop(block: "NEWNEW", rolls: !landed, figure: "NEWNEW", lines: [line, detail].filter { !$0.isEmpty }.map { text in
+          LookLine(tokens: text.split(separator: " ").map { .word(String($0)) }, replay: text)
+        })
       }
-      .font(Swiss.figure(15))
-      .contentTransition(.numericText())
-      .animation(.snappy(duration: 0.2), value: line + detail)
     }
     .padding(.horizontal, Swiss.pageInset)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -729,5 +746,172 @@ struct BlockLoader: View {
       try? await Task.sleep(for: .seconds(0.5))
       finish()
     }
+  }
+}
+
+// MARK: A header in the reader's look
+
+extension BlockToken {
+  /// "FRI [30] (OCT) clock 20:24".
+  static func date(_ date: Date) -> [BlockToken] {
+    let weekday = date.formatted(.dateTime.weekday(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
+    let month = date.formatted(.dateTime.month(.abbreviated)).uppercased().replacingOccurrences(of: ".", with: "")
+    let time = date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+    return [.word(weekday), .filled(date.formatted(.dateTime.day())), .outline(month), .clock, .word(time)]
+  }
+
+  /// The words a token stands for, upper case; glyphs have none.
+  var words: String {
+    switch self {
+    case .word(let s), .filled(let s), .outline(let s), .bracket(let s): s.uppercased()
+    case .clock, .stack, .head, .go, .listen, .watch: ""
+    }
+  }
+}
+
+/// One line under a look's block: rebus tokens, when it arrives, what replays it.
+struct LookLine {
+  let tokens: [BlockToken]
+  var delay: Double = 0
+  var replay: AnyHashable = 0
+}
+
+/// A page top in the reader's look (Settings › Look), for every page with Today's kind of top:
+/// the Top 10 cover and Done, the full-screen loader. Blocks: the rebus around the block, as
+/// Today. Mixed: the block, each rebus line as a quiet dot chip. Dots: one board tile, the date in grey, `figure` in large dots, each line a
+/// dot row.
+struct LookTop: View {
+  var date: Date?
+  /// The block's word (Blocks, Mixed).
+  let block: String
+  var rolls = false
+  var rollsFrom: String?
+  /// The board's figure (Dots): "TOP 10", "DONE".
+  let figure: String
+  var lines: [LookLine] = []
+  @ScaledMetric(relativeTo: .body) private var rebusSize: CGFloat = 19
+  @AppStorage(TopLook.key) private var raw = TopLook.blocks.rawValue
+
+  var body: some View {
+    switch TopLook.stored(raw) {
+    case .blocks: blocks
+    case .mixed: mixed
+    case .dots: dots
+    }
+  }
+
+  var blocks: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      if let date { BlockRebusLine(tokens: BlockToken.date(date), size: rebusSize) }
+      BlockText(text: block, rolls: rolls, rollsFrom: rollsFrom).foregroundStyle(Swiss.ink)
+      ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+        BlockRebusLine(tokens: line.tokens, size: rebusSize, delay: line.delay, replay: line.replay)
+      }
+    }
+    .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+  }
+
+  /// A rebus line as chips, calm: the whole line in one quiet chip, wrapped into a few at word
+  /// breaks when it's long; a list ("QUIET (SPORTS) (MUSIC)") as its word, then a grey chip per item.
+  static func chips(_ tokens: [BlockToken]) -> [(text: String, muted: Bool)] {
+    if isList(tokens) {
+      let lead = tokens.compactMap { if case .word(let w) = $0 { w.uppercased() } else { nil } }.joined(separator: " ")
+      let items = tokens.compactMap { if case .outline(let o) = $0 { o.uppercased() } else { nil } }
+      return (lead.isEmpty ? [] : [(lead, false)]) + items.map { ($0, true) }
+    }
+    // A number keeps the word after it ("2 MIN"); a phone column holds about 30 cells.
+    var units: [String] = []
+    var pending: String?
+    for token in tokens where !token.words.isEmpty {
+      if let number = pending { units.append(number + " " + token.words); pending = nil; continue }
+      if case .filled = token { pending = token.words } else { units.append(token.words) }
+    }
+    if let pending { units.append(pending) }
+    return pack(units).map { ($0, false) }
+  }
+
+  /// Words packed into lines of at most `limit` cells: a phone column holds about 28 at the
+  /// board's row size (pitch 1.8).
+  static func pack(_ units: [String], limit: Int = 28) -> [String] {
+    var out: [String] = []
+    var current = ""
+    for unit in units {
+      if !current.isEmpty, current.count + 1 + unit.count > limit { out.append(current); current = unit }
+      else { current = current.isEmpty ? unit : current + " " + unit }
+    }
+    if !current.isEmpty { out.append(current) }
+    return out
+  }
+
+  /// A list line ("QUIET (SPORTS) (MUSIC)"): its items are outlined words that end a phrase.
+  static func isList(_ tokens: [BlockToken]) -> Bool {
+    tokens.indices.contains { i in
+      guard case .outline = tokens[i] else { return false }
+      if i + 1 < tokens.count, case .word = tokens[i + 1] { return false }
+      return true
+    }
+  }
+
+  /// Tight, as Today's Mixed top: the day and time chips, the block, the first line as chips,
+  /// and any further lines as small dot rows in one panel (like Today's message panel), a
+  /// list's line in grey.
+  var mixed: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      if let date {
+        let full = NewsTop.dateText(date)
+        let time = String(full.split(separator: " ").last ?? "")
+        HStack(spacing: 6) {
+          DotChip(String(full.dropLast(time.count + 1)), pitch: 1.8)
+          DotChip(time, pitch: 1.8, muted: true)
+        }
+      }
+      BlockText(text: block, rolls: rolls, rollsFrom: rollsFrom).foregroundStyle(Swiss.ink)
+      if let first = lines.first {
+        FlowLayout(spacing: 6) {
+          ForEach(Array(Self.chips(first.tokens).enumerated()), id: \.offset) { _, chip in
+            DotChip(chip.text, decodeDelay: first.delay, pitch: 1.8, muted: chip.muted)
+          }
+        }
+      }
+      if lines.count > 1 {
+        VStack(alignment: .leading, spacing: 1.4 * 3) {
+          ForEach(Array(lines.dropFirst().enumerated()), id: \.offset) { _, line in
+            let grey = Self.isList(line.tokens)
+            ForEach(Array(Self.pack(line.tokens.map(\.words).filter { !$0.isEmpty }, limit: 34).enumerated()), id: \.offset) { _, text in
+              DotText(text, pitch: 1.4, unlit: 0.07, decodeDelay: line.delay, decodesOnChange: true)
+                .foregroundStyle(grey ? Swiss.muted : Swiss.ink)
+            }
+          }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .tile(.plain)
+      }
+    }
+    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+  }
+
+  var dots: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      if let date {
+        DotText(NewsTop.dateText(date), pitch: 1.8, unlit: 0.07, motion: .roll).foregroundStyle(Swiss.muted)
+      }
+      ViewThatFits(in: .horizontal) {
+        DotText(figure, pitch: 3, unlit: 0.07, motion: .roll, decodeDelay: 0.12)
+        DotText(figure, pitch: 2.2, unlit: 0.07, motion: .roll, decodeDelay: 0.12)
+      }
+      .foregroundStyle(Swiss.ink)
+      // Each line wrapped into rows that fit the tile, at the board's row size.
+      ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+        ForEach(Array(Self.pack(line.tokens.map(\.words).filter { !$0.isEmpty }).enumerated()), id: \.offset) { _, text in
+          DotText(text, pitch: 1.8, unlit: 0.07, motion: .roll, decodeDelay: 0.24 + line.delay, decodesOnChange: true)
+            .foregroundStyle(Swiss.ink)
+        }
+      }
+    }
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .tile(.plain)
+    .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
   }
 }
