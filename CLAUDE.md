@@ -428,7 +428,8 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   ("You're caught up." and when the next edition comes). "Show everything instead" shows the
   feed for this visit. "Edition ready" schedules local notifications at both times; breaking
   alerts are off while Today opens as an edition (`Alerts.breakingOn`).
-- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Blocks or Mixed (`TopLook.offered`;
+- Settings › Look (`TopLook`, key "topLook", in TopFaces.swift) picks Today's top: Rebus or Dots (`TopLook.offered`; labels only, the stored values
+  stay "blocks" and "mixed", so the code still says Blocks and Mixed;
   Dots, the board above, is kept in code but no longer offered, and a stored "dots" or "lcd"
   reads as Mixed, 2026-11-17). Mixed (`NewsTop.mixed`, Figma › Explorations · Dots top, B1: the block as in Blocks; the day
   and the time in grey as quiet dot chips over it, what it counts in a quiet chip and "219 IN

@@ -24,18 +24,20 @@ enum TopLook: String, CaseIterable, Identifiable {
     let look = raw == "lcd" ? .dots : TopLook(rawValue: raw) ?? .blocks
     return offered.contains(look) ? look : .mixed
   }
+  /// Both offered looks keep the block, so they're named after what surrounds it (2026-11-17):
+  /// Rebus (stored "blocks") and Dots (stored "mixed"). The old board is "Board" here only.
   var label: String {
     switch self {
-    case .dots: "Dots"
-    case .mixed: "Mixed"
-    case .blocks: "Blocks"
+    case .dots: "Board"
+    case .mixed: "Dots"
+    case .blocks: "Rebus"
     }
   }
   var detail: String {
     switch self {
     case .dots: "A small departures board: the day, the count and what's new in dots."
-    case .mixed: "What's new in big blocks, the day, the counts and the messages in dots."
-    case .blocks: "What's new in big blocks across the top, the rest as a rebus in mono."
+    case .mixed: "What's new in big blocks; the day, the counts and the messages in dots."
+    case .blocks: "What's new in big blocks; the rest as a rebus in mono, with pills and signs."
     }
   }
 }
