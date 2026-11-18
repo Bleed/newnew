@@ -107,9 +107,15 @@
       setTimeout(next, 60000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 50);
     }
     // The first roll waits until the clock is on screen.
+    // The colon blinks with the seconds: lit on even, dark on odd (steady with Reduce Motion).
+    function blink() {
+      const d = new Date();
+      if (!reduce) set(2, d.getSeconds() % 2 ? ' ' : ':');
+      setTimeout(blink, 1000 - d.getMilliseconds() + 5);
+    }
     const seen = new IntersectionObserver(entries => {
       if (!entries.some(e => e.isIntersecting)) return;
-      seen.disconnect(); next();
+      seen.disconnect(); next(); blink();
     }, { threshold: 0.6 });
     const [d0] = now();
     if (dateEl) dateEl.textContent = d0.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
