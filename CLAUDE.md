@@ -439,7 +439,10 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 
 ## Look (from Atelier CRM)
 
-- The name is lower case: "newnew" (home screen, prompts, accessibility).
+- The name is lower case: "newnew" (home screen, prompts, accessibility). On the web
+  (newnew.news, the privacy page) it is always NEWNEW, in capitals (2026-11-18); addresses
+  stay lower case. The site's favicons are the app icon, scaled (favicon-32, icon-192,
+  apple-touch-icon, favicon.ico).
 - Icon: "new" over "new" in the dot face, reversed (near-white dots on black), from
   `Scripts/render-app-icon.swift`.
 - Near-white page (#FAFAFA), grey tiles (#F1F1F1), black in dark mode; type carries contrast.
