@@ -72,7 +72,11 @@ section { margin-top: 88px; }
 @media (min-width: 900px) {
   section { margin-top: 140px; display: grid; grid-template-columns: 25% 75%; align-items: start; }
   .label { padding-left: 0; margin: 0; font-size: 14px; }
-  .intro .big { text-indent: 0; }
+  /* The introduction keeps the phone's layout at every width: the label above, the text across
+     the page with each paragraph's first line indented to the label's grid line. */
+  .intro { display: block; }
+  .intro .label { padding-left: var(--label); margin-bottom: 28px; }
+  .intro .big { text-indent: var(--label); }
 }
 
 /* Tables */
