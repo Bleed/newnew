@@ -98,7 +98,7 @@ section { margin-top: 88px; }
 /* Now */
 .now { display: grid; grid-template-columns: 1fr auto; gap: 24px; border-top: 1px solid var(--rule); padding-top: 12px; }
 .now .lines { color: var(--strong); }
-.clock { color: var(--strong); }
+.clock { color: var(--strong); justify-self: end; }
 .clock svg { display: block; width: 87px; height: auto; }
 @media (min-width: 900px) {
   .now { grid-template-columns: calc(33.333% - 24px) 1fr; border-top: 0; padding-top: 0; font-size: 15px; }
