@@ -34,7 +34,8 @@ No account, no ads, no tracking, no analytics. What you read stays on your devic
 news,rss,reader,headlines,feeds,world,compare,coverage,top stories,podcasts,bluesky,mastodon,calm
 
 ## URLs
-- Support: (needs a page; newnew.news?)
+- Support: https://newnew.news/support
+- Marketing: https://newnew.news
 - Privacy policy: https://newnew.news/privacypolicy
 
 ## Copyright
