@@ -40,6 +40,12 @@ header { display: flex; align-items: center; gap: 4px; }
 .logo { display: block; margin: 44px 0 10px; cursor: pointer; color: var(--logo); }
 .logo svg { display: block; width: 100%; height: auto; }
 .caption { display: grid; grid-template-columns: var(--label) 1fr; color: var(--grey); }
+/* On a phone the section labels sit one column in; (00) follows them, its line on the rows' value column. */
+@media (max-width: 899px) {
+  .caption { grid-template-columns: var(--label) minmax(0, 0.8fr) minmax(0, 1.2fr); }
+  .caption > :first-child { grid-column: 2; }
+  .caption > :last-child { grid-column: 3; }
+}
 @media (min-width: 900px) { .logo { margin-top: 96px; } }
 
 /* Sections */
