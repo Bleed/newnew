@@ -247,11 +247,16 @@ struct DotText: View {
     .accessibilityLabel(text)
   }
 
-  /// The screen's size, for telling whether the text is in view.
-  static let screenSize: CGSize = {
-    let bounds = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.screen.bounds }.first
-    return bounds?.size ?? CGSize(width: 400, height: 1000)
-  }()
+  /// The window's size now, for telling whether the text is in view. Read each time, not kept:
+  /// kept from the first read, an iPad turned to landscape (or a window resized) measured
+  /// against its portrait width, so the right half of a story page never counted as on screen
+  /// and its coverage spectrum stayed blank (2026-11-18).
+  static var screenSize: CGSize {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+    let scene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+    let window = scene?.windows.first { $0.isKeyWindow } ?? scene?.windows.first
+    return window?.bounds.size ?? scene?.screen.bounds.size ?? CGSize(width: 400, height: 1000)
+  }
 
   func startPixels() {
     guard pixelsIn, !pixelsDone, !reduceMotion, pixelStart == nil, launchClear, onScreen else { return }
