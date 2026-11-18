@@ -14,7 +14,7 @@ settings:
     CODE_SIGN_STYLE: Automatic
     # The published latest_news.json (GitHub Pages, from .github/workflows/update_feed.yml).
     # Empty: the app uses its bundled sample instead.
-    NEWNEW_FEED_URL: "https://bleed.github.io/newnew/index.json"
+    NEWNEW_FEED_URL: "https://newnew.news/index.json"
     # The CloudKit container for breaking-news pushes, e.g. iCloud.com.svein.newnew. Empty: no
     # push; breaking alerts come from background refresh. Set it together with
     # NEWNEW_ENTITLEMENTS = Newnew/App/Newnew-CloudKit.entitlements.

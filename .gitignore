@@ -5,3 +5,4 @@ build/
 xcuserdata/
 github-scraper/node_modules/
 github-scraper/public/
+github-scraper/site/outlets.json

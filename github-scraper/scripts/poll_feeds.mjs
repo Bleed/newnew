@@ -21,6 +21,7 @@ import path from 'node:path'
 import Parser from 'rss-parser'
 import * as cheerio from 'cheerio'
 import { findStories, selectNew, cloudKitConfig, sendToCloudKit } from './alerts.mjs'
+import { outletCatalog } from './outlets.mjs'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const OUT_DIR = path.resolve(process.env.OUT_DIR ?? path.join(root, 'public'))
@@ -134,25 +135,6 @@ function canonicalURL(raw) {
   } catch {
     return null
   }
-}
-
-// MARK: Outlets
-
-/** One entry per outlet: its name, its categories, its kinds of feed (article, video, podcast, chart)
- * and the feeds themselves. */
-export function outletCatalog(feeds) {
-  const byOutlet = new Map()
-  for (const feed of feeds) {
-    const entry = byOutlet.get(feed.outlet) ?? { outlet: feed.outlet, categories: [], kinds: [] }
-    if (feed.category && !entry.categories.includes(feed.category)) entry.categories.push(feed.category)
-    // "article" for an ordinary news feed, so the app can tell video-only outlets apart.
-    const kind = feed.kind ?? 'article'
-    if (!entry.kinds.includes(kind)) entry.kinds.push(kind)
-    // Each iPhone reads the feeds itself.
-    entry.feeds = [...(entry.feeds ?? []), { url: feed.url, category: feed.category, kind: feed.kind, country: feed.country }]
-    byOutlet.set(feed.outlet, entry)
-  }
-  return { outlets: [...byOutlet.values()] }
 }
 
 // MARK: Run

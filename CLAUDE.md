@@ -14,8 +14,11 @@ open Newnew.xcodeproj
 iOS 26, Swift 6, default actor isolation `MainActor` (plain data types and pure math are marked
 `nonisolated`). **Phone-first:** each iPhone fetches its chosen outlets' RSS feeds itself
 (`FeedFetcher`); no news passes through a newnew server. `NEWNEW_FEED_URL` in `project.yml`
-(https://bleed.github.io/newnew/index.json, repo github.com/Bleed/newnew) only names the folder
-that holds `outlets.json` (the outlets and their feed addresses). Set it empty to use
+(https://newnew.news/index.json since build 65; builds ≤ 64 read https://bleed.github.io/newnew/,
+so GitHub Pages keeps publishing outlets.json too; repo github.com/Bleed/newnew) only names the
+folder that holds `outlets.json` (the outlets and their feed addresses). Both copies come from
+`feeds.json` through `scripts/outlets.mjs`: the Action writes GitHub's, Cloudflare Pages' build
+(`node ../scripts/build_site.mjs`) writes newnew.news's on every push. Set it empty to use
 `Newnew/Resources/sample_news.json` instead (invented outlets; times moved up to "now").
 Switching source clears stored articles (`storedSource` "phone-1" wiped what builds ≤ 32
 downloaded). Feed health: https://bleed.github.io/newnew/status.json. Builds ≤ 32 read
@@ -423,8 +426,9 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   `github-scraper/site` (no build step) on every push to main: index.html (coming soon, Figma
   page "Website · newnew.news"), support.html (the App Store support URL, newnew.news/support),
   privacy.html, style.css, site.js (the NEWNEW block logo from `BlockFont`, its roll-in, the
-  dot-face clock) and `_redirects` (/privacypolicy → privacy). The outlet list stays on GitHub
-  Pages. At release, swap the "Coming soon" slot in index.html for Apple's App Store badge.
+  dot-face clock) and `_redirects` (/privacypolicy → privacy). The build writes `outlets.json`
+  from `feeds.json` (git-ignored in site/). At release, swap the "Coming soon" slot in
+  index.html for Apple's App Store badge.
 - Mailboxes the app names: feedback@newnew.news, publishers@newnew.news.
 
 ## Look (from Atelier CRM)
