@@ -117,9 +117,18 @@ footer { margin-top: 88px; border-top: 1px solid var(--rule); padding-top: 14px;
 @media (min-width: 900px) { footer { grid-template-columns: 25% 25% 1fr; font-size: 13px; margin-top: 140px; } }
 
 /* Menu: the dark screen */
+/* It opens out of the dot: a circle grows from the dot to cover the page (site.js sets
+   --cx/--cy to the dot's centre), then the links rise in 0.06 s apart. It closes back into it. */
 .menu { position: fixed; inset: 0; z-index: 10; background: #1f1f1f; color: #f2f2f2; padding: 16px var(--gutter);
-  display: none; flex-direction: column; overflow: auto; }
-.menu.open { display: flex; }
+  display: flex; flex-direction: column; overflow: auto; visibility: hidden;
+  clip-path: circle(0 at var(--cx, calc(100% - 27px)) var(--cy, 27px));
+  transition: clip-path 0.42s cubic-bezier(0.6, 0, 0.3, 1), visibility 0s linear 0.42s; }
+.menu.open { visibility: visible; clip-path: circle(150vmax at var(--cx, calc(100% - 27px)) var(--cy, 27px));
+  transition: clip-path 0.55s cubic-bezier(0.6, 0, 0.2, 1), visibility 0s; }
+.menu nav a { opacity: 0; transform: translateY(16px); transition: opacity 0.2s ease, transform 0.2s ease; }
+.menu.open nav a { opacity: 1; transform: none;
+  transition: opacity 0.45s ease calc(0.2s + var(--i, 0) * 0.06s), transform 0.55s cubic-bezier(0.2, 0.7, 0.2, 1) calc(0.2s + var(--i, 0) * 0.06s); }
+@media (prefers-reduced-motion: reduce) { .menu, .menu nav a { transition: none !important; } }
 .menu .tile { background: #333; color: #f2f2f2; }
 .menu .dot { background: #f2f2f2; }
 .menu nav { margin-top: 56px; display: flex; flex-direction: column; }

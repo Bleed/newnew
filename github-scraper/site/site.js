@@ -161,7 +161,12 @@
 
   // Menu
   const menu = document.querySelector('.menu');
+  menu?.querySelectorAll('nav a').forEach((l, i) => l.style.setProperty('--i', i));
   document.querySelectorAll('[data-menu]').forEach(b => b.addEventListener('click', () => {
+    // The circle grows from, and shrinks back into, the dot that was tapped.
+    const r = b.getBoundingClientRect();
+    menu.style.setProperty('--cx', `${r.left + r.width / 2}px`);
+    menu.style.setProperty('--cy', `${r.top + r.height / 2}px`);
     const open = menu.classList.toggle('open');
     document.querySelectorAll('[data-menu]').forEach(x => x.setAttribute('aria-expanded', open));
   }));
