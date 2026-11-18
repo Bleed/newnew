@@ -7,7 +7,7 @@ The news, grouped and compared
 Pick the outlets you trust. newnew groups their headlines into stories, shows how each one covers them, and links you straight to the publisher. No account, no tracking.
 
 ## Description (4000)
-newnew is a calm news reader for iPhone and iPad. You choose the outlets; newnew reads their public feeds on your device, puts each story together once, and shows you how every outlet tells it.
+newnew is a calm RSS reader for the news, on iPhone and iPad. You choose the outlets; newnew reads their public RSS feeds on your device, puts each story together once, and shows you how every outlet tells it.
 
 YOUR OUTLETS, CHOSEN BY YOU
 Nothing is chosen for you. Pick the outlets you want, category by category, from world news and business to sport, music, design and gaming. Add your own: any website's feed, a YouTube channel, or a Bluesky or Mastodon account.
