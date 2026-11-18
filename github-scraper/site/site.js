@@ -61,22 +61,60 @@
     8: '01110100011000101110100011000101110', 9: '01110100011000101111000010001001100',
     ':': '00000011000110000000011000110000000',
   };
+  // Arrives like the app's dot face (DotText): cells start 0.025 s apart, left to right, each
+  // rolls through random digits every 0.06 s for 4 + 0.4 × index steps, then settles. When the
+  // minute turns, only the digits that change roll.
   function clock(el, dateEl) {
-    const draw = () => {
-      const now = new Date();
-      const text = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      const cols = text.length * 6 + 1, rows = 9;
-      let dots = '';
-      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
-        const gi = Math.floor((x - 1) / 6), cx = (x - 1) % 6, cy = y - 1;
-        const on = x > 0 && cx < 5 && cy >= 0 && cy < 7 && D[text[gi]]?.[cy * 5 + cx] === '1';
-        dots += `<circle cx="${x + 0.5}" cy="${y + 0.5}" r="0.36" fill="currentColor"${on ? '' : ' fill-opacity="0.07"'}/>`;
+    const cols = 5 * 6 + 1, rows = 9;
+    el.innerHTML = `<svg viewBox="0 0 ${cols} ${rows}" role="img">${Array.from({ length: rows * cols }, (_, k) =>
+      `<circle cx="${k % cols + 0.5}" cy="${Math.floor(k / cols) + 0.5}" r="0.36" fill="currentColor" fill-opacity="0.07"/>`).join('')}</svg>`;
+    const svg = el.firstChild, dots = svg.querySelectorAll('circle');
+    const cells = [' ', ' ', ' ', ' ', ' '];
+    function set(i, ch) {
+      if (cells[i] === ch) return; cells[i] = ch;
+      for (let cy = 0; cy < 7; cy++) for (let cx = 0; cx < 5; cx++) {
+        const on = D[ch]?.[cy * 5 + cx] === '1';
+        dots[(cy + 1) * cols + 1 + i * 6 + cx].setAttribute('fill-opacity', on ? '1' : '0.07');
       }
-      el.innerHTML = `<svg viewBox="0 0 ${cols} ${rows}" role="img" aria-label="${text}">${dots}</svg>`;
-      if (dateEl) dateEl.textContent = now.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-      setTimeout(draw, 60000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
-    };
-    draw();
+    }
+    let timer;
+    function show(text, roll) {
+      svg.setAttribute('aria-label', text);
+      clearInterval(timer);
+      const target = [...text];
+      const moving = target.map((ch, i) => roll && ch !== cells[i] && ch !== ':');
+      if (reduce || !moving.some(Boolean)) { target.forEach((ch, i) => set(i, ch)); return; }
+      target.forEach((ch, i) => { if (!moving[i]) set(i, ch); });
+      const start = performance.now();
+      let order = 0;
+      const plan = target.map((_, i) => moving[i] ? { at: (order++) * 25, steps: 4 + 0.4 * i } : null);
+      const tick = () => {
+        const t = performance.now() - start; let busy = false;
+        plan.forEach((p, i) => {
+          if (!p || t < p.at) { if (p) busy = true; return; }
+          if (t < p.at + p.steps * 60) { busy = true; set(i, String(Math.floor(Math.random() * 10))); }
+          else set(i, target[i]);
+        });
+        if (!busy) clearInterval(timer);
+      };
+      tick(); timer = setInterval(tick, 60);
+    }
+    const now = () => { const d = new Date(); return [d, `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`]; };
+    function next() {
+      const [d, text] = now();
+      show(text, true);
+      if (dateEl) dateEl.textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      setTimeout(next, 60000 - (d.getSeconds() * 1000 + d.getMilliseconds()) + 50);
+    }
+    // The first roll waits until the clock is on screen.
+    const seen = new IntersectionObserver(entries => {
+      if (!entries.some(e => e.isIntersecting)) return;
+      seen.disconnect(); next();
+    }, { threshold: 0.6 });
+    const [d0] = now();
+    if (dateEl) dateEl.textContent = d0.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    seen.observe(el);
+    el.addEventListener('click', () => { cells.fill(' '); show(now()[1], true); });
   }
   document.querySelectorAll('[data-clock]').forEach(el => clock(el, document.querySelector('[data-date]')));
 
