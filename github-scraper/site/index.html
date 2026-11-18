@@ -43,9 +43,16 @@
       <div><span class="serif">Price</span><span>Free</span><span></span></div>
     </div>
     <div class="slot-row">
-      <!-- At release: Apple's official badge, linking to https://apps.apple.com/app/id6826606642 -->
-      <span class="badge">Coming soon</span>
-      <span class="note">On the App Store as NEWNEW: News, Grouped.</span>
+      <!-- Apple's badge, unaltered (Apple's rules: no fading or recolouring), not yet a link.
+           At release: wrap the <picture> in <a href="https://apps.apple.com/app/id6826606642">,
+           drop aria-disabled and the "Coming soon" line. -->
+      <span class="badge" aria-disabled="true" title="Coming soon">
+        <picture>
+          <source srcset="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/white/en-us" media="(prefers-color-scheme: dark)">
+          <img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" alt="Download on the App Store (coming soon)">
+        </picture>
+      </span>
+      <span class="note">Coming soon. On the App Store as NEWNEW: News, Grouped.</span>
     </div>
   </div>
 </section>

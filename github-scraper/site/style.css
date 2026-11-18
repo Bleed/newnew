@@ -85,13 +85,14 @@ section { margin-top: 88px; }
   .rows .serif { font-size: 15px; }
 }
 
-/* App Store slot: replace .badge with Apple's official badge once the app is out. */
+/* App Store slot: at release the badge becomes a link to the app. */
 .slot-row { align-items: center; padding-top: 14px; gap: 14px 0; }
-.badge { grid-column: 2; display: inline-flex; align-items: center; justify-content: center; height: 50px; width: 150px;
-  border: 1px dashed var(--ink); border-radius: 10px; }
+/* Apple's badge as Apple draws it (never faded or recoloured); not a link until release. */
+.badge { grid-column: 2; display: inline-flex; align-items: center; height: 44px; cursor: default; }
+.badge img { display: block; height: 100%; width: auto; }
 .slot-row .note { grid-column: 3; color: var(--grey); font-size: 11px; line-height: 1.2; padding-left: 14px; }
 @media (max-width: 899px) { .slot-row .note { grid-column: 2 / 4; padding-left: 0; } }
-@media (min-width: 900px) { .slot-row .note { font-size: 14px; padding-left: 0; } .badge { width: 180px; height: 60px; border-radius: 12px; } }
+@media (min-width: 900px) { .slot-row .note { font-size: 14px; padding-left: 0; } .badge { height: 54px; } }
 
 /* Now */
 .now { display: grid; gap: 14px; border-top: 1px solid var(--rule); padding-top: 12px; }
