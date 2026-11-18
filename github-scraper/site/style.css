@@ -150,3 +150,5 @@ footer { margin-top: 88px; border-top: 1px solid var(--rule); padding-top: 14px;
 .menu nav a { font-size: var(--big); line-height: 0.97; letter-spacing: -0.02em; color: rgba(242, 242, 242, 0.35); }
 .menu nav a[aria-current] { color: #f2f2f2; }
 .menu nav a:hover { color: #f2f2f2; text-decoration: none; }
+/* On a phone the links are big enough to tap and read across the room: about 10 % of the width. */
+@media (max-width: 899px) { .menu nav { margin-top: 48px; gap: 4px; } .menu nav a { font-size: min(10vw, 44px); line-height: 1.02; } }
