@@ -65,16 +65,24 @@
   // rolls through random digits every 0.06 s for 4 + 0.4 × index steps, then settles. When the
   // minute turns, only the digits that change roll.
   function clock(el, dateEl) {
-    const cols = 5 * 6 + 1, rows = 9;
-    el.innerHTML = `<svg viewBox="0 0 ${cols} ${rows}" role="img">${Array.from({ length: rows * cols }, (_, k) =>
-      `<circle cx="${k % cols + 0.5}" cy="${Math.floor(k / cols) + 0.5}" r="0.36" fill="currentColor" fill-opacity="0.07"/>`).join('')}</svg>`;
+    // One 5 × 7 module per character, apart from the next, like the app's dot face: unlit dots
+    // only inside a module, none in the gaps.
+    const PAD = 0.9, TILE = 5 + 2 * PAD, GAP = 0.8, STEP = TILE + GAP;
+    const width = 5 * STEP - GAP, height = 7 + 2 * PAD;
+    let tiles = '', circles = '';
+    for (let i = 0; i < 5; i++) {
+      tiles += `<rect x="${(i * STEP).toFixed(2)}" y="0" width="${TILE}" height="${height}" rx="0.9" fill="currentColor" fill-opacity="0.06"/>`;
+      for (let cy = 0; cy < 7; cy++) for (let cx = 0; cx < 5; cx++)
+        circles += `<circle cx="${(i * STEP + PAD + cx + 0.5).toFixed(2)}" cy="${(PAD + cy + 0.5).toFixed(2)}" r="0.38" fill="currentColor" fill-opacity="0.07"/>`;
+    }
+    el.innerHTML = `<svg viewBox="0 0 ${width.toFixed(2)} ${height.toFixed(2)}" role="img">${tiles}${circles}</svg>`;
     const svg = el.firstChild, dots = svg.querySelectorAll('circle');
     const cells = [' ', ' ', ' ', ' ', ' '];
     function set(i, ch) {
       if (cells[i] === ch) return; cells[i] = ch;
       for (let cy = 0; cy < 7; cy++) for (let cx = 0; cx < 5; cx++) {
         const on = D[ch]?.[cy * 5 + cx] === '1';
-        dots[(cy + 1) * cols + 1 + i * 6 + cx].setAttribute('fill-opacity', on ? '1' : '0.07');
+        dots[i * 35 + cy * 5 + cx].setAttribute('fill-opacity', on ? '1' : '0.07');
       }
     }
     let timer;

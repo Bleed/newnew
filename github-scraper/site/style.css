@@ -94,13 +94,13 @@ section { margin-top: 88px; }
 @media (min-width: 900px) { .slot-row .note { font-size: 14px; padding-left: 0; } .badge { width: 180px; height: 60px; border-radius: 12px; } }
 
 /* Now */
-.now { display: grid; grid-template-columns: 1fr auto; gap: 24px; border-top: 1px solid var(--rule); padding-top: 12px; }
+.now { display: grid; gap: 14px; border-top: 1px solid var(--rule); padding-top: 12px; }
 .now .lines { color: var(--strong); }
-.clock { color: var(--strong); justify-self: end; }
-.clock svg { display: block; width: 87px; height: auto; }
+/* Under the text, half the size it was: one module per character. */
+.clock { color: var(--strong); justify-self: start; }
+.clock svg { display: block; width: 86px; height: auto; }
 @media (min-width: 900px) {
-  .now { grid-template-columns: calc(33.333% - 24px) 1fr; border-top: 0; padding-top: 0; font-size: 15px; }
-  .clock svg { width: 171px; }
+  .now { border-top: 0; padding-top: 0; font-size: 15px; }
 }
 
 /* Questions (support) */
