@@ -149,21 +149,54 @@ import UserNotifications
     guard let delivered = await center.deliveredNotifications().first(where: { note in
       (CKNotification(fromRemoteNotificationDictionary: note.request.content.userInfo) as? CKQueryNotification)?.recordID == recordID
     }) else { return }
-    guard let cluster = breakingStory(url: fields["url"] as? String, words: fields["headline"] as? String, in: pipeline.context)
-    else { return }
+    func replace(subtitle: String?, body: String) async {
+      let content = UNMutableNotificationContent()
+      content.title = "Breaking"
+      if let subtitle { content.subtitle = subtitle }
+      content.body = body
+      content.userInfo = delivered.request.content.userInfo
+      content.threadIdentifier = delivered.request.content.threadIdentifier
+      content.interruptionLevel = .passive
+      center.removeDeliveredNotifications(withIdentifiers: [delivered.request.identifier])
+      try? await center.add(UNNotificationRequest(identifier: "breaking.\(recordID.recordName)", content: content, trigger: nil))
+    }
+    let words = (fields["headline"] as? String)?.split(separator: "·").first.map { $0.trimmingCharacters(in: .whitespaces) }
+    guard let cluster = breakingStory(url: fields["url"] as? String, words: fields["headline"] as? String, in: pipeline.context) else {
+      // Not among this iPhone's stories (outlets it doesn't read, or no sync allowed): the
+      // words alone, made readable, rather than a bare list.
+      guard let words, let label = await IntelligenceService.alertTopic(words) else { return }
+      await replace(subtitle: (fields["outlets"] as? NSNumber).map { "\($0.intValue) outlets" }, body: label)
+      return
+    }
+    // A second push about a story this iPhone already alerted (a new angle the server counted
+    // as new): one alert per story, so this one goes.
+    if alreadyAlerted(cluster) {
+      center.removeDeliveredNotifications(withIdentifiers: [delivered.request.identifier])
+      return
+    }
+    markAlerted(cluster)
     let sources = cluster.sortedArticles.prefix(6).map {
       IntelligenceService.Source(outlet: $0.outlet, title: $0.title, snippet: $0.snippet)
     }
     guard let line = await IntelligenceService.alertSubject(Array(sources)) ?? cluster.lead?.title else { return }
-    let content = UNMutableNotificationContent()
-    content.title = "Breaking"
-    content.subtitle = "\(cluster.outlets.count) outlets"
-    content.body = line
-    content.userInfo = delivered.request.content.userInfo
-    content.threadIdentifier = delivered.request.content.threadIdentifier
-    content.interruptionLevel = .passive
-    center.removeDeliveredNotifications(withIdentifiers: [delivered.request.identifier])
-    try? await center.add(UNNotificationRequest(identifier: "breaking.\(recordID.recordName)", content: content, trigger: nil))
+    await replace(subtitle: "\(cluster.outlets.count) outlets", body: line)
+  }
+
+  /// Links of the stories alerted as breaking in the last day, so a story alerts once however it
+  /// grows or regroups.
+  private static let alertedKey = "breaking.alertedLinks"
+
+  static func alreadyAlerted(_ cluster: StoryCluster) -> Bool {
+    let stored = UserDefaults.standard.dictionary(forKey: alertedKey) as? [String: Double] ?? [:]
+    let since = Date.now.timeIntervalSince1970 - 86_400
+    return cluster.articles.contains { (stored[$0.url] ?? 0) > since }
+  }
+
+  static func markAlerted(_ cluster: StoryCluster) {
+    let now = Date.now.timeIntervalSince1970
+    var stored = (UserDefaults.standard.dictionary(forKey: alertedKey) as? [String: Double] ?? [:]).filter { now - $0.value < 86_400 }
+    for article in cluster.articles { stored[article.url] = now }
+    UserDefaults.standard.set(stored, forKey: alertedKey)
   }
 
   /// The story a breaking push is about: the one holding its lead article, else the recent one

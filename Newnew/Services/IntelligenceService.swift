@@ -385,6 +385,42 @@ enum IntelligenceService {
     return nil
   }
 
+  /// A breaking alert whose story this iPhone doesn't have: the push's three words ("Kress,
+  /// interim, Colette") as a short topic label ("Colette Kress, interim"). Every word kept, at
+  /// most six words in all and no verb, so it can't claim what the words don't say. Nil without
+  /// the model or when it adds too much; the alert keeps its words.
+  static func alertTopic(_ words: String) async -> String? {
+    refreshAvailability()
+    #if canImport(FoundationModels)
+      guard isAvailable else { return nil }
+      let keys = words.lowercased().split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init).filter { $0.count >= 3 }
+      guard !keys.isEmpty else { return nil }
+      let instructions = """
+        Turn the keywords of a news story into a short topic label, like a newspaper section \
+        heading: at most six words, every keyword kept, names written in full order. Names and \
+        nouns only: no verb, no claim about what happened, no quotation marks, no full stop.
+        """
+      func tidy(_ text: String) -> String? {
+        let line = (text.split(whereSeparator: \.isNewline).first.map(String.init) ?? "")
+          .trimmingCharacters(in: .whitespaces.union(CharacterSet(charactersIn: "\"“”.")))
+        let lower = line.lowercased()
+        guard !line.isEmpty, line.split(separator: " ").count <= 6, keys.allSatisfy({ lower.contains($0) }) else { return nil }
+        return line
+      }
+      let prompt = "Keywords: \(words)"
+      if let response = try? await LanguageModelSession(instructions: instructions).respond(to: prompt),
+        let line = tidy(response.content)
+      {
+        return line
+      }
+      let model = SystemLanguageModel(guardrails: .permissiveContentTransformations)
+      if let response = try? await LanguageModelSession(model: model, instructions: instructions).respond(to: prompt) {
+        return tidy(response.content)
+      }
+    #endif
+    return nil
+  }
+
   // MARK: Topics
 
   /// A followed or muted topic as example headlines (compared with stories by meaning) and a

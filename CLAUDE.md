@@ -344,8 +344,14 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
      app syncs if allowed, finds the story (its lead link, else most of the words) and replaces
      the delivered alert, quietly, with Apple Intelligence's line from the headlines this iPhone
      read (`IntelligenceService.alertSubject`), else its own lead headline
-     (`Alerts.rewriteBreaking`, push C, 2026-11-17). Untested on a device: Simulator pushes need
-     notification permission, and Apple Intelligence and CloudKit pushes don't run there.
+     (`Alerts.rewriteBreaking`, push C, 2026-11-17). One alert per story (2026-11-18, after a
+     second push about Nvidia arrived as bare words): the server skips a story that shares two
+     keywords, any article, or two of its subject words with the wider vocabulary (`context`) of
+     one sent in 36 h (`sentBefore`); the iPhone drops a push whose story holds an article it
+     alerted in the last day (`breaking.alertedLinks`). A push whose story this iPhone doesn't
+     have becomes a short label from its words (`IntelligenceService.alertTopic`: every word
+     kept, ≤ 6 words, no verb), else stays as sent. Rewriting works on devices (seen 2026-11-18);
+     the Simulator can't run CloudKit pushes or Apple Intelligence.
 - Push is on (set up 2026-10-24): container iCloud.com.svein.newnew (team W533Y4V578), the app
   builds with Newnew/App/Newnew-CloudKit.entitlements; `Breaking` (headline String, url String,
   outlets Int64) is deployed to Production. The scraper signs with a Production

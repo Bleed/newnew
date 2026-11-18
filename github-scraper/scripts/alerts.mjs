@@ -77,6 +77,9 @@ export function findStories(articles, now = Date.now()) {
     const counts = new Map()
     for (const d of group) for (const w of d.all) if (rare(w)) counts.set(w, (counts.get(w) ?? 0) + 1)
     const keywords = [...counts].filter(([, n]) => n * 2 >= group.length).sort((a, b) => df.get(a[0]) - df.get(b[0])).map(([w]) => w).slice(0, 10)
+    // Its wider vocabulary (rare words in a quarter of its articles), to know a later angle on
+    // the same story: Nvidia's quarter, then its CFO named interim.
+    const context = [...counts].filter(([, n]) => n * 4 >= group.length).sort((a, b) => b[1] - a[1]).map(([w]) => w).slice(0, 40)
     // The headline: the article that shares most of those words, newest on a tie.
     const lead = [...group].sort((x, y) =>
       keywords.filter(w => y.all.has(w)).length - keywords.filter(w => x.all.has(w)).length || Date.parse(y.a.publishedAt) - Date.parse(x.a.publishedAt))[0].a
@@ -89,6 +92,8 @@ export function findStories(articles, now = Date.now()) {
       outlets: outlets.size,
       breaking: outlets.size >= BREAKING_OUTLETS && recent >= BREAKING_RECENT,
       keywords,
+      context,
+      urls: group.map(d => d.a.url),
       articles: group.length,
     })
   }
@@ -116,17 +121,31 @@ export function subject(keywords, lead) {
   return shown.join(', ')
 }
 
-/** The breaking stories not sent before (by shared words), within today's limit. */
+/**
+ * Whether a story was pushed already: it shares two keywords with a sent one, or any article,
+ * or two of its subject words (its three rarest) are in a sent story's wider vocabulary — a new
+ * angle on the same story, which the iPhone groups with the first anyway.
+ */
+export function sentBefore(story, s) {
+  if (s.keywords.filter(w => story.keywords.includes(w)).length >= 2) return true
+  if ((s.urls ?? []).some(u => story.urls?.includes(u))) return true
+  const vocabulary = new Set([...(s.keywords ?? []), ...(s.context ?? [])])
+  return story.keywords.slice(0, 3).filter(w => vocabulary.has(w)).length >= 2
+}
+
+/** The breaking stories not sent before, within today's limit. */
 export function selectNew(stories, previous, now = Date.now()) {
   const sent = (previous?.sent ?? []).filter(s => now - Date.parse(s.at) < KEEP_STATE)
   const today = sent.filter(s => now - Date.parse(s.at) < 86_400_000).length
   const out = []
   for (const story of stories) {
     if (!story.breaking || out.length >= MAX_PER_RUN || today + out.length >= MAX_PER_DAY) continue
-    if (sent.some(s => s.keywords.filter(w => story.keywords.includes(w)).length >= 2)) continue
+    if ([...sent, ...out].some(s => sentBefore(story, s))) continue
     out.push(story)
   }
-  const state = { sent: [...sent, ...out.map(s => ({ keywords: s.keywords, at: new Date(now).toISOString() }))] }
+  const state = {
+    sent: [...sent, ...out.map(s => ({ keywords: s.keywords, context: s.context, urls: s.urls, at: new Date(now).toISOString() }))],
+  }
   return { send: out, state }
 }
 
