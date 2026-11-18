@@ -33,6 +33,10 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 /* Header */
 header { display: flex; align-items: center; gap: 4px; }
+/* The top bar stays while the page scrolls, on the page colour so nothing shows through. It
+   sits where it always did (the body's 16 px top padding moves into it). */
+body > header { position: sticky; top: 0; z-index: 5; background: var(--bg);
+  margin: -16px calc(-1 * var(--gutter)) 0; padding: 16px var(--gutter) 12px; }
 .tile { background: var(--tile); color: var(--ink); border: 0; border-radius: 4px; padding: 12px 16px;
   font: inherit; cursor: pointer; }
 .tile:hover { text-decoration: none; filter: brightness(0.97); }
@@ -46,7 +50,6 @@ header { display: flex; align-items: center; gap: 4px; }
 @media (min-width: 900px) {
   body { font-size: 14px; }
   .status { display: block; position: absolute; left: calc(var(--gutter) + (100% - 2 * var(--gutter)) * 0.25); }
-  header { position: relative; }
 }
 
 /* Logo */
