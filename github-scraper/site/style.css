@@ -29,7 +29,12 @@ header { display: flex; align-items: center; gap: 4px; }
   font: inherit; cursor: pointer; }
 .tile:hover { text-decoration: none; filter: brightness(0.97); }
 .status { display: none; }
-.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--ink); margin-left: auto; }
+/* The dot is the menu button: 22 pt, with a 44 pt touch area. */
+.dot { width: 22px; height: 22px; border-radius: 50%; background: var(--ink); margin-left: auto;
+  border: 0; padding: 0; cursor: pointer; position: relative; flex: none; transition: transform 0.15s ease; }
+.dot::after { content: ""; position: absolute; inset: -11px; }
+.dot:hover { transform: scale(1.12); }
+.dot:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
 @media (min-width: 900px) {
   body { font-size: 14px; }
   .status { display: block; position: absolute; left: calc(var(--gutter) + (100% - 2 * var(--gutter)) * 0.25); }
