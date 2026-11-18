@@ -113,16 +113,43 @@
       if (!reduce) set(2, d.getSeconds() % 2 ? ' ' : ':');
       setTimeout(blink, 1000 - d.getMilliseconds() + 5);
     }
+    let started = false, answered = false;
+    const start = () => { if (started) return; started = true; seen.disconnect(); next(); blink(); };
     const seen = new IntersectionObserver(entries => {
-      if (!entries.some(e => e.isIntersecting)) return;
-      seen.disconnect(); next(); blink();
-    }, { threshold: 0.6 });
+      answered = true;
+      if (entries.some(e => e.isIntersecting)) start();
+    }, { threshold: 0.3 });
+    // Never left blank: a browser that never reports what's on screen gets the time anyway.
+    setTimeout(() => { if (!answered) start(); }, 1500);
     const [d0] = now();
     if (dateEl) dateEl.textContent = d0.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     seen.observe(el);
     el.addEventListener('click', () => { cells.fill(' '); show(now()[1], true); });
   }
   document.querySelectorAll('[data-clock]').forEach(el => clock(el, document.querySelector('[data-date]')));
+
+  // Entrance: the top (header, caption) and then each section, its parts rising 0.07 s apart
+  // when a fifth of it is on screen. style.css hides `.rise` only with motion allowed.
+  const PARTS = '.label, .big, .title, .rows > div, .slot-row, .now, .qa > div';
+  const groups = [
+    [...document.querySelectorAll('body > header, .caption')],
+    ...[...document.querySelectorAll('main section')].map(s => [...s.querySelectorAll(PARTS)]),
+    [...document.querySelectorAll('body > footer')],
+  ].filter(g => g.length);
+  groups.flat().forEach(el => el.classList.add('rise'));
+  const show = group => group.forEach((el, i) => { el.style.setProperty('--delay', `${Math.min(i, 10) * 0.07}s`); el.classList.add('in'); });
+  let answered = false;
+  const watch = new IntersectionObserver(entries => {
+    answered = true;
+    for (const e of entries) {
+      if (!e.isIntersecting) continue;
+      watch.unobserve(e.target);
+      show(groups.find(g => g[0] === e.target) ?? [e.target]);
+    }
+  }, { threshold: 0.2 });
+  groups.forEach(g => watch.observe(g[0]));
+  // A browser that never reports what's on screen still shows everything.
+  setTimeout(() => { if (!answered) { watch.disconnect(); groups.forEach(show); } }, 1500);
 
   // Menu
   const menu = document.querySelector('.menu');

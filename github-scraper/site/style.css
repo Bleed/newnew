@@ -23,6 +23,14 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .serif { font: italic 400 13px/1.25 "Times New Roman", Times, serif; }
 .grey { color: var(--grey); }
 
+/* Entrance: like the app's pages, parts rise in one after another (site.js sets the delay,
+   0.07 s apart), each section as it comes into view. Only with motion allowed and scripts on. */
+@media (prefers-reduced-motion: no-preference) {
+  html.js .rise { opacity: 0; transform: translateY(14px); }
+  html.js .rise.in { opacity: 1; transform: none;
+    transition: opacity 0.5s ease var(--delay, 0s), transform 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) var(--delay, 0s); }
+}
+
 /* Header */
 header { display: flex; align-items: center; gap: 4px; }
 .tile { background: var(--tile); color: var(--ink); border: 0; border-radius: 4px; padding: 12px 16px;
