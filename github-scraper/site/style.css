@@ -90,6 +90,16 @@ section { margin-top: 88px; }
 /* Apple's badge as Apple draws it (never faded or recoloured); not a link until release. */
 .badge { grid-column: 2; display: inline-flex; align-items: center; height: 44px; cursor: default; }
 .badge img { display: block; height: 100%; width: auto; }
+/* Hover or tap: the badge (never altered) hides behind an ink board of the same size with
+   COMING over SOON in the dot face (site.js), arriving as a departures board. */
+.badge { position: relative; outline: none; justify-self: start; }
+.badge picture { display: block; height: 100%; transition: opacity 0.18s ease; }
+.badge .soon { position: absolute; inset: 0; border-radius: 8px; background: var(--strong); color: var(--bg);
+  display: grid; place-items: center; opacity: 0; transition: opacity 0.18s ease; pointer-events: none; }
+.badge .soon svg { display: block; height: 72%; width: auto; }
+.badge.on picture { opacity: 0; }
+.badge.on .soon { opacity: 1; }
+.badge:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 9px; }
 .slot-row .note { grid-column: 3; color: var(--grey); font-size: 11px; line-height: 1.2; padding-left: 14px; }
 @media (max-width: 899px) { .slot-row .note { grid-column: 2 / 4; padding-left: 0; } }
 @media (min-width: 900px) { .slot-row .note { font-size: 14px; padding-left: 0; } .badge { height: 54px; } }

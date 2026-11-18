@@ -435,7 +435,7 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
   dot-face clock) and `_redirects` (/privacypolicy → privacy). The build writes `outlets.json`
   from `feeds.json` (git-ignored in site/). index.html shows Apple's App Store badge
   (hosted by Apple, toolbox.marketingtools.apple.com, never faded or recoloured) as a non-link with "Coming
-  soon"; at release wrap it in a link to apps.apple.com/app/id6826606642 and drop the "Coming soon".
+  soon" (hover on desktop, tap on a phone: an ink board of its size shows COMING / SOON in the dot face, rolling in); at release wrap it in a link to apps.apple.com/app/id6826606642 and drop the "Coming soon".
 - Mailboxes the app names: feedback@newnew.news, publishers@newnew.news.
 
 ## Look (from Atelier CRM)

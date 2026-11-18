@@ -136,6 +136,65 @@
   }
   document.querySelectorAll('[data-clock]').forEach(el => clock(el, document.querySelector('[data-date]')));
 
+  // The App Store badge, until release: hover (desktop) or tap (phone) hides it behind an ink
+  // board with COMING over SOON in the dot face, arriving like the app's departures board: cells
+  // 0.025 s apart in reading order, each rolling through random letters every 0.06 s for
+  // 4 + 0.4 × index steps, then settling. The badge itself is never altered.
+  const L = {
+    C: '01110100011000010000100001000101110', O: '01110100011000110001100011000101110',
+    M: '10001110111010110101100011000110001', I: '01110001000010000100001000010001110',
+    N: '10001110011010110011100011000110001', G: '01110100011000010111100011000101111',
+    S: '01111100001000001110000010000111110', A: '01110100011000111111100011000110001',
+    E: '11111100001000011110100001000011111', T: '11111001000010000100001000010000100',
+    W: '10001100011000110101101011010101010', U: '10001100011000110001100011000101110',
+  };
+  const RANDOM = Object.keys(L);
+  function soon(badge) {
+    const board = badge.querySelector('.soon');
+    const lines = ['COMING', ' SOON '], COLS = 6, PAD = 2;
+    const W = COLS * 6 - 1 + PAD * 2, H = 7 * 2 + 1 + PAD * 2;
+    let circles = '';
+    lines.forEach((_, row) => { for (let c = 0; c < COLS; c++) for (let y = 0; y < 7; y++) for (let x = 0; x < 5; x++)
+      circles += `<circle cx="${PAD + c * 6 + x + 0.5}" cy="${PAD + row * 8 + y + 0.5}" r="0.4" fill="currentColor" fill-opacity="0.14"/>`; });
+    board.innerHTML = `<svg viewBox="0 0 ${W} ${H}">${circles}</svg>`;
+    const dots = board.querySelectorAll('circle');
+    const target = lines.join('');
+    const set = (i, ch) => { for (let k = 0; k < 35; k++) dots[i * 35 + k].setAttribute('fill-opacity', L[ch]?.[k] === '1' ? '1' : '0.14'); };
+    let timer, hideTimer;
+    function play() {
+      clearInterval(timer);
+      if (reduce) { [...target].forEach((ch, i) => set(i, ch)); return; }
+      [...target].forEach((_, i) => set(i, ' '));
+      const start = performance.now();
+      const tick = () => {
+        const t = performance.now() - start; let busy = false;
+        [...target].forEach((ch, i) => {
+          if (ch === ' ') return;
+          const at = i * 25, steps = 4 + 0.4 * i;
+          if (t < at) { busy = true; return; }
+          if (t < at + steps * 60) { busy = true; set(i, RANDOM[Math.floor(Math.random() * RANDOM.length)]); } else set(i, ch);
+        });
+        if (!busy) clearInterval(timer);
+      };
+      tick(); timer = setInterval(tick, 60);
+    }
+    const show = () => { if (badge.classList.contains('on')) return; badge.classList.add('on'); play(); };
+    const hide = () => { badge.classList.remove('on'); clearTimeout(hideTimer); };
+    const canHover = matchMedia('(hover: hover) and (pointer: fine)');
+    badge.addEventListener('mouseenter', () => { if (canHover.matches) show(); });
+    badge.addEventListener('mouseleave', () => { if (canHover.matches) hide(); });
+    // A tap shows it for a few seconds; tapping again puts the badge back.
+    badge.addEventListener('click', () => {
+      if (canHover.matches) return;
+      if (badge.classList.contains('on')) { hide(); return; }
+      show(); clearTimeout(hideTimer); hideTimer = setTimeout(hide, 3000);
+    });
+    // Keyboard focus shows it too; a tap's focus doesn't (the tap's click decides).
+    badge.addEventListener('focus', () => { if (badge.matches(':focus-visible')) show(); });
+    badge.addEventListener('blur', hide);
+  }
+  document.querySelectorAll('[data-soon]').forEach(soon);
+
   // Entrance: the top (header, caption) and then each section, its parts rising 0.07 s apart
   // when a fifth of it is on screen. style.css hides `.rise` only with motion allowed.
   const PARTS = '.label, .big, .title, .rows > div, .slot-row, .now, .qa > div';
