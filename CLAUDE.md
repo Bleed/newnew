@@ -418,6 +418,13 @@ headlines score ≥ 0.89 raw, so everything would merge. What the code does inst
 - Privacy policy: lives at https://newnew.news/privacypolicy (the app links there, and so
   should App Store Connect). The text is github-scraper/site/privacy.html, also published with
   the outlet list at https://bleed.github.io/newnew/privacy.html as a copy.
+- newnew.news (registered at GoDaddy; DNS on Cloudflare since 2026-11-18, nameservers
+  elle/marvin.ns.cloudflare.com) is the Cloudflare Pages project "newnew-site", built from
+  `github-scraper/site` (no build step) on every push to main: index.html (coming soon, Figma
+  page "Website · newnew.news"), support.html (the App Store support URL, newnew.news/support),
+  privacy.html, style.css, site.js (the NEWNEW block logo from `BlockFont`, its roll-in, the
+  dot-face clock) and `_redirects` (/privacypolicy → privacy). The outlet list stays on GitHub
+  Pages. At release, swap the "Coming soon" slot in index.html for Apple's App Store badge.
 - Mailboxes the app names: feedback@newnew.news, publishers@newnew.news.
 
 ## Look (from Atelier CRM)
