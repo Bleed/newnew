@@ -22,7 +22,6 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .serif { font: italic 400 13px/1.25 "Times New Roman", Times, serif; }
 .grey { color: var(--grey); }
-.nowrap { white-space: nowrap; }
 
 /* Entrance: like the app's pages, parts rise in one after another (site.js sets the delay,
    0.07 s apart), each section as it comes into view. Only with motion allowed and scripts on. */
@@ -140,6 +139,7 @@ section { margin-top: 88px; }
 footer { margin-top: 88px; border-top: 1px solid var(--rule); padding-top: 14px; display: grid;
   grid-template-columns: calc(var(--label) + var(--col)) 1fr; color: var(--grey); font-size: 11px; gap: 4px 0; }
 @media (max-width: 899px) { .wide-only { display: none; } }
+@media (min-width: 900px) { .narrow-only { display: none; } }
 @media (min-width: 900px) { footer { grid-template-columns: 25% 25% 1fr; font-size: 13px; margin-top: 140px; } }
 /* The menu's links again, quiet: grey, the current page's in ink. They wrap on a phone. */
 .footer-links { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; }
