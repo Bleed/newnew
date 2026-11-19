@@ -13,7 +13,13 @@
   h2 { font-weight: 500; font-size: 17px; margin: 32px 0 6px; }
   p, li { color: #3a3a3a; }
   .muted { color: #828282; font-size: 15px; }
-  @media (prefers-color-scheme: dark) { body { background: #000; color: #f5f5f5; } p, li { color: #cfcfcf; } }
+  footer { margin-top: 56px; border-top: 1px solid #d6d6d6; padding-top: 14px; font-size: 13px; line-height: 1.25; color: #a3a3a3; }
+  footer nav { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 10px; }
+  footer a { color: inherit; text-decoration: none; }
+  footer a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  footer a[aria-current] { color: #3a3a3a; }
+  @media (prefers-color-scheme: dark) { body { background: #000; color: #f5f5f5; } p, li { color: #cfcfcf; }
+    footer { border-color: #3d3d3d; color: #8a8a8a; } footer a[aria-current] { color: #f2f2f2; } }
 </style>
 </head>
 <body>
@@ -55,5 +61,15 @@
 
 <h2 id="publishers">For publishers</h2>
 <p>NEWNEW is an RSS reader: each iPhone reads the public RSS feeds its owner chose, shows headlines and the feed's own short description and picture, and links every story to the publisher. NEWNEW keeps no copy of your articles on any server. To have your outlet removed, or to change how it appears, write to <a href="mailto:publishers@newnew.news">publishers@newnew.news</a>. We remove an outlet within 48 hours of a request; the change reaches every reader at their next refresh, without an app update.</p>
+<footer>
+  <span>© 2026 Mutiny AS · Headlines link to their publishers. NEWNEW stores no articles.</span>
+  <nav aria-label="Site">
+    <a href="https://newnew.news/">Introduction</a>
+    <a href="https://newnew.news/#contact">Contact</a>
+    <a href="https://newnew.news/privacypolicy#publishers">For publishers</a>
+    <a href="https://newnew.news/privacypolicy" aria-current="page">Privacy</a>
+    <a href="https://newnew.news/support">Support</a>
+  </nav>
+</footer>
 </body>
 </html>
