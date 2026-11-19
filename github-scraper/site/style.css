@@ -89,6 +89,10 @@ section { margin-top: 88px; }
 .title { padding-bottom: 16px; }
 .rows > div, .slot-row { display: grid; grid-template-columns: var(--label) minmax(0, 0.8fr) minmax(0, 1.2fr); border-top: 1px solid var(--rule); padding: 10px 0; font-size: 12px; }
 .rows > div > * { min-width: 0; overflow-wrap: anywhere; padding-right: 8px; }
+/* An email address never breaks inside a word: on a phone its column takes the address's
+   width and the middle column wraps instead. */
+.rows a[href^="mailto:"] { overflow-wrap: normal; }
+@media (max-width: 899px) { .rows > div:has(a[href^="mailto:"]) { grid-template-columns: var(--label) minmax(0, 1fr) auto; } }
 @media (min-width: 900px) {
   .rows > div, .slot-row { grid-template-columns: 1fr 1fr 1fr; }
   .rows > div { padding: 14px 0; font-size: 15px; }
